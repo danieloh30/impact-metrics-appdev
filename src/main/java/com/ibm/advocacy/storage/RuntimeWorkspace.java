@@ -46,6 +46,28 @@ public class RuntimeWorkspace {
     }
     public Data data(String id,String name) throws IOException { return mapper.readValue(Files.readAllBytes(runPath(id,"state/"+name+".json")),Data.class); }
     public void data(String id,String name,Data data) throws IOException { bytes(runPath(id,"state/"+name+".json"),mapper.writeValueAsBytes(data)); }
+    /** Clear only run-owned files; never follow links into other runtime data. */
+    public int resetRuns() throws IOException {
+        Path runs=path("runs");
+        if(!Files.exists(runs,LinkOption.NOFOLLOW_LINKS)) { Files.createDirectories(runs);return 0; }
+        if(!Files.isDirectory(runs,LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Runs path must be a directory");
+        int[] deleted={0};
+        Files.walkFileTree(runs,new SimpleFileVisitor<Path>() {
+            @Override public FileVisitResult preVisitDirectory(Path dir,java.nio.file.attribute.BasicFileAttributes attributes) {
+                if(runs.equals(dir.getParent()))deleted[0]++;
+                return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFile(Path file,java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
+                Files.delete(file);return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult postVisitDirectory(Path dir,IOException error) throws IOException {
+                if(error!=null)throw error;
+                if(!dir.equals(runs))Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return deleted[0];
+    }
     public static String hash(byte[] bytes) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
         catch(Exception e) { throw new IllegalStateException(e); }

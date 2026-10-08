@@ -108,9 +108,14 @@ public class Pipeline {
             if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
             if(attempted.add(key))try { measurement(run,row); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
         }
-        List<Row> baselines=new ArrayList<>();for(Row original:source.rows) { Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());baselines.add(row); }
+List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
+    Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
+    try { if(Calculations.number(row.get("Current total")).signum()<0)throw new IllegalArgumentException("Previous baseline cannot be negative"); }
+    catch(IllegalArgumentException e) { issue(run,row,"Invalid previous baseline — "+e.getMessage(),true,"BASELINE"); }
+    baselines.add(row);
+}
         List<Row> rows=Calculations.trailing(baselines,run.measurements);
-        for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline"))issue(run,row,row.get(NOTE),true,"BASELINE");
+        for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline")&&run.issues.stream().noneMatch(i->i.rowId().equals(row.id)&&i.metricType().equals("BASELINE")))issue(run,row,row.get(NOTE),true,"BASELINE");
         store(run,4,"updated_90-day.csv",csv.output(source,rows));
         event(run,"Trailing90Agent","Refreshed "+source.rows.size()+" rows using "+attempted.size()+" resource groups");workspace.save(run);
     }

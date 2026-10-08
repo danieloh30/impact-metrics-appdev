@@ -4,12 +4,17 @@ const trailing=Buffer.from('Author,Tool,Type of activity,Name of activity,Curren
 test('imports, collects manually, approves each phase, previews and downloads all five exports',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await expect(page.getByRole('heading',{name:'Make your impact count.'})).toBeVisible();
+ await expect(page.locator('.workspace')).toHaveText('AppDev Developer Advocacy');
+ await page.evaluate(()=>document.fonts.ready);expect(await page.evaluate(()=>document.fonts.check('14px "IBM Plex Sans"'))).toBe(true);
+ await page.screenshot({path:'../../../target/e2e-redesigned-landing.png',fullPage:true});
+ await page.locator('.csv-import > summary').click();
  await page.getByLabel('Current month CSV').setInputFiles({name:'AvocadoBot 2.csv',mimeType:'text/csv',buffer:current});
  await page.getByLabel('Trailing 90 days CSV').setInputFiles({name:'trailing_90-day.csv',mimeType:'text/csv',buffer:trailing});
  await page.getByRole('button',{name:'Import CSV files'}).click();
  await expect(page.getByRole('heading',{name:'Review the calculation contract'})).toBeVisible();
  await page.getByLabel('I accept these calculation rules for this run.').check();await page.getByRole('button',{name:'Start processing'}).click();
  await expect(page.getByRole('button',{name:'Approve phase 1'})).toBeVisible();
+ await page.screenshot({path:'../../../target/e2e-redesigned-review.png',fullPage:true});
  await page.getByRole('button',{name:'Enter views'}).click();await page.getByLabel('Measured total').fill('100');await page.getByLabel('Source / collection note').fill('Synthetic end-to-end fixture: verified views 100');
  await page.getByRole('button',{name:'Save & refresh review'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'Approve phase 1'})).toBeEnabled();
@@ -24,5 +29,5 @@ test('imports, collects manually, approves each phase, previews and downloads al
  const zipEvent=page.waitForEvent('download');await page.getByRole('link',{name:'Download all .zip'}).click();expect((await zipEvent).suggestedFilename()).toMatch(/\.zip$/);
  await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'../../../target/e2e-completed.png',fullPage:true});expect(errors).toEqual([]);
  await page.reload();await expect(page.locator('.status')).toHaveText('Complete');
- await page.setViewportSize({width:390,height:844});await expect(page.getByRole('heading',{name:'Your CSV exports'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:'../../../target/e2e-mobile.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await expect(page.getByRole('heading',{name:'Your CSV exports'})).toBeVisible();await expect(page.locator('.workspace')).toBeVisible();await expect(page.getByRole('navigation',{name:'Recent runs'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:'../../../target/e2e-mobile.png',fullPage:true});
 });

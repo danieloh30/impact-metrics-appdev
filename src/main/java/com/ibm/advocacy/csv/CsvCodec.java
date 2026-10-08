@@ -14,7 +14,9 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @ApplicationScoped
 public class CsvCodec {
     public Data read(byte[] bytes,boolean trailing) throws IOException {
-        Charset charset=trailing?Charset.forName("windows-1252"):StandardCharsets.UTF_8;
+        return read(bytes,trailing,trailing?Charset.forName("windows-1252"):StandardCharsets.UTF_8);
+    }
+    public Data read(byte[] bytes,boolean trailing,Charset charset) throws IOException {
         String text=charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
         if(text.startsWith("\ufeff"))text=text.substring(1);
         try(CSVParser parser=CSVFormat.RFC4180.builder().setIgnoreEmptyLines(true).get().parse(new StringReader(text))) {

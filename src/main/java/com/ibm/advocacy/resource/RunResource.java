@@ -29,11 +29,14 @@ public class RunResource {
     @Inject CsvCodec csv;
     @Inject LinkedInCollector linkedin;
     public record Start(boolean acceptContract) {}
+    public record Reset(boolean confirm) {}
     public record Approve(@Min(1) int version,@NotBlank String digest,boolean acknowledgeIssues) {}
     public record Manual(@Min(1) int version,@NotBlank String rowId,@NotBlank String value,@NotBlank String type,@NotBlank @Size(max=1000) String evidence) {}
     @GET @Path("/config") public Map<String,Object> config() { return Map.of("phases",PHASES,"contract",Pipeline.CONTRACT,"outputs",OUTPUTS); }
     @GET @Path("/linkedin/session") public Map<String,Object> session() { return linkedin.session(); }
     @POST @Path("/linkedin/session") public Response connect() { return Response.accepted(linkedin.connect()).build(); }
+    @POST @Path("/runs/reset") @Consumes(MediaType.APPLICATION_JSON)
+    public Map<String,Object> reset(@Valid Reset body) throws Exception { return Map.of("deletedRuns",service.resetHistory(body!=null&&body.confirm())); }
     @GET @Path("/runs") public List<Run> list() throws Exception { return service.list(); }
     @POST @Path("/runs") @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Run upload(@RestForm("current") FileUpload current,@RestForm("trailing") FileUpload trailing) throws Exception {
@@ -42,6 +45,28 @@ public class RunResource {
         return service.create(Files.readAllBytes(current.uploadedFile()),trailing==null?null:Files.readAllBytes(trailing.uploadedFile()));
     }
     static void filename(FileUpload upload) { if(upload.fileName()==null||upload.fileName().contains("/")||upload.fileName().contains("\\")||!upload.fileName().toLowerCase(Locale.ROOT).endsWith(".csv"))throw new BadRequestException("Upload a CSV filename without a path"); }
+    @Inject com.ibm.advocacy.service.WorkbookService workbooks;
+    @POST @Path("/workbooks/inspect") @Consumes(MediaType.MULTIPART_FORM_DATA)
+    public com.ibm.advocacy.service.WorkbookService.Inspection inspect(@RestForm("workbook") FileUpload workbook) throws Exception {
+        workbookFilename(workbook);return workbooks.inspect(Files.readAllBytes(workbook.uploadedFile()));
+    }
+    @POST @Path("/runs/from-workbook") @Consumes(MediaType.MULTIPART_FORM_DATA)
+    public Run workbook(@RestForm("workbook") FileUpload workbook,@RestForm("month") String month,@RestForm("currentSheet") String currentSheet,@RestForm("historySheets") String historyJson) throws Exception {
+        workbookFilename(workbook);
+        List<String> history;
+        try { history=historyJson==null?List.of():new com.fasterxml.jackson.databind.ObjectMapper().readValue(historyJson,new com.fasterxml.jackson.core.type.TypeReference<List<String>>(){}); }
+        catch(Exception e) { throw new BadRequestException("Invalid history sheet selection"); }
+        if(history==null||history.stream().anyMatch(Objects::isNull))throw new BadRequestException("Invalid history sheet selection");
+        return service.createWorkbook(Files.readAllBytes(workbook.uploadedFile()),workbook.fileName(),month,currentSheet,history);
+    }
+    static void workbookFilename(FileUpload upload) {
+        if(upload==null||upload.fileName()==null||upload.fileName().contains("/")||upload.fileName().contains("\\")||!upload.fileName().toLowerCase(Locale.ROOT).endsWith(".xlsx"))throw new BadRequestException("Upload an .xlsx workbook filename without a path");
+    }
+    @GET @Path("/runs/{id}/inputs/{name}/download") @Produces("text/csv")
+    public Response input(@PathParam("id") String id,@PathParam("name") String name) throws Exception {
+        Run run=service.get(id);String charset=!run.workbook.isEmpty()||name.equals("AvocadoBot 2.csv")?"utf-8":"windows-1252";
+        return Response.ok(service.input(id,name),"text/csv; charset="+charset).header("Content-Disposition","attachment; filename=\""+name+"\"").header("X-Content-Type-Options","nosniff").build();
+    }
     @POST @Path("/runs/from-runtimes") public Run seed() throws Exception { return service.seed(); }
     @GET @Path("/runs/{id}") public Map<String,Object> get(@PathParam("id") String id) throws Exception { Run run=service.get(id);return Map.of("run",run,"approvalDigest",RunService.digest(run)); }
     @POST @Path("/runs/{id}/start") public Response start(@PathParam("id") String id,@Valid Start body) throws Exception { return accepted(service.start(id,body!=null&&body.acceptContract())); }
@@ -60,8 +85,12 @@ public class RunResource {
         service.get(id);
         return Multi.createFrom().ticks().every(Duration.ofSeconds(1)).onItem().transformToUniAndConcatenate(tick->io.smallrye.mutiny.Uni.createFrom().item(()-> {
             try { Run run=service.get(id);return Map.<String,Object>of("version",run.version,"status",run.status,"phase",run.phase,"events",run.events.stream().filter(e->e.sequence()>after).toList()); }
+            catch(NotFoundException deleted) { throw deleted; }
             catch(Exception e) { throw new RuntimeException(e); }
-        }).runSubscriptionOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool()));
+        }).runSubscriptionOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool()))
+            // Reset may remove a run while an SSE subscriber is still connected.
+            // One terminal event tells the browser to stop reconnecting, then completes.
+            .onFailure(NotFoundException.class).recoverWithItem(Map.<String,Object>of("status","RESET","runId",id,"events",List.of()));
     }
     static Response accepted(Run run) { return Response.accepted(run).build(); }
 }

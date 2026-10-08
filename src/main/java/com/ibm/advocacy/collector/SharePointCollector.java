@@ -1,0 +1,97 @@
+package com.ibm.advocacy.collector;
+
+import com.ibm.advocacy.storage.RuntimeWorkspace;
+import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.WaitUntilState;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/** Local, interactive sign-in. Passwords and browser cookies never enter model prompts or API responses. */
+@ApplicationScoped
+public class SharePointCollector {
+    @Inject RuntimeWorkspace workspace;
+    @ConfigProperty(name="metrics.sharepoint.enabled",defaultValue="true") boolean enabled;
+    @ConfigProperty(name="metrics.sharepoint.host",defaultValue="ibm-my.sharepoint.com") String allowedHost;
+    @ConfigProperty(name="metrics.sharepoint.browser-channel",defaultValue="chrome") String channel;
+    @ConfigProperty(name="metrics.sharepoint.browser-executable",defaultValue="") Optional<String> executable;
+    private final ExecutorService browserWorker=Executors.newSingleThreadExecutor();
+    private final AtomicBoolean busy=new AtomicBoolean();
+    private volatile String status="NOT_CONNECTED",message="Connect SharePoint to sign in with your IBM account.";
+    public record Workbook(byte[] bytes,String filename,String sourceUrl) {}
+    @jakarta.annotation.PreDestroy void close(){browserWorker.shutdownNow();}
+    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost);}
+
+    public URI fileUri(String value) {
+        try {
+            URI uri=URI.create(value.strip());
+            if(!"https".equalsIgnoreCase(uri.getScheme())||!allowedHost.equalsIgnoreCase(uri.getHost())||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443))throw new IllegalArgumentException();
+            String path=uri.getPath();if(path.startsWith("/:x:/r/"))path=path.substring(6);
+            if(!path.matches("/(personal|sites|teams)/[^/]+/.+\\.xlsx")||Arrays.asList(path.split("/")).contains("..")||path.contains("\\"))throw new IllegalArgumentException();
+            return new URI("https",null,allowedHost,-1,path,null,null);
+        }catch(Exception e){throw new BadRequestException("Use an HTTPS .xlsx file link from "+allowedHost+" (the /:x:/r/ link or direct file path).");}
+    }
+    public URI downloadUri(URI file) {
+        String[] segments=file.getPath().split("/");String site="/"+segments[1]+"/"+segments[2];
+        return URI.create("https://"+allowedHost+site+"/_layouts/15/download.aspx?SourceUrl="+URLEncoder.encode(file.toASCIIString(),StandardCharsets.UTF_8));
+    }
+    private BrowserType.LaunchPersistentContextOptions options(boolean headless) throws Exception {
+        var options=new BrowserType.LaunchPersistentContextOptions().setHeadless(headless).setAcceptDownloads(true).setDownloadsPath(workspace.path(".uploads/sharepoint-downloads"));
+        if(executable.isPresent()&&!executable.get().isBlank())options.setExecutablePath(Path.of(executable.get()));
+        else if(!channel.isBlank())options.setChannel(channel);
+        return options;
+    }
+    private boolean authenticated(BrowserContext browser) {
+        return browser.cookies().stream().anyMatch(c->(c.name.equals("FedAuth")||c.name.equals("rtFa"))&&(c.domain.equals(allowedHost)||allowedHost.endsWith(c.domain.startsWith(".")?c.domain:c.domain+"."))&&!c.value.isBlank());
+    }
+    public Map<String,Object> connect(String url) {
+        URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
+        if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in or wait for the import.",409);
+        status="CONNECTING";message="Sign in in the SharePoint browser window, including IBM SSO/MFA if requested.";
+        browserWorker.submit(()->{
+            try(Playwright playwright=Playwright.create();BrowserContext browser=playwright.chromium().launchPersistentContext(workspace.path(".sessions/sharepoint"),options(false))) {
+                Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();
+                page.navigate(URI.create(url.strip()).toASCIIString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(60_000));
+                long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
+                while(System.nanoTime()<deadline&&!Thread.currentThread().isInterrupted()) {
+                    if(authenticated(browser)){status="CONNECTED";message="Signed in. Choose Read SharePoint workbook to download a snapshot.";return;}
+                    page.waitForTimeout(1000);
+                }
+                status="NOT_CONNECTED";message="Sign-in timed out. Connect again or upload the downloaded workbook.";
+            }catch(Exception e){status="NOT_CONNECTED";message="Browser sign-in could not finish. Check Chrome installation, IBM access, and sign-in requirements, then reconnect.";}
+            finally{busy.set(false);}
+        });return session();
+    }
+    public Workbook download(String url) throws Exception {
+        URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
+        if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in first.",409);
+        Future<Workbook> future=browserWorker.submit(()->{
+            Path saved=workspace.path(".uploads/sharepoint-"+UUID.randomUUID()+".xlsx");
+            try(Playwright playwright=Playwright.create();BrowserContext browser=playwright.chromium().launchPersistentContext(workspace.path(".sessions/sharepoint"),options(true))) {
+                if(!authenticated(browser))throw new ClientErrorException("Connect SharePoint and sign in before importing the workbook.",401);
+                Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();
+                Download download;
+                try{download=page.waitForDownload(new Page.WaitForDownloadOptions().setTimeout(45_000),()->page.evaluate("url => window.location.assign(url)",downloadUri(file).toASCIIString()));}
+                catch(PlaywrightException e){throw new ClientErrorException("SharePoint did not provide a workbook download. Reconnect, verify file access, or upload the workbook if your organization blocks browser downloads.",401);}
+                download.saveAs(saved);
+                if(Files.size(saved)>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
+                String filename=file.getPath().substring(file.getPath().lastIndexOf('/')+1);
+                status="CONNECTED";message="Workbook snapshot downloaded. Review sheets and reporting month.";
+                return new Workbook(Files.readAllBytes(saved),filename,file.toASCIIString());
+            }catch(PlaywrightException e){throw new ClientErrorException("SharePoint browser is unavailable. Install Chrome or configure the browser executable, then connect again.",503);}
+            finally{Files.deleteIfExists(saved);}
+        });
+        try{return future.get(90,TimeUnit.SECONDS);}
+        catch(ExecutionException e){if(e.getCause() instanceof ClientErrorException client&&client.getResponse().getStatus()==401){status="NOT_CONNECTED";message="SharePoint sign-in or workbook access needs attention. Reconnect before importing.";}if(e.getCause() instanceof Exception cause)throw cause;throw e;}
+        catch(TimeoutException e){future.cancel(true);throw new ClientErrorException("SharePoint download timed out. Reconnect and try again.",504);}
+        finally{busy.set(false);}
+    }
+}
