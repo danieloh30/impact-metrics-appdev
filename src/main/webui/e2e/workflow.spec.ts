@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test';
+const current=Buffer.from('Author of activity,Tool,Type of activity,Name of activity,Views / attendance,Duration (in hours),Link / URL to resource\r\nA;B,X;Y,Recorded video,Digital,,,https://example.com/video\r\nA;B,X;Y,Customer meeting,Meeting,25,2,\r\nA;B,X,Standard participation,Other,,,\r\n');
+const trailing=Buffer.from('Author,Tool,Type of activity,Name of activity,Current total,Previous total,Views / attendance,Link / URL to resource\r\nA,X,Recorded video,café,40,0,0,https://example.com/trailing\r\nB,X,Recorded video,café,40,0,0,https://example.com/trailing\r\n','latin1');
+test('imports, collects manually, approves each phase, previews and downloads all five exports',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/');await expect(page.getByRole('heading',{name:'Make your impact count.'})).toBeVisible();
+ await page.getByLabel('Current month CSV').setInputFiles({name:'AvocadoBot 2.csv',mimeType:'text/csv',buffer:current});
+ await page.getByLabel('Trailing 90 days CSV').setInputFiles({name:'trailing_90-day.csv',mimeType:'text/csv',buffer:trailing});
+ await page.getByRole('button',{name:'Import CSV files'}).click();
+ await expect(page.getByRole('heading',{name:'Review the calculation contract'})).toBeVisible();
+ await page.getByLabel('I accept these calculation rules for this run.').check();await page.getByRole('button',{name:'Start processing'}).click();
+ await expect(page.getByRole('button',{name:'Approve phase 1'})).toBeVisible();
+ await page.getByRole('button',{name:'Enter views'}).click();await page.getByLabel('Measured total').fill('100');await page.getByLabel('Source / collection note').fill('Synthetic end-to-end fixture: verified views 100');
+ await page.getByRole('button',{name:'Save & refresh review'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'Approve phase 1'})).toBeEnabled();
+ await page.getByRole('button',{name:'Approve phase 1'}).click();await expect(page.getByRole('button',{name:'Approve phase 2'})).toBeEnabled();await page.getByRole('button',{name:'Approve phase 2'}).click();
+ await expect(page.getByRole('button',{name:'Approve phase 3'})).toBeEnabled();await page.getByRole('button',{name:'Approve phase 3'}).click();
+ await expect(page.getByRole('button',{name:'Approve phase 4'})).toBeVisible();await page.getByRole('button',{name:'Enter views'}).click();await page.getByLabel('Measured total').fill('120');await page.getByLabel('Source / collection note').fill('Synthetic shared resource total = 120');await page.getByRole('button',{name:'Save & refresh review'}).click();
+ await expect(page.getByRole('button',{name:'Approve phase 4'})).toBeEnabled();await page.getByRole('button',{name:'Approve phase 4'}).click();
+ await expect(page.locator('.status')).toHaveText('Complete');
+ for(const name of ['digital.csv','in-person.csv','follow-up.csv','updated_90-day.csv','current.csv'])await expect(page.getByRole('link',{name:`Download ${name}`,exact:true})).toBeVisible();
+ const row=page.locator('.export-row').filter({has:page.getByText('current.csv',{exact:true})});await row.getByRole('button',{name:'Preview'}).click();await expect(page.locator('table th')).toHaveCount(24);await expect(page.locator('tbody tr')).toHaveCount(10);
+ const downloaded=page.waitForEvent('download');await page.getByRole('link',{name:'Download current.csv',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toBe('current.csv');const stream=await file.createReadStream();let csv='';for await(const chunk of stream!)csv+=chunk.toString();expect(csv.split('\r\n')[0].split(',')).toHaveLength(24);expect(csv).toContain('12.5');
+ const zipEvent=page.waitForEvent('download');await page.getByRole('link',{name:'Download all .zip'}).click();expect((await zipEvent).suggestedFilename()).toMatch(/\.zip$/);
+ await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'../../../target/e2e-completed.png',fullPage:true});expect(errors).toEqual([]);
+ await page.reload();await expect(page.locator('.status')).toHaveText('Complete');
+ await page.setViewportSize({width:390,height:844});await expect(page.getByRole('heading',{name:'Your CSV exports'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:'../../../target/e2e-mobile.png',fullPage:true});
+});

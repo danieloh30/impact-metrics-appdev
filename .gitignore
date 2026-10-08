@@ -1,0 +1,64 @@
+#Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+.flattened-pom.xml
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ
+.idea
+*.ipr
+*.iml
+*.iws
+
+# NetBeans
+nb-configuration.xml
+
+# Visual Studio Code
+.vscode
+.factorypath
+
+# OSX
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# patch
+*.orig
+*.rej
+
+# Local environment
+.env
+
+# Plugin directory
+/.quarkus/cli/plugins/
+# TLS Certificates
+.certs/
+src/main/webui/node_modules/
+src/main/webui/dist/
+src/main/webui/test-results/
+runtimes/*.csv
+runtimes/runs/
+runtimes/.sessions/
+runtimes/.uploads/
+.venv/
+*.log
+
+# Runtime data remains local, including future rawdata/output layouts.
+/runtimes/**
+!/runtimes/RUN.md
+!/runtimes/AGENTS.md
+
+# Local credentials and browser test artifacts.
+.env.*
+!.env.example
+src/main/webui/playwright-report/
