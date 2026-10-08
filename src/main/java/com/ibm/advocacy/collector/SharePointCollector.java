@@ -49,8 +49,25 @@ public class SharePointCollector {
         else if(!channel.isBlank())options.setChannel(channel);
         return options;
     }
-    private boolean authenticated(BrowserContext browser) {
-        return browser.cookies().stream().anyMatch(c->(c.name.equals("FedAuth")||c.name.equals("rtFa"))&&(c.domain.equals(allowedHost)||allowedHost.endsWith(c.domain.startsWith(".")?c.domain:c.domain+"."))&&!c.value.isBlank());
+    boolean authenticated(BrowserContext browser) {
+        return browser.cookies().stream().anyMatch(c->c.name.equals("FedAuth")&&(c.domain.equals(allowedHost)||allowedHost.endsWith(c.domain.startsWith(".")?c.domain:c.domain+"."))&&!c.value.isBlank());
+    }
+    // Chrome does not reliably retain session cookies when the sign-in process closes.
+    // Snapshot them explicitly before closing and restore them in the download process.
+    void saveSession(BrowserContext browser) throws Exception {
+        workspace.bytes(workspace.path(".sessions/sharepoint-auth.json"),browser.storageState(new BrowserContext.StorageStateOptions().setIndexedDB(true)).getBytes(StandardCharsets.UTF_8));
+    }
+    Browser downloadBrowser(Playwright playwright) throws Exception {
+        var options=new BrowserType.LaunchOptions().setHeadless(true).setDownloadsPath(workspace.path(".uploads/sharepoint-downloads"));
+        if(executable.isPresent()&&!executable.get().isBlank())options.setExecutablePath(Path.of(executable.get()));
+        else if(!channel.isBlank())options.setChannel(channel);
+        return playwright.chromium().launch(options);
+    }
+    BrowserContext downloadContext(Browser browser) throws Exception {
+        var options=new Browser.NewContextOptions().setAcceptDownloads(true);
+        Path state=workspace.path(".sessions/sharepoint-auth.json");
+        if(Files.isRegularFile(state))options.setStorageStatePath(state);
+        return browser.newContext(options);
     }
     public Map<String,Object> connect(String url) {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
@@ -62,7 +79,7 @@ public class SharePointCollector {
                 page.navigate(URI.create(url.strip()).toASCIIString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(60_000));
                 long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
                 while(System.nanoTime()<deadline&&!Thread.currentThread().isInterrupted()) {
-                    if(authenticated(browser)){status="CONNECTED";message="Signed in. Choose Read SharePoint workbook to download a snapshot.";return;}
+                    if(authenticated(browser)){saveSession(browser);status="CONNECTED";message="Signed in. Choose Read SharePoint workbook to download a snapshot.";return;}
                     page.waitForTimeout(1000);
                 }
                 status="NOT_CONNECTED";message="Sign-in timed out. Connect again or upload the downloaded workbook.";
@@ -75,7 +92,7 @@ public class SharePointCollector {
         if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in first.",409);
         Future<Workbook> future=browserWorker.submit(()->{
             Path saved=workspace.path(".uploads/sharepoint-"+UUID.randomUUID()+".xlsx");
-            try(Playwright playwright=Playwright.create();BrowserContext browser=playwright.chromium().launchPersistentContext(workspace.path(".sessions/sharepoint"),options(true))) {
+            try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=downloadContext(chrome)) {
                 if(!authenticated(browser))throw new ClientErrorException("Connect SharePoint and sign in before importing the workbook.",401);
                 Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();
                 Download download;
@@ -84,6 +101,7 @@ public class SharePointCollector {
                 download.saveAs(saved);
                 if(Files.size(saved)>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
                 String filename=file.getPath().substring(file.getPath().lastIndexOf('/')+1);
+                saveSession(browser);
                 status="CONNECTED";message="Workbook snapshot downloaded. Review sheets and reporting month.";
                 return new Workbook(Files.readAllBytes(saved),filename,file.toASCIIString());
             }catch(PlaywrightException e){throw new ClientErrorException("SharePoint browser is unavailable. Install Chrome or configure the browser executable, then connect again.",503);}

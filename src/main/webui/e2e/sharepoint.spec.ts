@@ -29,3 +29,26 @@ test('SharePoint sign-in and snapshot flow feeds the workbook preparation UI',as
  expect(reads).toBe(1);expect(prepared).toBe(1);await expect(page.getByRole('link',{name:'Download trailing_90-day.csv ↓',exact:true})).toBeVisible();
  await page.screenshot({path:'../../../target/e2e-sharepoint-prepared.png',fullPage:true});expect(errors).toEqual([]);
 });
+
+test('SharePoint read waits for complete sign-in and disables itself when access expires',async({page})=>{
+ const url='https://ibm-my.sharepoint.com/:x:/r/personal/test_ibm_com/Documents/Inputs/Activity%20inputs.xlsx';
+ let status='NOT_CONNECTED',busy=false,reads=0;
+ await page.route('**/api/sharepoint/session',async route=>{
+  if(route.request().method()==='POST'){status='CONNECTING';busy=true;}
+  await route.fulfill({status:route.request().method()==='POST'?202:200,json:{busy,enabled:true,status,message:status==='CONNECTED'?'Signed in.':status==='CONNECTING'?'Sign in in the separate Chrome window.':'Reconnect SharePoint.'}});
+ });
+ await page.route('**/api/workbooks/from-sharepoint',async route=>{
+  reads++;status='NOT_CONNECTED';
+  await route.fulfill({status:401,json:{error:'SharePoint access expired. Reconnect.'}});
+ });
+ await page.goto('/');await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();
+ await page.getByLabel('SharePoint workbook link').fill(url);
+ const read=page.getByRole('button',{name:'Read SharePoint workbook',exact:true});
+ await expect(read).toBeDisabled();
+ await page.getByRole('button',{name:'Connect SharePoint',exact:true}).click();await expect(page.locator('.sharepoint-status')).toContainText('Sign in');await expect(read).toBeDisabled();
+ status='CONNECTED';// Authentication is detected before the sign-in browser finishes closing.
+ await expect(page.locator('.sharepoint-status')).toContainText('Signed in.');await expect(read).toBeDisabled();
+ busy=false;await expect(read).toBeEnabled({timeout:7000});await read.click();
+ await expect(page.getByRole('alert')).toContainText('SharePoint access expired');await expect(read).toBeDisabled();
+ expect(reads).toBe(1);
+});
