@@ -13,7 +13,7 @@ cd /Users/danieloh/developer-advocacy/tools/impact-metrics-appdev
 
 Open **http://127.0.0.1:8097**. Quinoa builds and serves the SPA through Quarkus; no separate frontend server is needed. First startup requires dependency downloads. Override the port with `./dev.sh -Dquarkus.http.port=8098` if necessary.
 
-Connect SharePoint once with your IBM account, then use **Read AvocadoBot workbook** and **Read metrics workbook** independently. Both editable URL fields start with the supplied defaults. Choose the reporting month, confirm the current activity sheet and automatically selected historical baseline sheet, then choose **Prepare workbook inputs**. Accept the calculation contract and start the agents. Approve phases 1–4 as applicable; phases 5–7 finish automatically. CSV/local Excel import controls and runtime seed import endpoints are removed. Download results individually or as ZIP.
+Connect SharePoint once with your IBM account and choose the reporting month, then select **Read workbooks & prepare inputs**. Both editable URL fields start with the supplied defaults. The app reads both sources and prepares their selected sheets sequentially. Ambiguous selections pause for review. If a step fails, **Retry failed step** reuses successful snapshots; independent re-read controls are available under each workbook’s **Source details**. Accept the calculation contract and start the agents. Approve phases 1–4 as applicable; phases 5–7 finish automatically. CSV/local Excel import controls and runtime seed import endpoints are removed. Download results individually or as ZIP.
 
 Restarted/interrupted runs become retryable and resume from immutable phase inputs. Successful measurements are cached per run. Approvals reference exact artifact versions; edits generate fresh versions.
 
@@ -253,3 +253,11 @@ The SPA includes a sticky **Your next step** guide for SharePoint connection, bo
 ### Workbook blog metrics
 
 Blogs on `eldermoraes.com` and `the-main-thread.com` (including their `www` variants) use the workbook's supplied Views / attendance and never trigger manual URL collection. Zero is valid; missing, invalid, or negative views require a data correction. Duration is preserved and is not required for digital blog views. Historical blog rows retain supplied views and prior totals, with **Workbook blog input — not a trailing delta** provenance; they do not invent a fresh lifetime measurement. Other hosts keep their existing collection rules.
+
+## One-action SharePoint preparation
+
+After sign-in and reporting-month selection, **Read workbooks & prepare inputs** sequentially reads AvocadoBot, reads the separate historical metrics workbook, validates sheet selection, and prepares a new run. Three progress cards identify the active step, successful snapshots, and failures. The calculation contract and phase approvals remain explicit user actions.
+
+**Retry failed step** retains successful downloads and resumes at the missing read or preparation; it does not download both sources again. A second-site sign-in error directs Connect SharePoint to that workbook. Source URLs remain visible; each card's expandable **Source details** provides an independent re-read for changed or expired snapshots. Editing a URL invalidates only that source. Controls are locked during the sequence to keep month, sheet, and snapshot choices consistent and prevent duplicate submissions.
+
+An authoritative Current month inputs sheet is selected automatically, or the sole eligible activity sheet. When multiple alternatives exist without that sheet, preparation pauses for a sheet choice; missing, duplicate, or ineligible historical monthly sheets also pause preparation. Users can fix selections or the workbook and continue without re-downloading successful snapshots. Errors are shown at their source or preparation step. The next-action guide targets the combined action and any required selection.
