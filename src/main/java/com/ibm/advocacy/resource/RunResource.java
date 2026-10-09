@@ -31,6 +31,7 @@ public class RunResource {
     public record Start(boolean acceptContract) {}
     public record Reset(boolean confirm) {}
     public record Approve(@Min(1) int version,@NotBlank String digest,boolean acknowledgeIssues) {}
+    public record InputReview(@Min(1) int version,@NotBlank String rowId,String views,String duration,boolean keepOriginal,@Size(max=1000) String note) {}
     public record Manual(@Min(1) int version,@NotBlank String rowId,@NotBlank String value,@NotBlank String type,@NotBlank @Size(max=1000) String evidence) {}
     @GET @Path("/config") public Map<String,Object> config() { return Map.of("phases",PHASES,"contract",Pipeline.CONTRACT,"outputs",OUTPUTS); }
     @GET @Path("/linkedin/session") public Map<String,Object> session() { return linkedin.session(); }
@@ -72,6 +73,11 @@ public class RunResource {
     @POST @Path("/runs/{id}/start") public Response start(@PathParam("id") String id,@Valid Start body) throws Exception { return accepted(service.start(id,body!=null&&body.acceptContract())); }
     @POST @Path("/runs/{id}/phases/{phase}/approve") public Response approve(@PathParam("id") String id,@PathParam("phase") int phase,@Valid Approve body) throws Exception { if(body==null)throw new BadRequestException("Approval body required");return accepted(service.approve(id,phase,body.version(),body.digest(),body.acknowledgeIssues())); }
     @POST @Path("/runs/{id}/measurements") public Response measurement(@PathParam("id") String id,@Valid Manual body) throws Exception { if(body==null)throw new BadRequestException("Measurement body required");return accepted(service.measured(id,body.version(),body.rowId(),body.value(),body.type(),body.evidence())); }
+@GET @Path("/runs/{id}/trailing-input") public RunService.TrailingInput trailingInput(@PathParam("id") String id,@QueryParam("rowId") String rowId) throws Exception {return service.trailingInput(id,rowId);}
+@POST @Path("/runs/{id}/trailing-inputs") public Response reviewInput(@PathParam("id") String id,@Valid InputReview body) throws Exception {
+    if(body==null)throw new BadRequestException("Input review body required");
+    return accepted(service.reviewTrailingInput(id,body.version(),body.rowId(),body.views(),body.duration(),body.keepOriginal(),body.note()));
+}
     @POST @Path("/runs/{id}/retry") public Response retry(@PathParam("id") String id) throws Exception { return accepted(service.retry(id)); }
     @POST @Path("/runs/{id}/cancel") public Run cancel(@PathParam("id") String id) throws Exception { return service.cancel(id); }
     @GET @Path("/runs/{id}/artifacts") public Collection<Artifact> artifacts(@PathParam("id") String id) throws Exception { return service.get(id).artifacts.values(); }

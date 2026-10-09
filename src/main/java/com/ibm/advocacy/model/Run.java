@@ -12,5 +12,6 @@ public class Run {
     public List<Event> events=new ArrayList<>();
     public List<Approval> approvals=new ArrayList<>();
     public LinkedHashMap<String,Artifact> artifacts=new LinkedHashMap<>();
+    public Map<String,InputReview> inputReviews=new LinkedHashMap<>();
     public LinkedHashMap<String,Measurement> measurements=new LinkedHashMap<>();
 }

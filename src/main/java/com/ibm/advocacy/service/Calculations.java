@@ -51,7 +51,7 @@ public final class Calculations {
     public static List<Row> trailing(List<Row> originals,Map<String,Measurement> measured) {
         Map<String,List<Row>> groups=new LinkedHashMap<>();List<Row> result=new ArrayList<>();
         for(Row original:originals) {
-            Row row=original.copy();row.cells.put("Previous total",original.get("Current total"));row.cells.put(VIEWS,"");result.add(row);
+            Row row=original.copy();row.cells.put("Original Views / attendance",original.get(VIEWS));row.cells.put("Original Duration (in hours)",original.get("Duration (in hours)"));row.cells.put("Metric basis","Unresolved trailing delta");row.cells.put("Previous total",original.get("Current total"));row.cells.put(VIEWS,"");result.add(row);
             String key=urlKey(original.get(URL));if(key.isBlank())key="blank:"+original.id;
             groups.computeIfAbsent(key,k->new ArrayList<>()).add(row);
         }
@@ -60,7 +60,7 @@ public final class Calculations {
             if(m==null) { group.getValue().forEach(r->r.cells.put(NOTE,"Current measurement unavailable — prior total retained; delta not calculated"));continue; }
             List<BigDecimal> allocations=allocate(number(m.value()),group.getValue().size());
             for(int i=0;i<allocations.size();i++) {
-                Row row=group.getValue().get(i);row.cells.put("Current total",format(allocations.get(i)));
+                Row row=group.getValue().get(i);row.cells.put("Metric basis","Trailing delta");row.cells.put("Current total",format(allocations.get(i)));
                 try { BigDecimal delta=allocations.get(i).subtract(number(row.get("Previous total")));row.cells.put(VIEWS,format(delta));row.cells.put(NOTE,(delta.signum()<0?"Negative delta — review; ":"")+m.type()+" collected "+m.collectedAt()); }
                 catch(IllegalArgumentException e) { row.cells.put(NOTE,"Invalid previous baseline — "+e.getMessage()); }
             }

@@ -125,15 +125,25 @@ public class Pipeline {
         for(Row row:source.rows) {
             String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
             if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
+            if(run.inputReviews.containsKey(row.id))continue;
             if(attempted.add(key))try { measurement(run,row); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
         }
 List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
     Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
+    if(run.inputReviews.containsKey(row.id)){baselines.add(row);continue;}
     try { if(Calculations.number(row.get("Current total")).signum()<0)throw new IllegalArgumentException("Previous baseline cannot be negative"); }
     catch(IllegalArgumentException e) { issue(run,row,"Invalid previous baseline — "+e.getMessage(),true,"BASELINE"); }
     baselines.add(row);
 }
         List<Row> rows=Calculations.trailing(baselines,run.measurements);
+        for(Row row:rows) {
+            var input=run.inputReviews.get(row.id);if(input==null)continue;
+            Row original=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
+            row.cells.put(VIEWS,input.views());row.cells.put("Duration (in hours)",input.duration());
+            row.cells.put("Current total",original.get("Current total"));row.cells.put("Previous total",original.get("Current total"));
+            row.cells.put("Metric basis",input.edited()?"Reviewed input — not a trailing delta":"Retained input — not a trailing delta");
+            row.cells.put(NOTE,input.note()+"; no fresh lifetime total or trailing delta calculated");
+        }
         for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline")&&run.issues.stream().noneMatch(i->i.rowId().equals(row.id)&&i.metricType().equals("BASELINE")))issue(run,row,row.get(NOTE),true,"BASELINE");
         store(run,4,"updated_90-day.csv",csv.output(source,rows));
         event(run,"Trailing90Agent","Refreshed "+source.rows.size()+" rows using "+attempted.size()+" resource groups");workspace.save(run);

@@ -27,7 +27,7 @@ For LinkedIn Live, open the event page, choose Show in-depth analytics, follow t
 
 For current-month digital rows, a numeric nonnegative Views / attendance plus numeric Duration (in hours) is sufficient. Preserve the supplied views and record that the inputs supplied the metric; no manual collection issue is created. Digital metrics are not multiplied by duration. If either value is missing, retain No URL — manual collection required. If supplied values are invalid, require correction before approval. In-person rows use provided attendance and duration without requiring a URL; blank duration defaults to one hour under RUN.md. Booth lead and unknown/other activity handling remain separate follow-up rules.
 
-The exception is current-month data only. Historical rows still need a fresh lifetime total and a verified previous baseline to calculate a trailing delta. Do not substitute the historical Views / attendance or duration for a fresh total.
+The exception is current-month data only. Historical rows still need a fresh lifetime total and a verified previous baseline to calculate a trailing delta. Do not substitute the historical Views / attendance or duration for a fresh total. A user may instead explicitly keep or edit historical no-URL input values in the SPA. Record that decision separately from measurements, preserve immutable originals, and label the exported values as retained/reviewed input rather than a trailing delta. Since this path calculates no delta, it does not require a historical baseline or fabricate a lifetime total. The user still approves phase 4.
 
 ## Approvals and data safety
 

@@ -166,6 +166,32 @@ public synchronized byte[] input(String id,String name) throws Exception {
             Pipeline.event(run,"Manual collection","Recorded "+type+" for "+row.id+"; refreshing review artifacts");enqueue(run,run.phase);return run;
         }
     }
+    private static String editableNumber(String value){try{return Calculations.format(Calculations.number(value));}catch(IllegalArgumentException invalid){return value;}}
+    public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain) {}
+    private Row trailingRow(Run run,String rowId) throws Exception {
+        if(!run.trailing)throw new BadRequestException("This run has no historical input");
+        Row row=workspace.data(run.id,"trailing-source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown historical row"));
+        if(!row.get(URL).isBlank())throw new BadRequestException("Input retention is available for historical rows without a URL");
+        return row;
+    }
+    public synchronized TrailingInput trailingInput(String id,String rowId) throws Exception {
+        Run run=get(id);Row row=trailingRow(run,rowId);var reviewed=run.inputReviews.get(rowId);boolean valid=true;
+        try{BigDecimalValidation(row.get(VIEWS));BigDecimalValidation(row.get("Duration (in hours)"));}catch(IllegalArgumentException|BadRequestException e){valid=false;}
+        return new TrailingInput(row.get(VIEWS),row.get("Duration (in hours)"),row.get("Current total"),reviewed==null?editableNumber(row.get(VIEWS)):reviewed.views(),reviewed==null?editableNumber(row.get("Duration (in hours)")):reviewed.duration(),valid);
+    }
+    public synchronized Run reviewTrailingInput(String id,int version,String rowId,String views,String duration,boolean keepOriginal,String note) throws Exception {
+        synchronized(lock(id)) {
+            Run run=get(id);
+            if(!run.status.equals("AWAITING_APPROVAL")||run.phase!=4||run.version!=version)throw new ClientErrorException("Input review requires the current trailing phase review",409);
+            Row row=trailingRow(run,rowId);
+            String count=keepOriginal?row.get(VIEWS):views,hours=keepOriginal?row.get("Duration (in hours)"):duration;
+            try{BigDecimalValidation(count);BigDecimalValidation(hours);}catch(IllegalArgumentException e){throw new BadRequestException("Enter valid nonnegative views / attendance and duration");}
+            if(note!=null&&note.length()>1000)throw new BadRequestException("Review note must be at most 1,000 characters");
+            String evidence=note==null||note.isBlank()?keepOriginal?"User retained original historical inputs":"User reviewed and edited historical inputs":note.strip();
+            run.inputReviews.put(rowId,new com.ibm.advocacy.model.InputReview(Calculations.format(Calculations.number(count)),Calculations.format(Calculations.number(hours)),evidence,!keepOriginal));
+            Pipeline.event(run,"Input review",(keepOriginal?"Retained":"Edited")+" supplied attendance/views and duration for "+rowId+"; no fresh lifetime total or delta claimed");enqueue(run,4);return run;
+        }
+    }
     static void BigDecimalValidation(String value) { if(Calculations.number(value).signum()<0)throw new BadRequestException("Measured totals cannot be negative"); }
     public synchronized byte[] artifact(String id,String name,Integer version) throws Exception {
         if(!OUTPUTS.contains(name))throw new BadRequestException("Unknown artifact");Run run=get(id);Artifact artifact=run.artifacts.get(name);if(artifact==null)throw new NotFoundException("Artifact is not generated yet");
