@@ -38,3 +38,7 @@ CSV compatibility: all generated exports use UTF-8. Older saved trailing_90-day.
 ## Measurement review input context
 
 Load original cell values for URL rows as well as no-URL rows in phases 1, 2, and 4. Display original views/attendance, duration, and baseline separately from the editable measurement. Prefill the matching field or latest manual value; do not prefill a duration/baseline correction from the wrong column. Zero is a valid prefill. Notes are optional and bounded to 1,000 characters. Missing notes are recorded explicitly as not provided, not as verified source evidence. A user still confirms/saves the selected measurement; display of a prior period's count does not itself refresh a trailing lifetime total.
+
+## Workbook blog collection exception
+
+For eldermoraes.com and the-main-thread.com, including www variants, use supplied workbook Views / attendance rather than manual URL collection. Zero is valid; missing, invalid, or negative views require correction. Duration is preserved but is not needed for digital blog views. Historical blog rows retain supplied views and prior totals, explicitly marked Workbook blog input — not a trailing delta; do not fabricate a fresh lifetime measurement or delta. Other hosts retain existing rules.

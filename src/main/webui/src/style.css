@@ -368,3 +368,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media(max-width:900px) { .sharepoint-workbooks { grid-template-columns:1fr; } .sharepoint-connection-bar { align-items:flex-start; flex-direction:column; } }
 @media(max-width:560px) { .sharepoint-workbook { padding:16px; } .workbook-read-row .primary { width:100%; } .reporting-month-picker { align-items:flex-start; flex-direction:column; } }
 .sharepoint-workbook input,.workbook-options select,.reporting-month-picker input { min-height:44px; padding:10px 12px; border:1px solid #cbd8eb; border-radius:7px; background:#fff; color:#26374f; font:inherit; font-size:13px; font-weight:400; line-height:1.4; }
+
+.next-action-guide { position:sticky; top:12px; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px 20px; margin:0 0 22px; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:12px; background:#fff; box-shadow:0 6px 22px #18365d1c; }
+.next-action-guide>div { min-width:0; }
+.next-action-label { display:block; color:#245ac8; font-size:10px; font-weight:600; letter-spacing:1.4px; margin-bottom:5px; }
+.next-action-guide strong { display:block; font-size:16px; color:#192b45; }
+.next-action-guide p { font-size:12px; margin:5px 0 0; overflow-wrap:anywhere; }
+.next-action-links { display:flex; flex-wrap:wrap; gap:8px; flex-shrink:0; }
+.next-action-links>button:first-child { color:#fff; background:#0f62fe; border-color:#0f62fe; }
+.next-action-section { outline:3px solid #7aa4ff; outline-offset:5px; scroll-margin-top:180px; }
+.next-action-control { outline:3px solid #0f62fe !important; outline-offset:4px; box-shadow:0 0 0 7px #dce8ff !important; }
+.source-switch { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:12px 0 20px; padding:10px 14px; background:#f0f4fa; border-radius:8px; font-size:12px; }
+@media(max-width:700px) { .next-action-guide { top:8px; padding:12px 14px; align-items:flex-start; flex-direction:column; gap:10px; } .next-action-guide strong { font-size:14px; } .next-action-links { flex-shrink:1; width:100%; } .next-action-links>button:first-child { flex:1; } }

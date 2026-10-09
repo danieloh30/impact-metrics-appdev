@@ -51,3 +51,7 @@ Copy Views / attendance to Current total. ValidationAgent checks unique attribut
 ## Review and reproducibility
 
 Manual measurement popups show the immutable original views/attendance, duration, and recorded baseline for rows with or without URLs. Prefill the editable field from its matching input metric (baseline, duration, reactions, or views/attendance), or the latest user measurement if available. Source / collection notes are optional; when absent, record that no source note was provided rather than inventing evidence. Numeric, metric-type, phase and version validation remain required. Enter corrections through the SPA; publish a new structured result version and approve its digest. Approval hashes cover the structured result bytes, independent of CSV formatting. Approvals after phases 1–4 remain mandatory. Frozen copies of this RUN.md and AGENTS.md are saved per run; changing them does not modify an existing run. Never automatically recalculate follow-up metrics or fabricate missing dates, URLs, totals, or baselines.
+
+## Workbook blog collection exception
+
+For eldermoraes.com and the-main-thread.com, including www variants, use supplied workbook Views / attendance rather than manual URL collection. Zero is valid; missing, invalid, or negative views require correction. Duration is preserved but is not needed for digital blog views. Historical blog rows retain supplied views and prior totals, explicitly marked Workbook blog input — not a trailing delta; do not fabricate a fresh lifetime measurement or delta. Other hosts retain existing rules.
