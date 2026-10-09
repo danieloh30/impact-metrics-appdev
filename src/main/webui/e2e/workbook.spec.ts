@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 test('workbook generates both CSV inputs and runs through the existing agents',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');await page.getByRole('button',{name:'Upload Excel file',exact:true}).click();
  await page.getByLabel('Original Excel workbook').setInputFiles(path.resolve('../../../target/workbook-e2e.xlsx'));
  await page.getByRole('button',{name:'Read workbook',exact:true}).click();
  await expect(page.getByLabel('Reporting month')).toBeVisible();await page.getByLabel('Reporting month').fill('2026-09');await expect(page.getByText('Trailing window: 2026-07-01 – 2026-09-30')).toBeVisible();await page.getByLabel('Reporting month').fill('2026-10');await expect(page.getByLabel('Current-month sheet')).toHaveValue('October inputs');
@@ -32,7 +32,7 @@ test('Raw workbook defaults to current and previous inputs without selecting its
   sheets:[{name:'Bob csv',eligible:true,rows:29,months:['2026-07','2026-08'],reason:''},{name:'Current month inputs',eligible:true,rows:11,months:['2026-10'],reason:''},{name:'Previous months inputs',eligible:true,rows:402,months:['2026-09'],reason:''}],
   suggestedMonth:'2026-10',suggestedCurrentSheet:'Current month inputs',suggestedHistorySheets:['Previous months inputs']
  }}));
- await page.goto('/');await page.getByLabel('Original Excel workbook').setInputFiles({name:'Raw inputs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});
+ await page.goto('/');await page.getByRole('button',{name:'Upload Excel file',exact:true}).click();await page.getByLabel('Original Excel workbook').setInputFiles({name:'Raw inputs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});
  await page.getByRole('button',{name:'Read workbook',exact:true}).click();
  await expect(page.getByLabel('Current-month sheet')).toHaveValue('Current month inputs');
  await expect(page.getByRole('option',{name:'Current month inputs · 11 activities in sheet'})).toHaveCount(1);
@@ -49,7 +49,7 @@ test('Blog supplements show reporting-month counts and undated exclusions withou
    {name:'Elder blog data',eligible:true,blog:true,rows:132,months:['2026-09'],monthCounts:{'2026-09':23},undatedRows:14,reason:''}],
   suggestedMonth:'2026-10',suggestedCurrentSheet:'Current month inputs',suggestedHistorySheets:['Previous months inputs']
  }}));
- await page.goto('/');await page.getByLabel('Original Excel workbook').setInputFiles({name:'Blogs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});await page.getByRole('button',{name:'Read workbook',exact:true}).click();
+ await page.goto('/');await page.getByRole('button',{name:'Upload Excel file',exact:true}).click();await page.getByLabel('Original Excel workbook').setInputFiles({name:'Blogs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});await page.getByRole('button',{name:'Read workbook',exact:true}).click();
  await page.getByLabel('Reporting month').fill('2026-09');const blogs=page.locator('.blog-sheets');
  await expect(blogs).toContainText('11 activities for 2026-09');await expect(blogs).toContainText('23 activities for 2026-09');await expect(blogs).toContainText('matched using Month');await expect(blogs).toContainText('14 rows have no Date or Month and will be excluded');
  await expect(page.getByRole('option',{name:/Markus blog/})).toHaveCount(0);await expect(page.getByRole('checkbox',{name:/Elder blog/})).toHaveCount(0);

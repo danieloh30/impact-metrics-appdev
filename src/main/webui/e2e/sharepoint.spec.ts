@@ -79,8 +79,31 @@ test('SharePoint workbook link starts prefilled and remains editable',async({pag
  const edited='https://ibm-my.sharepoint.com/:x:/r/personal/test_ibm_com/Documents/Inputs/Other.xlsx';
  let connectedUrl='';
  await page.route('**/api/sharepoint/session',route=>{if(route.request().method()==='POST')connectedUrl=route.request().postDataJSON().url;return route.fulfill({json:{busy:false,status:'NOT_CONNECTED',message:'Connect SharePoint first.'}});});
- await page.goto('/');await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();
+ await page.goto('/');
+ await expect(page.getByRole('button',{name:'Import from SharePoint',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('button',{name:'Upload Excel file',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByLabel('Original Excel workbook')).toHaveCount(0);
  const input=page.getByLabel('SharePoint workbook link');await expect(input).toHaveValue(defaultUrl);
  await input.fill(edited);await page.getByRole('button',{name:'Upload Excel file',exact:true}).click();await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();await expect(input).toHaveValue(edited);
  await page.getByRole('button',{name:'Connect SharePoint',exact:true}).click();await expect.poll(()=>connectedUrl).toBe(edited);
+});
+
+test('Default SharePoint tab restores saved connection readiness without starting sign-in',async({page})=>{
+ let statusChecks=0,signIns=0;
+ await page.route('**/api/sharepoint/session',route=>{
+  if(route.request().method()==='POST')signIns++;else statusChecks++;
+  return route.fulfill({json:{busy:false,status:'CONNECTED',message:'Signed in. Read SharePoint workbook.'}});
+ });
+ await page.goto('/');
+ const sharepoint=page.getByRole('button',{name:'Import from SharePoint',exact:true});
+ const upload=page.getByRole('button',{name:'Upload Excel file',exact:true});
+ await expect(sharepoint).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByLabel('SharePoint workbook link')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Read SharePoint workbook',exact:true})).toBeEnabled();
+ await expect(page.locator('.sharepoint-status')).toContainText('Signed in.');expect(statusChecks).toBeGreaterThan(0);expect(signIns).toBe(0);
+ await upload.click();await expect(upload).toHaveAttribute('aria-pressed','true');await expect(sharepoint).toHaveAttribute('aria-pressed','false');
+ await expect(page.getByLabel('Original Excel workbook')).toBeVisible();await expect(page.getByLabel('SharePoint workbook link')).toHaveCount(0);
+ await sharepoint.click();await expect(sharepoint).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('button',{name:'Read SharePoint workbook',exact:true})).toBeEnabled();expect(signIns).toBe(0);
+ await page.reload();await expect(sharepoint).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('button',{name:'Read SharePoint workbook',exact:true})).toBeEnabled();expect(signIns).toBe(0);
+ await page.setViewportSize({width:390,height:844});await expect(page.getByLabel('SharePoint workbook link')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
