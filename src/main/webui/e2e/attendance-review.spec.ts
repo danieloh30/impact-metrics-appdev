@@ -28,10 +28,21 @@ test('Phase 2 opens in-person preview after reload and explains review even with
  await expect(page.locator('.export-row.selected')).toContainText('in-person.csv');await expect(page.locator('table')).toContainText('Meeting 1');
  const checklist=page.getByLabel('In-person attendance review checklist');
  await expect(page.getByLabel('Changes from the previous phase')).toContainText('What changed from Phase 1');await expect(page.getByLabel('Changes from the previous phase')).toContainText('No manual updates flagged');
+const badge=page.locator('.phase-changes-status.is-clear');await expect(badge).toHaveText('No manual updates flagged');await expect(badge).toHaveAttribute('role','status');await expect(badge.locator('svg')).toHaveAttribute('aria-hidden','true');
+const presentation=await badge.evaluate(element=>{
+ const style=getComputedStyle(element);
+ const luminance=(value:string)=>{const rgb=value.match(/[\d.]+/g)!.slice(0,3).map(Number).map(n=>{const channel=n/255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4;});return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];};
+ const foreground=luminance(style.color),background=luminance(style.backgroundColor);
+ return {contrast:(Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05),weight:Number(style.fontWeight),size:parseFloat(style.fontSize)};
+});
+expect(presentation.contrast).toBeGreaterThanOrEqual(4.5);expect(presentation.weight).toBeGreaterThanOrEqual(600);expect(presentation.size).toBeGreaterThanOrEqual(13);
+await page.getByLabel('Changes from the previous phase').screenshot({path:'../../../target/e2e-phase-badge-desktop.png'});
+
  await expect(checklist).toContainText('No Phase 2 validation issues');await expect(checklist).toContainText('25 attendees × 2 hours = 50');await expect(checklist).toContainText('one-hour minimum');await expect(checklist).toContainText('Booth duty');await expect(checklist).toContainText('Phase 3');await expect(checklist).toContainText('missing or duplicate');
  const approve=page.getByRole('button',{name:'Approve phase 2',exact:false});await expect(approve).toBeEnabled();expect(state.approvals).toHaveLength(0);
  await page.reload();await expect(page.getByRole('heading',{name:'in-person.csv preview',exact:true})).toBeVisible();expect(state.approvals).toHaveLength(0);
  await page.setViewportSize({width:390,height:844});await expect(checklist).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await expect(badge).toBeVisible();await page.getByLabel('Changes from the previous phase').screenshot({path:'../../../target/e2e-phase-badge-mobile.png'});
  await approve.click();await expect.poll(()=>state.approvals.length).toBe(1);expect(state.approvals[0]).toEqual({version:3,digest:'phase-digest',acknowledgeIssues:false});
 });
 test('Published Phase 2 result replaces Phase 1 preview and pagination but preserves explicit choices on refresh',async({page})=>{
@@ -49,6 +60,7 @@ test('Empty attendance preview explains confirmation and blocking issues still p
  const run=fixture(2,0);run.issues=[{rowId:'c1',activity:'Invalid attendance',url:'',reason:'Invalid attendance number',blocking:true,metricType:'ATTENDANCE'}];
  const state=await mock(page,run);await page.goto('/');await expect(page.getByRole('heading',{name:'in-person.csv preview',exact:true})).toBeVisible();
  await expect(page.getByLabel('In-person attendance review checklist')).toContainText('No in-person activities were found');await expect(page.getByLabel('In-person attendance review checklist')).not.toContainText('No Phase 2 validation issues');
+ await expect(page.locator('.phase-changes-status.is-clear')).toHaveCount(0);await expect(page.locator('.phase-changes-status.is-attention')).toHaveText('Review issues below');await expect(page.locator('.phase-changes-status svg')).toHaveCount(0);
  const approve=page.getByRole('button',{name:'Approve phase 2',exact:false});await expect(approve).toBeDisabled();await page.getByLabel('I reviewed the unresolved collection issues and will retain them for follow-up.').check();await expect(approve).toBeDisabled();expect(state.approvals).toHaveLength(0);
 });
 

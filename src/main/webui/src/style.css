@@ -334,7 +334,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .phase-changes { margin: 16px 0; padding: 16px; border: 1px solid #c5d8f4; border-left: 3px solid #0f62fe; border-radius: 8px; background: #fff; }
 .phase-changes-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 10px; }
 .phase-changes-heading h3 { font-size: 14px; margin: 0; }
-.phase-changes-heading span { color: #245ac8; background: #edf3ff; border-radius: 5px; padding: 4px 8px; font-size: 11px; }
+.phase-changes-status { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 38px; padding: 8px 12px; border: 1px solid transparent; border-radius: 8px; font-size: 13px; line-height: 1.4; font-weight: 600; }
+.phase-changes-status.is-clear { color: #fff; background: #166534; border-color: #14532d; box-shadow: 0 3px 8px #16653426; }
+.phase-changes-status.is-attention { color: #854d0e; background: #fff7d6; border-color: #ecd391; }
+.phase-changes-status svg { width: 21px; height: 21px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.phase-changes-status>span { min-width: 0; }
 .review-panel .phase-change-baseline { color: #60748e; font-size: 11px; margin-bottom: 10px; }
 .phase-change-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
 .phase-change-counts>div { background: #f4f7fc; border-radius: 6px; padding: 10px 12px; }

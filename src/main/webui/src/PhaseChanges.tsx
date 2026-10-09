@@ -35,7 +35,10 @@ export function PhaseChanges({id,phase,version,currentRows,issues,artifacts,appr
     ?'Authors and tools were expanded into every author × tool combination. Digital views and in-person attendance hours were allocated across those rows while conserving activity totals. Follow-up rows were split without recalculating their metrics.'
     :'Historical measurement review was added separately. Recorded baselines are preserved; available fresh totals produce trailing deltas, while explicitly retained or edited inputs are labeled separately. Current-month results are unchanged.';
  return <aside className="phase-changes" aria-label="Changes from the previous phase">
-  <div className="phase-changes-heading"><h3>{phase===1?'What changed since import':`What changed from Phase ${phase-1}`}</h3><span>{issues===0?'No manual updates flagged':'Review issues below'}</span></div>
+  <div className="phase-changes-heading"><h3>{phase===1?'What changed since import':`What changed from Phase ${phase-1}`}</h3><span className={`phase-changes-status ${issues===0?'is-clear':'is-attention'}`} role="status">
+   {issues===0&&<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>}
+   <span>{issues===0?'No manual updates flagged':'Review issues below'}</span>
+  </span></div>
   {priorVersion!==undefined&&<p className="phase-change-baseline">Compared with approved Phase {phase-1} · version {priorVersion}</p>}
   <p>{description}</p>
   <dl className="phase-change-counts">{names.filter(name=>artifacts[name]).map(name=>{
