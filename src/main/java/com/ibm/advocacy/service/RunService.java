@@ -183,19 +183,24 @@ public synchronized byte[] input(String id,String name) throws Exception {
             Pipeline.event(run,"Manual collection","Recorded "+type+" for "+row.id+"; refreshing review artifacts");enqueue(run,run.phase);return run;
         }
     }
-    private static String editableNumber(String value){try{return Calculations.format(Calculations.number(value));}catch(IllegalArgumentException invalid){return value;}}
-public record MeasurementInput(String originalViews,String originalDuration,String baseline,String views,String duration,String value,boolean canRetain) {}
+    private static String editableNumber(String value){try{return Calculations.format(Calculations.number(value));}catch(IllegalArgumentException invalid){return "";}}
+public record SourceContext(String workbook,String sheet,String rowId,String author,String tool) {}
+private static SourceContext sourceContext(Run run,Row row) {
+    String filename=row.get("Source workbook");if(filename.isBlank())filename=String.valueOf(run.workbook.getOrDefault(run.phase==4?"historyFilename":"filename",run.phase==4?"Historical input":"Current input"));
+    return new SourceContext(filename,row.get("Source sheet"),row.id,row.get("Author of activity").isBlank()?row.get("Author"):row.get("Author of activity"),row.get("Tool"));
+}
+public record MeasurementInput(String originalViews,String originalDuration,String baseline,String views,String duration,String value,boolean canRetain,SourceContext source) {}
 public synchronized MeasurementInput measurementInput(String id,String rowId,String type) throws Exception {
     Run run=get(id);
     if(!Set.of(1,2,4).contains(run.phase))throw new BadRequestException("Original measurement context is available during phases 1, 2, and 4");
     if(type==null||!Set.of("VIEWS","VIDEO_VIEWS","REACTIONS","STARS","DOWNLOADS","ATTENDANCE","DURATION","BASELINE").contains(type))throw new BadRequestException("Unknown measurement type");
     Row row=workspace.data(id,run.phase==4?"trailing-source":"source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
-    String initial=switch(type){case "DURATION"->row.get("Duration (in hours)");case "BASELINE"->row.get("Current total");case "REACTIONS"->row.get("total_reactions").isBlank()?row.get(VIEWS):row.get("total_reactions");default->row.get(VIEWS);};
+    String initial=switch(type){case "DURATION"->row.get("Duration (in hours)");case "BASELINE"->TrailingEligibility.baseline(row);case "REACTIONS"->row.get("total_reactions").isBlank()?row.get(VIEWS):row.get("total_reactions");default->row.get(VIEWS);};
     String key=type.equals("DURATION")?"duration:"+row.id:type.equals("BASELINE")?"baseline:"+row.id:run.phase==2?"attendance:"+row.id:Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
     Measurement saved=run.measurements.get(key);
-    return new MeasurementInput(row.get(VIEWS),row.get("Duration (in hours)"),row.get("Current total"),editableNumber(row.get(VIEWS)),editableNumber(row.get("Duration (in hours)")),editableNumber(saved==null?initial:saved.value()),false);
+    return new MeasurementInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),editableNumber(row.get(VIEWS)),editableNumber(row.get("Duration (in hours)")),editableNumber(saved==null?initial:saved.value()),false,sourceContext(run,row));
 }
-    public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain) {}
+    public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain,SourceContext source) {}
     private Row trailingRow(Run run,String rowId) throws Exception {
         if(!run.trailing)throw new BadRequestException("This run has no historical input");
         Row row=workspace.data(run.id,"trailing-source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown historical row"));
@@ -205,7 +210,7 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
     public synchronized TrailingInput trailingInput(String id,String rowId) throws Exception {
         Run run=get(id);Row row=trailingRow(run,rowId);var reviewed=run.inputReviews.get(rowId);boolean valid=true;
         try{BigDecimalValidation(row.get(VIEWS));BigDecimalValidation(row.get("Duration (in hours)"));}catch(IllegalArgumentException|BadRequestException e){valid=false;}
-        return new TrailingInput(row.get(VIEWS),row.get("Duration (in hours)"),row.get("Current total"),reviewed==null?editableNumber(row.get(VIEWS)):reviewed.views(),reviewed==null?editableNumber(row.get("Duration (in hours)")):reviewed.duration(),valid);
+        return new TrailingInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),reviewed==null?editableNumber(row.get(VIEWS)):reviewed.views(),reviewed==null?editableNumber(row.get("Duration (in hours)")):reviewed.duration(),valid,sourceContext(run,row));
     }
     public synchronized Run reviewTrailingInput(String id,int version,String rowId,String views,String duration,boolean keepOriginal,String note) throws Exception {
         synchronized(lock(id)) {

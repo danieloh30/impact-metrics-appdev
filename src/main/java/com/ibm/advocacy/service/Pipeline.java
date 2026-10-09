@@ -35,7 +35,7 @@ public class Pipeline {
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; configured blog/digital manual-check exclusions use workbook views without URL collection; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -67,7 +67,7 @@ public class Pipeline {
     private Measurement digitalMeasurement(Run run,Row row) throws Exception {
         if(manualCheckExclusions.matches(row.get(URL))) {
             Measurement override=run.measurements.get(Calculations.urlKey(row.get(URL)));
-            if(override!=null)return override;
+            if(override!=null&&override.manual())return override;
             return new Measurement(suppliedContentViews(row),"INPUT_DATA",row.get(URL),run.createdAt,"Digital content metrics supplied by workbook; source excluded from manual collection",false);
         }
 
@@ -134,30 +134,43 @@ public class Pipeline {
     public void trailing(PhaseTask task) throws Exception {
         Run run=workspace.load(task.runId());run.issues.clear();
         if(!run.trailing) { event(run,"Trailing90Agent","Skipped: no historical workbook/input rows selected");workspace.save(run);return; }
-        Data source=workspace.data(run.id,"trailing-source");Set<String> attempted=new HashSet<>();
+        Data originalSource=workspace.data(run.id,"trailing-source");
+        Data source=new Data(originalSource.headers,originalSource.rows.stream().filter(TrailingEligibility::includes).map(original->{Row row=original.copy();row.cells.put("Current total",TrailingEligibility.baseline(row));return row;}).toList());
+        run.trailingRows=source.rows.size();Set<String> attempted=new HashSet<>();
         for(Row row:source.rows) {
             String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
             if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
             if(run.inputReviews.containsKey(row.id))continue;
-            if(manualCheckExclusions.matches(row.get(URL))&&!run.measurements.containsKey(key)) {
-                try { suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
+            if(manualCheckExclusions.matches(row.get(URL))) {
+                try { if(!run.measurements.containsKey(key)||!run.measurements.get(key).manual())suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
                 continue;
             }
             if(attempted.add(key))try { measurement(run,row); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
         }
-List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
-    Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
-    if(run.inputReviews.containsKey(row.id)){baselines.add(row);continue;}
-    try { if(Calculations.number(row.get("Current total")).signum()<0)throw new IllegalArgumentException("Previous baseline cannot be negative"); }
-    catch(IllegalArgumentException e) { issue(run,row,"Invalid previous baseline — "+e.getMessage(),true,"BASELINE"); }
-    baselines.add(row);
-}
-        List<Row> rows=Calculations.trailing(baselines,run.measurements);
+        List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
+            Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
+            boolean retained=run.inputReviews.containsKey(row.id)||manualCheckExclusions.matches(row.get(URL));
+            if(!retained)try { if(Calculations.number(row.get("Current total")).signum()<0)throw new IllegalArgumentException("Previous baseline cannot be negative"); }
+            catch(IllegalArgumentException e) { issue(run,row,row.get("Current total").isBlank()?"Previous baseline is missing in the historical metrics workbook":"Invalid previous baseline — "+e.getMessage(),true,"BASELINE"); }
+            baselines.add(row);
+        }
+        if(run.workbook.containsKey("missingBaselines"))run.workbook.put("missingBaselines",run.issues.stream().filter(issue->issue.blocking()&&issue.metricType().equals("BASELINE")).count());
+        Map<String,Measurement> fresh=new LinkedHashMap<>(run.measurements);Map<String,String> contentOverrides=new HashMap<>();
+        Map<String,List<Row>> excludedGroups=new LinkedHashMap<>();
+        for(Row row:source.rows)if(manualCheckExclusions.matches(row.get(URL)))excludedGroups.computeIfAbsent(Calculations.urlKey(row.get(URL)),key->new ArrayList<>()).add(row);
+        for(var group:excludedGroups.entrySet()) {
+            Measurement override=fresh.remove(group.getKey());
+            if(override!=null&&override.manual()) {
+                List<java.math.BigDecimal> shares=Calculations.allocate(Calculations.number(override.value()),group.getValue().size());
+                for(int i=0;i<shares.size();i++)contentOverrides.put(group.getValue().get(i).id,Calculations.format(shares.get(i)));
+            }
+        }
+        List<Row> rows=Calculations.trailing(baselines,fresh);
         for(Row row:rows) {
-            if(manualCheckExclusions.matches(row.get(URL))&&!run.measurements.containsKey(Calculations.urlKey(row.get(URL)))&&!run.inputReviews.containsKey(row.id)) {
+            if(manualCheckExclusions.matches(row.get(URL))&&!run.inputReviews.containsKey(row.id)) {
                 Row original=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
                 try {
-                    row.cells.put(VIEWS,suppliedContentViews(original));
+                    row.cells.put(VIEWS,contentOverrides.containsKey(row.id)?contentOverrides.get(row.id):suppliedContentViews(original));
                     row.cells.put("Metric basis","Workbook content input — not a trailing delta");
                     row.cells.put(NOTE,"Content source excluded from manual collection; workbook views retained; no fresh lifetime total or trailing delta calculated");
                 } catch(InputMetricException e) { row.cells.put(NOTE,e.getMessage()); }

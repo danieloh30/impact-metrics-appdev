@@ -27,6 +27,7 @@ public class WorkbookService {
         }
     }
     @jakarta.inject.Inject BlogSheetReader blogs;
+    @jakarta.inject.Inject com.ibm.advocacy.collector.ManualCheckExclusions exclusions;
     public record Inspection(List<SheetInfo> sheets, String suggestedMonth, String suggestedCurrentSheet, List<String> suggestedHistorySheets) {}
     private record SheetData(Data data, Map<String,LocalDate> dates) {}
     private static final List<DateTimeFormatter> DATES=List.of(DateTimeFormatter.ISO_LOCAL_DATE,
@@ -103,18 +104,22 @@ public class WorkbookService {
                 pastHeaders.addAll(data.data.headers);
                 for(Row original:data.data.rows) {
                     LocalDate date=data.dates.get(original.id);
-                    if(date.isBefore(start)||date.isAfter(end))continue;
+                    if(date.isBefore(start)||date.isAfter(end)||!TrailingEligibility.includes(original))continue;
                     Row row=original.copy();
                     row.cells.put("Source sheet",name);
-                    String baseline=row.get("Current total");
+                    String baseline=row.get("Current total");boolean validBaseline=true;
                     try { if(Calculations.number(baseline).signum()<0)throw new IllegalArgumentException(); }
-                    catch(IllegalArgumentException e) { row.cells.put("Current total","Missing or invalid baseline — manual review required");missing++; }
+                    catch(IllegalArgumentException e) { validBaseline=false;if(!exclusions.matches(row.get(URL)))missing++; }
                     // A raw submission can have multiple authors/tools; split its recorded baseline conservatively.
                     List<Row> split=Calculations.split(row,null);
-                    if(split.size()>1&&!row.get("Current total").startsWith("Missing or invalid")) {
+                    if(split.size()>1&&validBaseline) {
                         var allocations=Calculations.allocate(Calculations.number(baseline),split.size());
                         for(int i=0;i<split.size();i++)split.get(i).cells.put("Current total",Calculations.format(allocations.get(i)));
                     }
+                    if(split.size()>1)try {
+                        var views=Calculations.allocate(Calculations.number(row.get(VIEWS)),split.size());
+                        for(int i=0;i<split.size();i++)split.get(i).cells.put(VIEWS,Calculations.format(views.get(i)));
+                    } catch(IllegalArgumentException ignored) { /* Preserve missing/invalid supplied views for correction. */ }
                     past.addAll(split);
                 }
             }

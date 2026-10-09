@@ -40,24 +40,24 @@ class WorkbookBlogPolicyTest {
         Data data=pipeline.stage(saved,4,"updated_90-day.csv");assertEquals(List.of("1000","0"),data.rows.stream().map(r->r.get(VIEWS)).toList());
         for(Row row:data.rows){assertEquals("800",row.get("Current total"));assertEquals("800",row.get("Previous total"));assertEquals("Workbook content input — not a trailing delta",row.get("Metric basis"));assertTrue(row.get(NOTE).contains("no fresh lifetime total"));}
     }
-    @Test void historicalInvalidViewsAndBaselinesStillRequireCorrection() throws Exception {
+    @Test void historicalInvalidViewsRequireCorrectionWithoutBaselineForRetainedInput() throws Exception {
         Row row=blog("a","https://eldermoraes.com/post","bad");row.cells.put("Current total","bad");Run run=run(List.of(row),true);
-        pipeline.trailing(new PhaseTask(run.id,4));Run saved=workspace.load(run.id);assertEquals(Set.of("VIEWS","BASELINE"),new HashSet<>(saved.issues.stream().map(Issue::metricType).toList()));assertTrue(saved.issues.stream().allMatch(Issue::blocking));
+        pipeline.trailing(new PhaseTask(run.id,4));Run saved=workspace.load(run.id);assertEquals(Set.of("VIEWS"),new HashSet<>(saved.issues.stream().map(Issue::metricType).toList()));assertTrue(saved.issues.stream().allMatch(Issue::blocking));
     }
 List<String> newSources() {
-    return List.of("https://ibm.admin.webcasts.com/event","https://www.sigs.de/article","https://www.heise.de/developer/article","https://www.infoq.com/articles/test","https://quarkus.io/blog/test","https://www.youtube.com/watch?v=OSsatFo8Pmc","https://www.kevindubois.com/post");
+    return List.of("https://ibm.admin.webcasts.com/event","https://www.sigs.de/article","https://www.heise.de/developer/article","https://www.infoq.com/articles/test","https://quarkus.io/blog/test","https://www.youtube.com/watch?v=OSsatFo8Pmc","https://www.kevindubois.com/post","https://thedevconf.com/event","https://ec.yourlearning.ibm.com/activity");
 }
 @Test void allNewDigitalSourcesUseWorkbookMetricsWithoutCollection() throws Exception {
     List<Row> rows=new ArrayList<>();for(String url:newSources()){Row row=blog("c"+rows.size(),url,"1000");row.cells.put("Type of activity","Recorded video");rows.add(row);}
     Run run=run(rows,false);pipeline.digital(new PhaseTask(run.id,1));Run saved=workspace.load(run.id);
-    assertTrue(saved.issues.isEmpty());assertTrue(saved.measurements.isEmpty());assertEquals(7,pipeline.stage(saved,1,"digital.csv").rows.size());assertTrue(pipeline.stage(saved,1,"follow-up.csv").rows.isEmpty());
+    assertTrue(saved.issues.isEmpty());assertTrue(saved.measurements.isEmpty());assertEquals(9,pipeline.stage(saved,1,"digital.csv").rows.size());assertTrue(pipeline.stage(saved,1,"follow-up.csv").rows.isEmpty());
     assertTrue(pipeline.stage(saved,1,"digital.csv").rows.stream().allMatch(row->row.get(VIEWS).equals("1000")));
 }
 @Test void allNewHistoricalSourcesRetainInputsWithoutInventingDeltas() throws Exception {
     List<Row> rows=new ArrayList<>();for(String url:newSources())rows.add(blog("t"+rows.size(),url,"1000"));
     Run run=run(rows,true);pipeline.trailing(new PhaseTask(run.id,4));Run saved=workspace.load(run.id);
     assertTrue(saved.issues.isEmpty());assertTrue(saved.measurements.isEmpty());
-    Data output=pipeline.stage(saved,4,"updated_90-day.csv");assertEquals(7,output.rows.size());
+    Data output=pipeline.stage(saved,4,"updated_90-day.csv");assertEquals(9,output.rows.size());
     for(Row row:output.rows){assertEquals("1000",row.get(VIEWS));assertEquals("800",row.get("Current total"));assertEquals("800",row.get("Previous total"));assertEquals("Workbook content input — not a trailing delta",row.get("Metric basis"));}
 }
 @Test void exactHostAndBlogPathRulesDoNotExcludeLookalikesOrOtherQuarkusContent() {
@@ -88,7 +88,7 @@ List<String> newSources() {
     Row row=blog("a","https://www.infoq.com/test","1000");Run run=run(List.of(row),true);
     run.measurements.put(Calculations.urlKey(row.get(URL)),new Measurement("1200","VIEWS",row.get(URL),run.createdAt,"Verified override",true));workspace.save(run);workspace.data(run.id,"source",new Data(new ArrayList<>(row.cells.keySet()),List.of(row)));
     pipeline.digital(new PhaseTask(run.id,1));Run current=workspace.load(run.id);assertTrue(current.issues.isEmpty());assertEquals("1200",pipeline.stage(current,1,"digital.csv").rows.getFirst().get(VIEWS));
-    pipeline.trailing(new PhaseTask(run.id,4));Run historical=workspace.load(run.id);assertTrue(historical.issues.isEmpty());Row output=pipeline.stage(historical,4,"updated_90-day.csv").rows.getFirst();assertEquals("1200",output.get("Current total"));assertEquals("400",output.get(VIEWS));assertEquals("Trailing delta",output.get("Metric basis"));
+    pipeline.trailing(new PhaseTask(run.id,4));Run historical=workspace.load(run.id);assertTrue(historical.issues.isEmpty());Row output=pipeline.stage(historical,4,"updated_90-day.csv").rows.getFirst();assertEquals("800",output.get("Current total"));assertEquals("1200",output.get(VIEWS));assertEquals("Workbook content input — not a trailing delta",output.get("Metric basis"));
 }
 
 }

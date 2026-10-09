@@ -47,11 +47,11 @@ class WorkbookImportTest {
         assertEquals("2026-10",inspection.suggestedMonth());assertEquals("October inputs",inspection.suggestedCurrentSheet());
         assertFalse(inspection.sheets().get(2).eligible());
         var result=workbooks.prepare(new WorkbookRequest(bytes,"2026-10","October inputs",List.of("Previous months")));
-        assertEquals("2026-08-01",result.windowStart());assertEquals("2026-10-31",result.windowEnd());assertEquals(1,result.current().rows.size());assertEquals(8,result.trailing().rows.size());
+        assertEquals("2026-08-01",result.windowStart());assertEquals("2026-10-31",result.windowEnd());assertEquals(1,result.current().rows.size());assertEquals(6,result.trailing().rows.size());
         assertEquals(4,result.trailing().rows.stream().filter(r->r.get("Current total").equals("20")).count());
         assertEquals(0,result.missingBaselines());
-       assertTrue(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("Opt out")));
-       assertTrue(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("In person")));
+       assertFalse(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("Opt out")));
+       assertFalse(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("In person")));
        assertTrue(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("Current excluded")));
        assertFalse(result.trailing().rows.stream().anyMatch(r->r.get("Name of activity").equals("Too old")));
        var september=workbooks.prepare(new WorkbookRequest(bytes,"2026-09","Previous months",List.of("Previous months")));
@@ -63,12 +63,12 @@ class WorkbookImportTest {
     @Test void workbookAgentPreservesOriginalAndInputsAreDownloadableAsUtf8() throws Exception {
         byte[] bytes=fixture(false);
         String id=runs.createWorkbook(bytes,"activities.xlsx","2026-10","October inputs",List.of("Previous months")).id;
-        Run run=runs.get(id);assertEquals("READY",run.status);assertEquals(1,run.currentRows);assertEquals(8,run.trailingRows);
+        Run run=runs.get(id);assertEquals("READY",run.status);assertEquals(1,run.currentRows);assertEquals(6,run.trailingRows);
         assertEquals("2026-10",run.workbook.get("month"));assertTrue(run.events.stream().anyMatch(e->e.agent().equals("WorkbookPreparationAgent")));
         assertArrayEquals(bytes,Files.readAllBytes(workspace.runPath(id,"rawdata/original.xlsx")));
         byte[] past=given().get("/api/runs/"+id+"/inputs/trailing_90-day.csv/download").then().statusCode(200).header("Content-Type",org.hamcrest.Matchers.containsString("utf-8")).extract().asByteArray();
         assertTrue(new String(past,StandardCharsets.UTF_8).contains("café 日本語"));
-        assertEquals(8,csv.read(past,true,StandardCharsets.UTF_8).rows.size());
+        assertEquals(6,csv.read(past,true,StandardCharsets.UTF_8).rows.size());
         given().get("/api/runs/"+id+"/inputs/secret.csv/download").then().statusCode(400);
         assertFalse(workbooks.inspect(bytes).sheets().isEmpty());
     }
