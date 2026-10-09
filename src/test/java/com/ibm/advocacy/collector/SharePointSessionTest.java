@@ -48,6 +48,16 @@ class SharePointSessionTest {
             }
         }
     }
+    @Test void sharedSavedStateKeepsBothHostsButReconnectWaitsForTheRequestedHost() throws Exception {
+        try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {
+            browser.addCookies(List.of(cookie("FedAuth","personal-session","ibm-my.sharepoint.com")));
+            assertTrue(collector.authenticated(browser));assertFalse(collector.authenticated(browser,"ibm.sharepoint.com"));
+            browser.addCookies(List.of(cookie("FedAuth","site-session","ibm.sharepoint.com")));collector.saveSession(browser);
+            try(BrowserContext restored=collector.downloadContext(chrome)) {
+                assertTrue(collector.authenticated(restored,"ibm-my.sharepoint.com"));assertTrue(collector.authenticated(restored,"ibm.sharepoint.com"));
+            }
+        }
+    }
     @Test void missingStateAndCrossSiteRefreshCookiesDoNotConfirmSiteSignIn() throws Exception {
         try(Playwright playwright=Playwright.create()) {
             try(Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {

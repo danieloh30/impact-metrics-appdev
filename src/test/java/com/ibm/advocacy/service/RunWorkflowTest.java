@@ -84,11 +84,7 @@ class RunWorkflowTest {
     @Test void runsAreIsolatedAndApiValidatesUploads() throws Exception {
         Run one=service.create(input(),null),two=service.create(input(),null);assertNotEquals(one.id,two.id);service.start(one.id,true);await(one.id,"AWAITING_APPROVAL");assertEquals("READY",service.get(two.id).status);
         given().get("/api/config").then().statusCode(200);
-        given().multiPart("current","broken.csv","not,a,valid,csv\n".getBytes()).post("/api/runs").then().statusCode(400);
-        // Quarkus strips multipart path components before FileUpload reaches the resource.
-        String sanitized=given().multiPart("current","../escape.csv",input()).post("/api/runs").then().statusCode(200).extract().path("id");
-        assertArrayEquals(input(),Files.readAllBytes(workspace.runPath(sanitized,"rawdata/AvocadoBot 2.csv")));
-        assertFalse(Files.exists(workspace.path("escape.csv")));
+        given().multiPart("current","broken.csv","not,a,valid,csv\n".getBytes()).post("/api/runs").then().statusCode(405);
         given().get("/api/runs/"+one.id+"/artifacts/secret.txt/download").then().statusCode(400);
         given().get("/api/runs/"+two.id+"/artifacts/current.csv/download").then().statusCode(404);
     }

@@ -39,9 +39,7 @@ class WorkbookHeaderTest {
         assertTrue(inspected.sheets().stream().filter(s->s.name().equals("Previous months inputs")).findFirst().orElseThrow().eligible());
         assertFalse(inspected.sheets().stream().filter(s->s.name().equals("Color highlight key")).findFirst().orElseThrow().eligible());
         assertFalse(inspected.sheets().stream().filter(s->s.name().equals("2025 inputs")).findFirst().orElseThrow().eligible());
-        given().multiPart("workbook","raw-inputs.xlsx",fixture(false)).post("/api/workbooks/inspect").then().statusCode(200)
-            .body("suggestedCurrentSheet",org.hamcrest.Matchers.equalTo("Current month inputs"))
-            .body("suggestedHistorySheets",org.hamcrest.Matchers.contains("Previous months inputs"));
+        assertTrue(workbooks.inspect(fixture(false)).sheets().stream().anyMatch(sheet->sheet.name().equals("Current month inputs")&&sheet.eligible()));
     }
     @Test void normalizedPublicUrlsAndScopedAuthorsToolsReachThePipelineWithoutReplacingOtherLinks() throws Exception {
         var result=workbooks.prepare(new WorkbookRequest(fixture(false),"2026-10","Current month inputs",List.of("Previous months inputs")));

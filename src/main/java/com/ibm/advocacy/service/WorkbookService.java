@@ -18,7 +18,10 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @ApplicationScoped
 public class WorkbookService {
     public record SheetInfo(String name, boolean eligible, int rows, List<String> months, String reason,
-                            boolean blog, Map<String,Integer> monthCounts, int undatedRows) {
+                            boolean blog, Map<String,Integer> monthCounts, int undatedRows, int inputMonth, int inputYear) {
+        public SheetInfo(String name,boolean eligible,int rows,List<String> months,String reason,boolean blog,Map<String,Integer> counts,int undated) {
+            this(name,eligible,rows,months,reason,blog,counts,undated,monthlyLabel(name)[0],monthlyLabel(name)[1]);
+        }
         public SheetInfo(String name,boolean eligible,int rows,List<String> months,String reason) {
             this(name,eligible,rows,months,reason,false,Map.of(),0);
         }
@@ -94,8 +97,9 @@ public class WorkbookService {
             }
             if(rows.size()>20_000)throw new BadRequestException("Generated current input exceeds 20,000 rows");
             if(rows.isEmpty())throw new BadRequestException("Current sheet and blog supplements have no activities in "+month);
+            try(XSSFWorkbook historical=history.isEmpty()?null:open(request.historyBytes())) {
             for(String name:history) {
-                SheetData data=name.equals(request.currentSheet())?current:selected(book,name);
+                SheetData data=selected(historical,name);
                 pastHeaders.addAll(data.data.headers);
                 for(Row original:data.data.rows) {
                     LocalDate date=data.dates.get(original.id);
@@ -114,6 +118,7 @@ public class WorkbookService {
                     past.addAll(split);
                 }
             }
+            }
             if(past.size()>20_000)throw new BadRequestException("Generated trailing input exceeds 20,000 rows");
             pastHeaders.addAll(List.of("Trailing 90-day","Current total","Source sheet"));
             return new PreparedWorkbook(new Data(new ArrayList<>(currentHeaders),rows),past.isEmpty()?null:new Data(new ArrayList<>(pastHeaders),past),month.toString(),start.toString(),end.toString(),List.copyOf(history),missing,Map.copyOf(blogRows),Map.copyOf(blogSkippedRows));
@@ -126,6 +131,30 @@ public class WorkbookService {
         if(book.isSheetHidden(index)||book.isSheetVeryHidden(index))throw new BadRequestException("Hidden sheets cannot be imported");
         if(BlogSheetReader.matches(name))throw new BadRequestException("Blog sheets are appended automatically; select an activity input sheet here");
         return read(sheet);
+    }
+    /** Only explicitly named monthly input sheets supply the separate metrics workbook history. */
+    private static int[] monthlyLabel(String name) {
+        var matcher=java.util.regex.Pattern.compile("(?i)^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(?:(\\d{4})\\s+)?inputs(?:\\s+(\\d{4}))?$").matcher(name.strip());
+        if(!matcher.matches())return new int[]{0,0};
+        int month=java.time.Month.valueOf(matcher.group(1).toUpperCase(Locale.ROOT)).getValue();
+        String year=matcher.group(2)!=null?matcher.group(2):matcher.group(3);
+        return new int[]{month,year==null?0:Integer.parseInt(year)};
+    }
+    public List<String> historySheets(byte[] bytes,String reportingMonth) throws IOException {
+        YearMonth month;try{month=YearMonth.parse(reportingMonth);}catch(Exception e){throw new BadRequestException("Choose a reporting month (YYYY-MM)");}
+        List<SheetInfo> infos=inspect(bytes).sheets();List<String> selected=new ArrayList<>();
+        // Monthly inputs already include rolling history. Use one latest snapshot to avoid double counting.
+        for(int offset=0;offset<=2;offset++) {
+            YearMonth target=month.minusMonths(offset);
+            List<SheetInfo> matching=infos.stream().filter(s->s.inputMonth()==target.getMonthValue()&&(s.inputYear()==0||s.inputYear()==target.getYear())).toList();
+            if(matching.isEmpty())continue;
+            if(matching.size()>1)throw new BadRequestException("Multiple monthly input sheets match "+target+". Keep one authoritative monthly sheet before importing.");
+            SheetInfo sheet=matching.getFirst();
+            if(!sheet.eligible())throw new BadRequestException("Cannot use historical sheet "+sheet.name()+": "+sheet.reason());
+            selected.add(sheet.name());break;
+        }
+        if(selected.isEmpty())throw new BadRequestException("No monthly input sheets match the reporting window in the metrics workbook. Expected sheets such as August inputs or September inputs.");
+        return List.copyOf(selected);
     }
     private static String sheetKey(String value){return value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}
     /** Map known source labels without substituting private deck/trip-report links for public URLs. */

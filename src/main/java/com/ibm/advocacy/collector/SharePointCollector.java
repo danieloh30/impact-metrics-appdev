@@ -23,6 +23,8 @@ public class SharePointCollector {
     @Inject RuntimeWorkspace workspace;
     @ConfigProperty(name="metrics.sharepoint.enabled",defaultValue="true") boolean enabled;
     @ConfigProperty(name="metrics.sharepoint.host",defaultValue="ibm-my.sharepoint.com") String allowedHost;
+    @ConfigProperty(name="metrics.sharepoint.site-host",defaultValue="ibm.sharepoint.com") String siteHost="ibm.sharepoint.com";
+    private boolean allowed(String host){return host!=null&&(allowedHost.equalsIgnoreCase(host)||siteHost.equalsIgnoreCase(host));}
     @ConfigProperty(name="metrics.sharepoint.browser-channel",defaultValue="chrome") String channel;
     @ConfigProperty(name="metrics.sharepoint.browser-executable",defaultValue="") Optional<String> executable;
     private final ExecutorService browserWorker=Executors.newSingleThreadExecutor();
@@ -37,15 +39,15 @@ public class SharePointCollector {
     public URI fileUri(String value) {
         try {
             URI uri=URI.create(value.strip());
-            if(!"https".equalsIgnoreCase(uri.getScheme())||!allowedHost.equalsIgnoreCase(uri.getHost())||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443))throw new IllegalArgumentException();
+            if(!"https".equalsIgnoreCase(uri.getScheme())||!allowed(uri.getHost())||uri.getUserInfo()!=null||(uri.getPort()!=-1&&uri.getPort()!=443))throw new IllegalArgumentException();
             String path=uri.getPath();if(path.startsWith("/:x:/r/"))path=path.substring(6);
             if(!path.matches("/(personal|sites|teams)/[^/]+/.+\\.xlsx")||Arrays.asList(path.split("/")).contains("..")||path.contains("\\"))throw new IllegalArgumentException();
-            return new URI("https",null,allowedHost,-1,path,null,null);
-        }catch(Exception e){throw new BadRequestException("Use an HTTPS .xlsx file link from "+allowedHost+" (the /:x:/r/ link or direct file path).");}
+            return new URI("https",null,uri.getHost().toLowerCase(Locale.ROOT),-1,path,null,null);
+        }catch(Exception e){throw new BadRequestException("Use an HTTPS .xlsx file link from "+allowedHost+" or "+siteHost+" (the /:x:/r/ link or direct file path).");}
     }
     public URI downloadUri(URI file) {
         String[] segments=file.getPath().split("/");String site="/"+segments[1]+"/"+segments[2];
-        return URI.create("https://"+allowedHost+site+"/_layouts/15/download.aspx?SourceUrl="+URLEncoder.encode(file.toASCIIString(),StandardCharsets.UTF_8));
+        return URI.create("https://"+file.getHost()+site+"/_layouts/15/download.aspx?SourceUrl="+URLEncoder.encode(file.toASCIIString(),StandardCharsets.UTF_8));
     }
     private BrowserType.LaunchPersistentContextOptions options(boolean headless) throws Exception {
         var options=new BrowserType.LaunchPersistentContextOptions().setHeadless(headless).setAcceptDownloads(true).setDownloadsPath(workspace.path(".uploads/sharepoint-downloads"));
@@ -54,7 +56,10 @@ public class SharePointCollector {
         return options;
     }
     boolean authenticated(BrowserContext browser) {
-        return browser.cookies().stream().anyMatch(c->c.name.equals("FedAuth")&&(c.domain.equals(allowedHost)||allowedHost.endsWith(c.domain.startsWith(".")?c.domain:c.domain+"."))&&!c.value.isBlank());
+        return authenticated(browser,allowedHost)||authenticated(browser,siteHost);
+    }
+    boolean authenticated(BrowserContext browser,String host) {
+        return browser.cookies().stream().anyMatch(c->c.name.equals("FedAuth")&&(c.domain.equals(host)||host.endsWith(c.domain.startsWith(".")?c.domain:c.domain+"."))&&!c.value.isBlank());
     }
     // Chrome does not reliably retain session cookies when the sign-in process closes.
     // Snapshot them explicitly before closing and restore them in the download process.
@@ -83,10 +88,10 @@ public class SharePointCollector {
                 page.navigate(URI.create(url.strip()).toASCIIString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(60_000));
                 long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
                 while(System.nanoTime()<deadline&&!Thread.currentThread().isInterrupted()) {
-                    if(authenticated(browser)){saveSession(browser);status="CONNECTED";message="Signed in. Choose Read SharePoint workbook to download a snapshot.";return;}
+                    if(authenticated(browser,file.getHost())){saveSession(browser);status="CONNECTED";message="Signed in. Read each SharePoint workbook separately; both use this saved session.";return;}
                     page.waitForTimeout(1000);
                 }
-                status="NOT_CONNECTED";message="Sign-in timed out. Connect again or upload the downloaded workbook.";
+                status="NOT_CONNECTED";message="Sign-in timed out. Connect again.";
             }catch(Exception e){status="NOT_CONNECTED";message="Browser sign-in could not finish. Check Chrome installation, IBM access, and sign-in requirements, then reconnect.";}
             finally{busy.set(false);}
         });return session();
@@ -110,8 +115,8 @@ public class SharePointCollector {
         if(bytes.length>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
         if(bytes.length>=4&&bytes[0]=='P'&&bytes[1]=='K'&&bytes[2]==3&&bytes[3]==4)return bytes;
         URI finalUrl=URI.create(response.url());String path=Optional.ofNullable(finalUrl.getPath()).orElse("").toLowerCase(Locale.ROOT);
-        if(!allowedHost.equalsIgnoreCase(finalUrl.getHost())||path.contains("authenticate.aspx")||path.contains("login.aspx"))throw new ClientErrorException("SharePoint redirected the file request to sign-in. Reconnect SharePoint before importing.",401);
-        throw new ClientErrorException("SharePoint returned a web page instead of an Excel file. Verify that the link opens the original workbook and that download is permitted; you can also upload the downloaded .xlsx file.",422);
+        if(!allowed(finalUrl.getHost())||path.contains("authenticate.aspx")||path.contains("login.aspx"))throw new ClientErrorException("SharePoint redirected the file request to sign-in. Reconnect SharePoint before importing.",401);
+        throw new ClientErrorException("SharePoint returned a web page instead of an Excel file. Verify that the link opens the original workbook and that download is permitted.",422);
     }
     byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
         try{return requestWorkbook(browser,downloadUri(file));}

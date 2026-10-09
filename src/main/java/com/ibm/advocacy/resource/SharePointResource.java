@@ -23,11 +23,7 @@ public class SharePointResource {
     @POST @Path("/workbooks/from-sharepoint") @Consumes(MediaType.APPLICATION_JSON)
     public WorkbookSourceService.SourceInspection inspect(@Valid Link body) throws Exception {if(body==null)throw new BadRequestException("SharePoint workbook URL required");return sources.inspect(body.url());}
     @POST @Path("/runs/from-sharepoint") @Consumes(MediaType.MULTIPART_FORM_DATA)
-    public Run create(@RestForm("sourceToken") String token,@RestForm("month") String month,@RestForm("currentSheet") String current,@RestForm("historySheets") String historyJson) throws Exception {
-        List<String> history;
-        try{history=historyJson==null?List.of():new com.fasterxml.jackson.databind.ObjectMapper().readValue(historyJson,new com.fasterxml.jackson.core.type.TypeReference<List<String>>(){});}
-        catch(Exception e){throw new BadRequestException("Invalid history sheet selection");}
-        if(history==null||history.stream().anyMatch(Objects::isNull))throw new BadRequestException("Invalid history sheet selection");
-        return sources.create(token,month,current,history);
+    public Run create(@RestForm("sourceToken") String token,@RestForm("historySourceToken") String historyToken,@RestForm("month") String month,@RestForm("currentSheet") String current) throws Exception {
+        return sources.create(token,historyToken,month,current);
     }
 }

@@ -8,7 +8,7 @@ Use the Quarkus LangChain4j agent workflow defined in RUN.md. WorkbookPreparatio
 
 Excel cell boundaries define fields. Text commas remain literal content. Numeric/formula-numeric cells use stored/cached values, independent of display grouping, currency, percentages, and workbook locale. Never evaluate formulas, macros, or external workbook links. Named source columns map to the canonical activity fields. Preserve source sheet and row IDs through structured processing; CSV serialization is for download/export compatibility.
 
-Use Current month inputs plus same-month Markus/Elder blogs for current data. Use Previous months inputs for the three-calendar-month history window. Elder Month is month-level precision, not an exact publication day. Exclude undated blog rows with a warning. Preserve recorded Current total as the historical baseline and require evidence for corrections. No invented measurements or baselines.
+Use Current month inputs plus same-month Markus/Elder blogs for current data. Use monthly input sheets from the separate AppDev Advocacy impact metrics workbook for the three-calendar-month history window, using one latest monthly snapshot at or before the reporting month, then filtering row dates to the displayed window. Do not merge overlapping monthly sheets. Never use AvocadoBot Previous months inputs for history. Elder Month is month-level precision, not an exact publication day. Exclude undated blog rows with a warning. Preserve recorded Current total as the historical baseline and require evidence for corrections. No invented measurements or baselines.
 
 ## Supported provider metrics
 
@@ -31,9 +31,9 @@ The exception is current-month data only. Historical rows still need a fresh lif
 
 ## Approvals and data safety
 
-Only runtimes is processed. Keep immutable original.xlsx, structured source rows, frozen instruction copies, JSON phase state, and immutable versioned JSON result datasets under each run. No CSV files are created during workbook preparation or any phase. Previews read structured results directly; approval digests hash their JSON bytes. Generate UTF-8 input snapshots, result CSVs, or ZIPs in memory only for explicit downloads and never persist them. Preserve separately uploaded legacy CSV inputs; read older saved CSV results only for compatibility. The SPA owns phase approval, manual corrections, downloads, and confirmed history reset. Reset preserves instruction files and local sessions. Runtime data, workbooks, outputs, and credentials remain excluded from commits.
+Only runtimes is processed. Keep immutable original.xlsx (AvocadoBot) and trailing-original.xlsx (metrics workbook), structured source rows, frozen instruction copies, JSON phase state, and immutable versioned JSON result datasets under each run. No CSV files are created during workbook preparation or any phase. Previews read structured results directly; approval digests hash their JSON bytes. Generate UTF-8 input snapshots, result CSVs, or ZIPs in memory only for explicit downloads and never persist them. Read older saved CSV inputs/results only for compatibility; new runs use two SharePoint workbook snapshots. The SPA owns phase approval, manual corrections, downloads, and confirmed history reset. Reset preserves instruction files and local sessions. Runtime data, workbooks, outputs, and credentials remain excluded from commits.
 
-CSV compatibility: current uploads and all generated exports use UTF-8. Separately uploaded legacy trailing_90-day.csv may use Windows-1252. Cell separators and text values inside a workbook are independent of CSV delimiter/encoding rules.
+CSV compatibility: all generated exports use UTF-8. Older saved trailing_90-day.csv may use Windows-1252. Cell separators and text values inside a workbook are independent of CSV delimiter/encoding rules.
 
 ## Measurement review input context
 

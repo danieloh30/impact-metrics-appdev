@@ -42,13 +42,22 @@ public class RunService {
     Object lock(String id) { return locks.computeIfAbsent(id,k->new Object()); }
     @PreDestroy void close() { workers.shutdownNow(); }
     public synchronized Run createWorkbook(byte[] bytes,String filename,String month,String currentSheet,List<String> historySheets) throws Exception {
+return createWorkbook(new com.ibm.advocacy.model.WorkbookRequest(bytes,month,currentSheet,historySheets),filename,null);
+    }
+    private Run createWorkbook(com.ibm.advocacy.model.WorkbookRequest request,String filename,String historyFilename) throws Exception {
+byte[] bytes=request.bytes();String currentSheet=request.currentSheet();
 com.ibm.advocacy.model.PreparedWorkbook prepared;
-try { prepared=workbookWorkflow.execute(UUID.randomUUID().toString(),new com.ibm.advocacy.model.WorkbookRequest(bytes,month,currentSheet,historySheets)); }
+try { prepared=workbookWorkflow.execute(UUID.randomUUID().toString(),request); }
 catch(RuntimeException failure) {
     // Agent reflection wrappers must preserve actionable 4xx validation errors.
     for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause instanceof jakarta.ws.rs.WebApplicationException web)throw web;
     throw failure;
 }
+        for(Data data:new Data[]{prepared.current(),prepared.trailing()})if(data!=null) {
+            if(!data.headers.contains("Source workbook"))data.headers.add("Source workbook");
+            String source=data==prepared.current()?filename:(historyFilename==null?filename:historyFilename);
+            data.rows.forEach(row->row.cells.put("Source workbook",source));
+        }
         Run run=createPrepared(prepared.current(),prepared.trailing(),null,null);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
@@ -56,9 +65,12 @@ catch(RuntimeException failure) {
         Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows without intermediate CSV files; "+prepared.missingBaselines()+" historical activities need baseline review");
         workspace.save(run);return run;
     }
-public synchronized Run createSharePointWorkbook(byte[] bytes,String filename,String month,String currentSheet,List<String> historySheets,String sourceUrl) throws Exception {
-    Run run=createWorkbook(bytes,filename,month,currentSheet,historySheets);
-    run.workbook.put("source","SharePoint");run.workbook.put("sourceUrl",sourceUrl);workspace.save(run);return run;
+public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String currentFilename,byte[] historyBytes,String historyFilename,String month,String currentSheet,List<String> historySheets,String currentUrl,String historyUrl) throws Exception {
+    Run run=createWorkbook(new com.ibm.advocacy.model.WorkbookRequest(currentBytes,month,currentSheet,historySheets,historyBytes),currentFilename,historyFilename);
+    workspace.bytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"),historyBytes);
+    run.workbook.put("source","SharePoint");run.workbook.put("sourceUrl",currentUrl);
+    run.workbook.put("historySourceUrl",historyUrl);run.workbook.put("historyFilename",historyFilename);run.workbook.put("historySha256",RuntimeWorkspace.hash(historyBytes));
+    workspace.save(run);return run;
 }
 public synchronized byte[] input(String id,String name) throws Exception {
 
@@ -92,7 +104,6 @@ public synchronized byte[] input(String id,String name) throws Exception {
         workspace.data(run.id,"source",source);if(past!=null)workspace.data(run.id,"trailing-source",past);
         Pipeline.event(run,"Import","Imported "+run.currentRows+" current-month and "+run.trailingRows+" trailing rows; raw uploads preserved");workspace.save(run);return run;
     }
-    public synchronized Run seed() throws Exception { Path past=workspace.path("trailing_90-day.csv");return create(Files.readAllBytes(workspace.path("AvocadoBot 2.csv")),Files.exists(past)?Files.readAllBytes(past):null); }
     public synchronized Run get(String id) throws Exception {
         synchronized(lock(id)) {
             Run run=workspace.load(id);

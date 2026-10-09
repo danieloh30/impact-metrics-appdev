@@ -62,7 +62,7 @@ class WorkbookImportTest {
     }
     @Test void workbookAgentPreservesOriginalAndInputsAreDownloadableAsUtf8() throws Exception {
         byte[] bytes=fixture(false);
-        String id=given().multiPart("workbook","activities.xlsx",bytes).multiPart("month","2026-10").multiPart("currentSheet","October inputs").multiPart("historySheets","[\"Previous months\"]").post("/api/runs/from-workbook").then().statusCode(200).extract().path("id");
+        String id=runs.createWorkbook(bytes,"activities.xlsx","2026-10","October inputs",List.of("Previous months")).id;
         Run run=runs.get(id);assertEquals("READY",run.status);assertEquals(1,run.currentRows);assertEquals(8,run.trailingRows);
         assertEquals("2026-10",run.workbook.get("month"));assertTrue(run.events.stream().anyMatch(e->e.agent().equals("WorkbookPreparationAgent")));
         assertArrayEquals(bytes,Files.readAllBytes(workspace.runPath(id,"rawdata/original.xlsx")));
@@ -70,7 +70,7 @@ class WorkbookImportTest {
         assertTrue(new String(past,StandardCharsets.UTF_8).contains("café 日本語"));
         assertEquals(8,csv.read(past,true,StandardCharsets.UTF_8).rows.size());
         given().get("/api/runs/"+id+"/inputs/secret.csv/download").then().statusCode(400);
-        given().multiPart("workbook","activities.xlsx",bytes).post("/api/workbooks/inspect").then().statusCode(200);
+        assertFalse(workbooks.inspect(bytes).sheets().isEmpty());
     }
     Run waiting(String id) throws Exception {
         for(int n=0;n<200;n++){Run run=runs.get(id);if(run.status.equals("AWAITING_APPROVAL")){Thread.sleep(25);return runs.get(id);}if(run.status.equals("FAILED_RETRYABLE"))fail(run.error);Thread.sleep(25);}throw new AssertionError("Phase timed out");
@@ -101,13 +101,11 @@ class WorkbookImportTest {
         assertThrows(BadRequestException.class,()->workbooks.prepare(new WorkbookRequest(bytes,"2026-10","missing",List.of())));
         assertThrows(BadRequestException.class,()->workbooks.prepare(new WorkbookRequest(bytes,"2026-10","October inputs",List.of("Previous months","Previous months"))));
         assertThrows(BadRequestException.class,()->workbooks.prepare(new WorkbookRequest(bytes,"2025-01","October inputs",List.of())));
-        given().multiPart("workbook","activities.csv",bytes).post("/api/workbooks/inspect").then().statusCode(400);
-        given().multiPart("workbook","broken.xlsx","broken".getBytes()).post("/api/workbooks/inspect").then().statusCode(400);
+        assertThrows(BadRequestException.class,()->workbooks.inspect("broken".getBytes()));
         try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(bytes));ByteArrayOutputStream out=new ByteArrayOutputStream()) {
             book.getSheet("October inputs").getRow(3).getCell(0).setCellValue("not a date");book.write(out);
             assertThrows(BadRequestException.class,()->workbooks.prepare(new WorkbookRequest(out.toByteArray(),"2026-10","October inputs",List.of())));
         }
-        given().multiPart("workbook","activities.xlsx",bytes).multiPart("month","2025-01").multiPart("currentSheet","October inputs").post("/api/runs/from-workbook").then().statusCode(400);
         Run currentOnly=runs.createWorkbook(bytes,"current.xlsx","2026-10","October inputs",List.of());assertFalse(currentOnly.trailing);
         given().get("/api/runs/"+currentOnly.id+"/inputs/trailing_90-day.csv/download").then().statusCode(404);
     }

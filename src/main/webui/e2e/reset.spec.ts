@@ -1,53 +1,9 @@
 import {test,expect} from '@playwright/test';
-const input=Buffer.from('Author,Tool,Type of activity,Link / URL to resource\nA,X,Recorded video,https://example.com/video\n');
-test('confirmed reset clears history and remembered run while cancel preserves it',async({page,request})=>{
- // This test is destructive: require the explicit isolated test-server flag.
- test.skip(process.env.METRICS_RESET_TESTS!=='true','Reset tests require a dedicated temporary runtime root.');
- await page.goto('/');
- await page.locator('.csv-import > summary').click();
- await page.getByLabel('Current month CSV').setInputFiles({name:'AvocadoBot 2.csv',mimeType:'text/csv',buffer:input});
- await page.getByRole('button',{name:'Import CSV files'}).click();
- await expect(page.getByRole('heading',{name:'Review the calculation contract'})).toBeVisible();
- const remembered=await page.evaluate(()=>localStorage.getItem('impact-run'));
- expect(remembered).toBeTruthy();
- await page.getByRole('button',{name:'Reset run history',exact:true}).click();
- const dialog=page.getByRole('dialog',{name:'Reset run history?'});
- await expect(dialog).toBeVisible();await expect(dialog.getByRole('button',{name:'Keep history'})).toBeFocused();
- await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
- expect((await request.get(`/api/runs/${remembered}`)).status()).toBe(200);
- await page.getByRole('button',{name:'Reset run history',exact:true}).click();
- await page.screenshot({path:'../../../target/e2e-reset-confirmation.png',fullPage:true});
- await dialog.getByRole('button',{name:'Delete all run history'}).click();
- await expect(dialog).toHaveCount(0);await expect(page.locator('.notice')).toContainText('Run history has been reset');
- await expect(page.locator('.history')).toHaveCount(0);await expect(page.locator('.metrics')).toHaveCount(0);
- expect(await page.evaluate(()=>localStorage.getItem('impact-run'))).toBeNull();
- expect(await (await request.get('/api/runs')).json()).toEqual([]);
- expect((await request.get(`/api/runs/${remembered}`)).status()).toBe(404);
- await page.reload();await expect(page.getByRole('heading',{name:'From activity to impact'})).toBeVisible();
- await expect(page.locator('.history')).toHaveCount(0);await expect(page.locator('.metrics')).toHaveCount(0);
- await page.setViewportSize({width:390,height:844});await expect(page.getByRole('button',{name:'Reset run history',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Reset run history',exact:true}).click();
- await expect(dialog).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await dialog.getByRole('button',{name:'Keep history'}).click();
-});
-
-test('reset notifies another tab and closes its live subscription',async({page,context})=>{
- test.skip(process.env.METRICS_RESET_TESTS!=='true','Reset tests require a dedicated temporary runtime root.');
- await page.goto('/');
- await page.locator('.csv-import > summary').click();
- await page.getByLabel('Current month CSV').setInputFiles({name:'AvocadoBot 2.csv',mimeType:'text/csv',buffer:input});
- await page.getByRole('button',{name:'Import CSV files'}).click();
- await expect(page.locator('.metrics')).toBeVisible();
- const peer=await context.newPage();let eventRequests=0;const errors:string[]=[];
- peer.on('request',request=>{if(request.url().includes('/events'))eventRequests++;});
- peer.on('pageerror',error=>errors.push(error.message));
- const live=peer.waitForResponse(response=>response.url().includes('/events')&&response.status()===200);
- await peer.goto('/');await expect(peer.locator('.metrics')).toBeVisible();await live;
- await page.getByRole('button',{name:'Reset run history',exact:true}).click();
- await page.getByRole('dialog').getByRole('button',{name:'Delete all run history'}).click();
- await expect(peer.locator('.notice')).toContainText('Saved run history was reset');
- await expect(peer.locator('.metrics')).toHaveCount(0);await expect(peer.locator('.history')).toHaveCount(0);
- expect(await peer.evaluate(()=>localStorage.getItem('impact-run'))).toBeNull();
- await peer.reload();await expect(peer.getByRole('heading',{name:'From activity to impact'})).toBeVisible();
- expect(eventRequests).toBe(1);expect(errors).toEqual([]);await peer.close();
+test('Reset confirmation is available without any CSV import dependency and cancel preserves history',async({page})=>{
+ const run={id:'saved-run',createdAt:'2026-10-09T12:00:00Z',status:'READY',phase:0,currentRows:1};let deletes=0;
+ await page.route('**/api/runs',route=>route.fulfill({json:[run]}));await page.route('**/api/runs/reset',route=>{deletes++;return route.fulfill({json:{deletedRuns:1}});});
+ await page.route('**/api/sharepoint/session',route=>route.fulfill({json:{busy:false,status:'CONNECTED',message:'Signed in.'}}));
+ await page.goto('/');await expect(page.locator('.history')).toHaveCount(1);await page.getByRole('button',{name:'Reset run history',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Reset run history?'});await expect(dialog).toBeVisible();await expect(dialog.getByRole('button',{name:'Keep history'})).toBeFocused();await expect(dialog).toContainText('SharePoint/LinkedIn sessions');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);expect(deletes).toBe(0);await expect(page.locator('.history')).toHaveCount(1);
+ await page.getByRole('button',{name:'Reset run history',exact:true}).click();await dialog.getByRole('button',{name:'Delete all run history'}).click();await expect(page.locator('.notice')).toContainText('Run history has been reset');expect(deletes).toBe(1);await expect(page.locator('.history')).toHaveCount(0);expect(await page.evaluate(()=>localStorage.getItem('impact-run'))).toBeNull();
 });

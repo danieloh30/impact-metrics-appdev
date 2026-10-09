@@ -18,6 +18,7 @@ import static io.restassured.RestAssured.given;
 @QuarkusTest
 class BlogWorkbookTest {
     @Inject WorkbookService workbooks;
+    @Inject RunService runs;
     @Inject CsvCodec csv;
     @Inject RuntimeWorkspace workspace;
     void row(Sheet sheet,int n,String... values) {var row=sheet.createRow(n);for(int c=0;c<values.length;c++)row.createCell(c).setCellValue(values[c]);}
@@ -50,7 +51,7 @@ class BlogWorkbookTest {
         assertEquals("Current month inputs",inspection.suggestedCurrentSheet());assertEquals(List.of("Previous months inputs"),inspection.suggestedHistorySheets());
         var elder=inspection.sheets().stream().filter(s->s.name().equals("Elder blog data")).findFirst().orElseThrow();
         assertTrue(elder.eligible());assertTrue(elder.blog());assertEquals(2,elder.rows());assertEquals(1,elder.undatedRows());assertEquals(1,elder.monthCounts().get("2026-10"));
-        given().multiPart("workbook","blogs.xlsx",bytes).post("/api/workbooks/inspect").then().statusCode(200).body("sheets[3].blog",org.hamcrest.Matchers.is(true)).body("sheets[3].undatedRows",org.hamcrest.Matchers.is(1));
+        assertTrue(workbooks.inspect(bytes).sheets().get(3).blog());
     }
     @Test void matchingBlogsAppendWithSourceValuesAndDoNotLeakIntoHistory() throws Exception {
         var prepared=workbooks.prepare(new WorkbookRequest(fixture(),"2026-10","Current month inputs",List.of("Previous months inputs")));
@@ -65,8 +66,7 @@ class BlogWorkbookTest {
     }
 @Test void workbookAgentPersistsAppendCountsAndDownloadContainsBothBlogSources() throws Exception {
     for(String name:List.of("RUN.md","AGENTS.md"))workspace.bytes(workspace.path(name),java.nio.file.Files.readAllBytes(java.nio.file.Path.of("runtimes",name)));
-    String id=given().multiPart("workbook","blogs.xlsx",fixture()).multiPart("month","2026-10").multiPart("currentSheet","Current month inputs").multiPart("historySheets","[\"Previous months inputs\"]")
-        .post("/api/runs/from-workbook").then().log().ifValidationFails().statusCode(200).body("currentRows",org.hamcrest.Matchers.is(3)).body("trailingRows",org.hamcrest.Matchers.is(1)).extract().path("id");
+    String id=runs.createWorkbook(fixture(),"blogs.xlsx","2026-10","Current month inputs",List.of("Previous months inputs")).id;
     Run stored=workspace.load(id);
     assertEquals(1,((Map<?,?>)stored.workbook.get("blogRows")).get("Markus blog data"));assertEquals(1,((Map<?,?>)stored.workbook.get("blogSkippedRows")).get("Elder blog data"));
     byte[] download=given().pathParam("name","AvocadoBot 2.csv").get("/api/runs/"+id+"/inputs/{name}/download").then().statusCode(200).extract().asByteArray();

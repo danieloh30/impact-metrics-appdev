@@ -346,3 +346,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .phase-change-counts dd { margin: 4px 0 0; color: #23416b; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .review-panel .phase-changes-confirm { margin-bottom: 0; font-size: 12px; }
 @media(max-width:700px) { .phase-change-counts { grid-template-columns: 1fr; } }
+
+.sharepoint-connection-bar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:18px; border:1px solid #dce5f2; border-radius:10px; background:#f7f9fd; }
+.sharepoint-connection-bar p { margin:5px 0 0; font-size:13px; }
+.sharepoint-signin-note { font-size:12px; margin:12px 0 20px; }
+.reporting-month-picker { display:flex; flex-wrap:wrap; align-items:center; gap:12px; font-weight:600; margin:20px 0; }
+.reporting-month-picker input { width:190px; }
+.reporting-month-picker small { font-weight:400; color:#647795; }
+.sharepoint-workbooks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.sharepoint-workbook { min-width:0; padding:24px; border:1px solid #cbd8eb; border-radius:12px; background:#f9fbff; }
+.sharepoint-workbook h3 { font-size:19px; margin:10px 0; line-height:1.4; }
+.sharepoint-workbook p { font-size:13px; margin-bottom:14px; }
+.sharepoint-workbook label,.workbook-options>label { display:block; font-weight:600; font-size:13px; }
+.sharepoint-workbook input,.workbook-options select { width:100%; min-width:0; margin-top:8px; }
+.workbook-source-label { font-size:11px; letter-spacing:1.6px; font-weight:600; color:#245ac8; }
+.workbook-read-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:18px; }
+.workbook-ready { color:#166534; font-size:12px; font-weight:600; }
+.workbook-snapshot { overflow-wrap:anywhere; margin-top:14px; }
+.workbook-prepare { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:24px; }
+.linkedin-controls { margin:12px 0 24px; }
+@media(max-width:900px) { .sharepoint-workbooks { grid-template-columns:1fr; } .sharepoint-connection-bar { align-items:flex-start; flex-direction:column; } }
+@media(max-width:560px) { .sharepoint-workbook { padding:16px; } .workbook-read-row .primary { width:100%; } .reporting-month-picker { align-items:flex-start; flex-direction:column; } }
+.sharepoint-workbook input,.workbook-options select,.reporting-month-picker input { min-height:44px; padding:10px 12px; border:1px solid #cbd8eb; border-radius:7px; background:#fff; color:#26374f; font:inherit; font-size:13px; font-weight:400; line-height:1.4; }
