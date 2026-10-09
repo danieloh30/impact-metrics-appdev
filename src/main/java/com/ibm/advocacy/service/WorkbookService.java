@@ -165,7 +165,7 @@ public class WorkbookService {
             for(int c=headers.size();c<source.getLastCellNum();c++)if(!formatter.formatCellValue(source.getCell(c)).isBlank())throw new BadRequestException("Data without a column header in "+sheet.getSheetName()+" row "+(n+1));
             Row row=new Row(sheet.getSheetName()+":"+(n+1),Map.of());
             for(int c=0;c<headers.size();c++) {
-                Cell cell=source.getCell(c);String value=formatter.formatCellValue(cell);
+                Cell cell=source.getCell(c);String value=WorkbookCells.value(cell,formatter);
                 if(cell!=null&&((cell.getCellType()==CellType.NUMERIC)||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.NUMERIC))&&DateUtil.isCellDateFormatted(cell))value=cell.getLocalDateTimeCellValue().toLocalDate().toString();
                 if(cell!=null&&(cell.getCellType()==CellType.ERROR||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.ERROR)))throw new BadRequestException("Excel error at "+sheet.getSheetName()+" row "+(n+1));
                 row.cells.put(headers.get(c),value);

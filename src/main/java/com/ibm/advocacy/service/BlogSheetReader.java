@@ -59,7 +59,7 @@ public class BlogSheetReader {
             if(source.getLastCellNum()>100)throw new BadRequestException("Sheet exceeds 100 columns");
             Row row=new Row(sheet.getSheetName()+":"+(n+1),Map.of());
             for(int c=0;c<Math.max(headers.size(),source.getLastCellNum());c++) {
-                Cell cell=source.getCell(c);String value=formatter.formatCellValue(cell);
+                Cell cell=source.getCell(c);String value=WorkbookCells.value(cell,formatter);
                 if(c>=headers.size()) {if(!value.isBlank())throw new BadRequestException("Data without a column header in "+sheet.getSheetName()+" row "+(n+1));continue;}
                 if(cell!=null&&(cell.getCellType()==CellType.ERROR||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.ERROR)))throw new BadRequestException("Excel error at "+sheet.getSheetName()+" row "+(n+1));
                 if(cell!=null&&(cell.getCellType()==CellType.NUMERIC||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.NUMERIC))&&DateUtil.isCellDateFormatted(cell))value=cell.getLocalDateTimeCellValue().toLocalDate().toString();

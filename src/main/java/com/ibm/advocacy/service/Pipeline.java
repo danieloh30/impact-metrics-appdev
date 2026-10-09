@@ -35,7 +35,7 @@ public class Pipeline {
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; downloadable CSV snapshots; supplied views+duration resolve blank current URLs; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -53,6 +53,25 @@ public class Pipeline {
         Measurement measurement=collectors.collect(row.get(URL));
         run.measurements.put(key,measurement);workspace.save(run);return measurement;
     }
+    private static class InputMetricException extends IllegalArgumentException {
+        final String metric;
+        InputMetricException(String metric,String reason){super(reason);this.metric=metric;}
+    }
+    private Measurement digitalMeasurement(Run run,Row row) throws Exception {
+        if(row.get(URL).isBlank()&&!row.get(VIEWS).isBlank()&&!row.get("Duration (in hours)").isBlank()) {
+            Measurement override=run.measurements.get("blank:"+row.id);
+            String views=override==null?row.get(VIEWS):override.value();
+            Measurement duration=run.measurements.get("duration:"+row.id);
+            if(duration!=null)row.cells.put("Duration (in hours)",duration.value());
+            try {if(Calculations.number(views).signum()<0)throw new IllegalArgumentException("Views / attendance cannot be negative");}
+            catch(IllegalArgumentException e){throw new InputMetricException("VIEWS",message(e));}
+            try {Calculations.number(row.get("Duration (in hours)"));}
+            catch(IllegalArgumentException e){throw new InputMetricException("DURATION",message(e));}
+            if(override!=null)return override;
+            return new Measurement(Calculations.format(Calculations.number(views)),"INPUT_DATA","",run.createdAt,"Supplied Views / attendance and Duration (in hours); no URL required",false);
+        }
+        return measurement(run,row);
+    }
     public void digital(PhaseTask task) throws Exception {
         Run run=workspace.load(task.runId());run.issues.clear();Data source=workspace.data(run.id,"source");
         List<Row> digital=new ArrayList<>(),follow=new ArrayList<>();Set<String> failed=new HashSet<>();
@@ -61,12 +80,12 @@ public class Pipeline {
             try {
                 if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
                 String key=Calculations.urlKey(row.get(URL));if(!key.isBlank()&&failed.contains(key)&&!run.measurements.containsKey(key))throw new IllegalArgumentException("Collection failed for this shared URL; manual collection required");
-                Measurement m=measurement(run,row);row.cells.put(VIEWS,m.value());row.cells.put(NOTE,m.type()+" collected "+m.collectedAt()+" — "+m.evidence());
+                Measurement m=digitalMeasurement(run,row);row.cells.put(VIEWS,m.value());row.cells.put(NOTE,m.type()+" collected "+m.collectedAt()+" — "+m.evidence());
                 if(m.type().equals("REACTIONS")) { row.cells.put("total_reactions",m.value());row.cells.put("reactions_scraped_at",m.collectedAt()); }
                 digital.add(row);
             } catch(Exception e) {
                 if(e instanceof java.util.concurrent.CancellationException)throw e;
-                String key=Calculations.urlKey(row.get(URL));if(!key.isBlank())failed.add(key);row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),false,MetricCollectors.type(row.get(URL)));
+                String key=Calculations.urlKey(row.get(URL));if(!key.isBlank())failed.add(key);row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),e instanceof InputMetricException,e instanceof InputMetricException input?input.metric:MetricCollectors.type(row.get(URL)));
             }
         }
         store(run,1,"digital.csv",csv.output(source,digital));store(run,1,"follow-up.csv",csv.output(source,follow));
@@ -101,7 +120,7 @@ public class Pipeline {
     }
     public void trailing(PhaseTask task) throws Exception {
         Run run=workspace.load(task.runId());run.issues.clear();
-        if(!run.trailing) { event(run,"Trailing90Agent","Skipped: no trailing_90-day.csv imported");workspace.save(run);return; }
+        if(!run.trailing) { event(run,"Trailing90Agent","Skipped: no historical workbook/input rows selected");workspace.save(run);return; }
         Data source=workspace.data(run.id,"trailing-source");Set<String> attempted=new HashSet<>();
         for(Row row:source.rows) {
             String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;

@@ -49,11 +49,11 @@ catch(RuntimeException failure) {
     throw failure;
 }
         byte[] current=csv.write(prepared.current()),trailing=prepared.trailing()==null?null:csv.write(prepared.trailing());
-        Run run=create(current,trailing,true);
+        Run run=createPrepared(prepared.current(),prepared.trailing(),current,trailing);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
         run.workbook.put("blogRows",prepared.blogRows());run.workbook.put("blogSkippedRows",prepared.blogSkippedRows());
-        Pipeline.event(run,"WorkbookPreparationAgent","Generated current-month and trailing inputs from Excel; "+prepared.missingBaselines()+" historical activities need baseline review");
+        Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows and downloadable input snapshots; "+prepared.missingBaselines()+" historical activities need baseline review");
         workspace.save(run);return run;
     }
 public synchronized Run createSharePointWorkbook(byte[] bytes,String filename,String month,String currentSheet,List<String> historySheets,String sourceUrl) throws Exception {
@@ -71,6 +71,10 @@ public synchronized byte[] input(String id,String name) throws Exception {
     private Run create(byte[] current,byte[] trailing,boolean utf8Trailing) throws Exception {
         if(current.length>6_000_000||(trailing!=null&&trailing.length>6_000_000))throw new BadRequestException("Each CSV must be smaller than 6 MB");
         Data source=csv.read(current,false),past=trailing==null?null:csv.read(trailing,true,utf8Trailing?StandardCharsets.UTF_8:java.nio.charset.Charset.forName("windows-1252"));
+        return createPrepared(source,past,current,trailing);
+    }
+    /** Workbook rows stay structured; CSVs are downloadable snapshots, not the processing input. */
+    private Run createPrepared(Data source,Data past,byte[] current,byte[] trailing) throws Exception {
         if(source.rows.isEmpty())throw new BadRequestException("Current-month input has no activity rows");
         String instructions=Files.readString(workspace.path("RUN.md"))+"\n"+Files.readString(workspace.path("AGENTS.md"));
         if(!RuntimeWorkspace.hash(instructions.getBytes(StandardCharsets.UTF_8)).equals(supportedInstructions))throw new BadRequestException("RUN.md or AGENTS.md changed. Review the new rules and update the implemented contract and its supported instruction hash before importing.");

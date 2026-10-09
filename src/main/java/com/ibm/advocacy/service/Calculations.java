@@ -28,7 +28,7 @@ public final class Calculations {
         result.set(count-1,total.subtract(part.multiply(BigDecimal.valueOf(count-1))));return result;
     }
     static List<String> components(String value) {
-        List<String> values=Arrays.stream(value.split(";")).map(String::strip).filter(s->!s.isEmpty()).toList();
+        List<String> values=Arrays.stream(value.split("[;\r\n]+")).map(String::strip).filter(s->!s.isEmpty()).toList();
         return values.isEmpty()?List.of(""):values;
     }
     public static List<Row> split(Row original,String metric) {
