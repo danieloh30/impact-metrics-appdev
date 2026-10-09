@@ -52,3 +52,24 @@ test('SharePoint read waits for complete sign-in and disables itself when access
  await expect(page.getByRole('alert')).toContainText('SharePoint access expired');await expect(read).toBeDisabled();
  expect(reads).toBe(1);
 });
+
+test('SharePoint download shows actual stages and elapsed time, then clears on success or error',async({page})=>{
+ let stage='OPENING',attempt=0,release:((value:unknown)=>void)|undefined;
+ await page.route('**/api/sharepoint/session',route=>route.fulfill({json:{busy:false,enabled:true,status:'CONNECTED',downloadStage:stage,message:'Signed in.'}}));
+ await page.route('**/api/workbooks/from-sharepoint',async route=>{
+  attempt++;await new Promise(resolve=>{release=resolve;});
+  if(attempt===1)await route.fulfill({json:{sheets:[{name:'Current inputs',eligible:true,rows:2,months:['2026-10'],reason:''}],suggestedCurrentSheet:'Current inputs',suggestedMonth:'2026-10',sourceToken:'synthetic-progress',filename:'Activity inputs.xlsx'}});
+  else await route.fulfill({status:403,json:{error:'SharePoint denied workbook download (HTTP 403).'}});
+ });
+ await page.goto('/');await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();
+ await page.getByLabel('SharePoint workbook link').fill('https://ibm-my.sharepoint.com/:x:/r/personal/test_ibm_com/Documents/Activity.xlsx');
+ const read=page.getByRole('button',{name:'Read SharePoint workbook',exact:true});await expect(read).toBeEnabled();await read.click();
+ const panel=page.locator('.workbook-progress');const bar=page.getByRole('progressbar',{name:'SharePoint workbook download progress'});
+ await expect(panel).toBeVisible();await expect(bar).not.toHaveAttribute('aria-valuenow');await expect(panel).toContainText('Preparing your SharePoint connection');await expect(page.getByRole('button',{name:'Downloading workbook…',exact:true})).toBeDisabled();
+ stage='DOWNLOADING';await expect(panel).toContainText('Downloading your workbook from SharePoint');await expect(panel.locator('.workbook-progress-time')).not.toHaveText('0s elapsed');
+ await page.screenshot({path:'../../../target/e2e-sharepoint-progress.png',fullPage:true});
+ stage='VALIDATING';await expect(panel).toContainText('Checking the downloaded Excel file');stage='INSPECTING';await expect(panel).toContainText('Reading activity sheets');release?.(undefined);
+ await expect(panel).toBeHidden();await expect(page.getByLabel('Current-month sheet')).toBeVisible();
+ stage='OPENING';await read.click();await expect(panel).toBeVisible();await expect.poll(()=>attempt).toBe(2);release?.(undefined);
+ await expect(panel).toBeHidden();await expect(page.getByRole('alert')).toContainText('HTTP 403');await expect(read).toBeEnabled();
+});

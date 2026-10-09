@@ -3,10 +3,12 @@ package com.ibm.advocacy.collector;
 import com.ibm.advocacy.storage.RuntimeWorkspace;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.microsoft.playwright.options.RequestOptions;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.WebApplicationException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -26,9 +28,11 @@ public class SharePointCollector {
     private final ExecutorService browserWorker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy=new AtomicBoolean();
     private volatile String status="NOT_CONNECTED",message="Connect SharePoint to sign in with your IBM account.";
+    private volatile String downloadStage="IDLE";
+    public void inspectionStage(String stage){downloadStage=stage;}
     public record Workbook(byte[] bytes,String filename,String sourceUrl) {}
     @jakarta.annotation.PreDestroy void close(){browserWorker.shutdownNow();}
-    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost);}
+    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost,"downloadStage",downloadStage);}
 
     public URI fileUri(String value) {
         try {
@@ -87,29 +91,60 @@ public class SharePointCollector {
             finally{busy.set(false);}
         });return session();
     }
+    /** Uses the browser cookie jar but reads the response instead of waiting for a download event. */
+    byte[] requestWorkbook(BrowserContext browser,URI target) {
+        downloadStage="DOWNLOADING";
+        APIResponse response;
+        try{response=browser.request().get(target.toASCIIString(),RequestOptions.create().setTimeout(30_000).setFailOnStatusCode(false));}
+        catch(PlaywrightException e){throw new WebApplicationException("SharePoint file request could not finish. Check your network and try reading the workbook again.",504);}
+        try{return workbookBytes(response);}finally{response.dispose();}
+    }
+    byte[] workbookBytes(APIResponse response) {
+        downloadStage="VALIDATING";
+        int code=response.status();
+        if(code==401)throw new ClientErrorException("SharePoint rejected the saved sign-in (HTTP 401). Reconnect SharePoint, then read the workbook again.",401);
+        if(code==403)throw new ClientErrorException("SharePoint denied workbook download (HTTP 403). Check that your IBM account has download permission or whether an organizational policy blocks it.",403);
+        if(code==404)throw new ClientErrorException("SharePoint could not find the workbook (HTTP 404). Check the file link and try again.",404);
+        if(!response.ok())throw new WebApplicationException("SharePoint file request returned HTTP "+code+". Try again or verify the file in SharePoint.",502);
+        byte[] bytes=response.body();
+        if(bytes.length>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
+        if(bytes.length>=4&&bytes[0]=='P'&&bytes[1]=='K'&&bytes[2]==3&&bytes[3]==4)return bytes;
+        URI finalUrl=URI.create(response.url());String path=Optional.ofNullable(finalUrl.getPath()).orElse("").toLowerCase(Locale.ROOT);
+        if(!allowedHost.equalsIgnoreCase(finalUrl.getHost())||path.contains("authenticate.aspx")||path.contains("login.aspx"))throw new ClientErrorException("SharePoint redirected the file request to sign-in. Reconnect SharePoint before importing.",401);
+        throw new ClientErrorException("SharePoint returned a web page instead of an Excel file. Verify that the link opens the original workbook and that download is permitted; you can also upload the downloaded .xlsx file.",422);
+    }
+    byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
+        try{return requestWorkbook(browser,downloadUri(file));}
+        catch(WebApplicationException first) {
+            int code=first.getResponse().getStatus();
+            if(code!=401&&code!=403&&code!=404&&code!=422)throw first;
+            // Redeem the original sharing link and allow the saved IBM SSO session to refresh.
+            downloadStage="REFRESHING";
+            Page page=browser.newPage();
+            try{page.navigate(URI.create(originalUrl.strip()).toASCIIString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30_000));}
+            catch(PlaywrightException e){throw new WebApplicationException("SharePoint could not open the workbook link to refresh access. Check your network or reconnect SharePoint.",504);}
+            try{return requestWorkbook(browser,downloadUri(file));}catch(WebApplicationException retry){int retryCode=retry.getResponse().getStatus();if(retryCode!=401&&retryCode!=403&&retryCode!=404&&retryCode!=422)throw retry;}
+            URI direct=URI.create(file.toASCIIString()+"?download=1");
+            return requestWorkbook(browser,direct);
+        }
+    }
     public Workbook download(String url) throws Exception {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
         if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in first.",409);
+        downloadStage="OPENING";
         Future<Workbook> future=browserWorker.submit(()->{
-            Path saved=workspace.path(".uploads/sharepoint-"+UUID.randomUUID()+".xlsx");
             try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=downloadContext(chrome)) {
                 if(!authenticated(browser))throw new ClientErrorException("Connect SharePoint and sign in before importing the workbook.",401);
-                Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();
-                Download download;
-                try{download=page.waitForDownload(new Page.WaitForDownloadOptions().setTimeout(45_000),()->page.evaluate("url => window.location.assign(url)",downloadUri(file).toASCIIString()));}
-                catch(PlaywrightException e){throw new ClientErrorException("SharePoint did not provide a workbook download. Reconnect, verify file access, or upload the workbook if your organization blocks browser downloads.",401);}
-                download.saveAs(saved);
-                if(Files.size(saved)>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
+                byte[] bytes=downloadWorkbook(browser,url,file);
                 String filename=file.getPath().substring(file.getPath().lastIndexOf('/')+1);
                 saveSession(browser);
-                status="CONNECTED";message="Workbook snapshot downloaded. Review sheets and reporting month.";
-                return new Workbook(Files.readAllBytes(saved),filename,file.toASCIIString());
-            }catch(PlaywrightException e){throw new ClientErrorException("SharePoint browser is unavailable. Install Chrome or configure the browser executable, then connect again.",503);}
-            finally{Files.deleteIfExists(saved);}
+                status="CONNECTED";message="Workbook downloaded. Reading its activity sheets.";
+                return new Workbook(bytes,filename,file.toASCIIString());
+            }catch(PlaywrightException e){throw new WebApplicationException("SharePoint browser is unavailable. Install Chrome or configure the browser executable, then connect again.",503);}
         });
-        try{return future.get(90,TimeUnit.SECONDS);}
-        catch(ExecutionException e){if(e.getCause() instanceof ClientErrorException client&&client.getResponse().getStatus()==401){status="NOT_CONNECTED";message="SharePoint sign-in or workbook access needs attention. Reconnect before importing.";}if(e.getCause() instanceof Exception cause)throw cause;throw e;}
-        catch(TimeoutException e){future.cancel(true);throw new ClientErrorException("SharePoint download timed out. Reconnect and try again.",504);}
+        try{return future.get(120,TimeUnit.SECONDS);}
+        catch(ExecutionException e){downloadStage="FAILED";if(e.getCause() instanceof WebApplicationException client&&client.getResponse().getStatus()==401){status="NOT_CONNECTED";message="SharePoint sign-in expired or was rejected. Reconnect before importing.";}if(e.getCause() instanceof Exception cause)throw cause;throw e;}
+        catch(TimeoutException e){downloadStage="FAILED";future.cancel(true);throw new WebApplicationException("SharePoint download timed out. Check your network and try again.",504);}
         finally{busy.set(false);}
     }
 }
