@@ -17,7 +17,13 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 /** Deterministic workbook extraction. No formulas, macros or external links are executed. */
 @ApplicationScoped
 public class WorkbookService {
-    public record SheetInfo(String name, boolean eligible, int rows, List<String> months, String reason) {}
+    public record SheetInfo(String name, boolean eligible, int rows, List<String> months, String reason,
+                            boolean blog, Map<String,Integer> monthCounts, int undatedRows) {
+        public SheetInfo(String name,boolean eligible,int rows,List<String> months,String reason) {
+            this(name,eligible,rows,months,reason,false,Map.of(),0);
+        }
+    }
+    @jakarta.inject.Inject BlogSheetReader blogs;
     public record Inspection(List<SheetInfo> sheets, String suggestedMonth, String suggestedCurrentSheet, List<String> suggestedHistorySheets) {}
     private record SheetData(Data data, Map<String,LocalDate> dates) {}
     private static final List<DateTimeFormatter> DATES=List.of(DateTimeFormatter.ISO_LOCAL_DATE,
@@ -41,6 +47,12 @@ public class WorkbookService {
                     sheets.add(new SheetInfo(sheet.getSheetName(),false,0,List.of(),"Hidden sheet — excluded"));continue;
                 }
                 try {
+                    if(BlogSheetReader.matches(sheet.getSheetName())) {
+                        var blog=blogs.read(sheet);Map<String,Integer> counts=new TreeMap<>();
+                        blog.months().values().forEach(month->counts.merge(month.toString(),1,Integer::sum));
+                        sheets.add(new SheetInfo(sheet.getSheetName(),true,blog.data().rows.size(),List.copyOf(counts.keySet()),"",true,counts,blog.undatedRows()));
+                        continue;
+                    }
                     SheetData data=read(sheet);List<String> months=data.dates.values().stream().map(d->YearMonth.from(d).toString()).distinct().sorted().toList();
                     sheets.add(new SheetInfo(sheet.getSheetName(),true,data.data.rows.size(),months,""));
                     if(!months.isEmpty()&&months.getLast().compareTo(latest)>0){latest=months.getLast();suggested=sheet.getSheetName();}
@@ -48,11 +60,11 @@ public class WorkbookService {
             }
         }
         if(latest.isEmpty())throw new BadRequestException("No usable activity sheets found. Each needs Date of activity (or Date), Author, Type of activity and Link / URL to resource headers.");
-        SheetInfo preferred=sheets.stream().filter(info->info.eligible()&&!info.months().isEmpty()&&sheetKey(info.name()).equals("current month inputs")).findFirst().orElse(null);
+        SheetInfo preferred=sheets.stream().filter(info->info.eligible()&&!info.blog()&&!info.months().isEmpty()&&sheetKey(info.name()).equals("current month inputs")).findFirst().orElse(null);
         if(preferred!=null){suggested=preferred.name();latest=preferred.months().getLast();}
         String current=suggested;
-        List<String> namedHistory=sheets.stream().filter(info->info.eligible()&&!info.name().equals(current)&&(sheetKey(info.name()).equals("previous months inputs")||sheetKey(info.name()).equals("previous months"))).map(SheetInfo::name).toList();
-        List<String> history=namedHistory.isEmpty()?sheets.stream().filter(info->info.eligible()&&!info.name().equals(current)).map(SheetInfo::name).toList():namedHistory;
+        List<String> namedHistory=sheets.stream().filter(info->info.eligible()&&!info.blog()&&!info.name().equals(current)&&(sheetKey(info.name()).equals("previous months inputs")||sheetKey(info.name()).equals("previous months"))).map(SheetInfo::name).toList();
+        List<String> history=namedHistory.isEmpty()?sheets.stream().filter(info->info.eligible()&&!info.blog()&&!info.name().equals(current)).map(SheetInfo::name).toList():namedHistory;
         return new Inspection(sheets,latest,suggested,history);
     }
     public PreparedWorkbook prepare(WorkbookRequest request) throws IOException {
@@ -63,8 +75,25 @@ public class WorkbookService {
         List<Row> past=new ArrayList<>();LinkedHashSet<String> pastHeaders=new LinkedHashSet<>();int missing=0;
         try(XSSFWorkbook book=open(request.bytes())) {
             SheetData current=selected(book,request.currentSheet());
-            List<Row> rows=current.data.rows.stream().filter(r->YearMonth.from(current.dates.get(r.id)).equals(month)).map(Row::copy).toList();
-            if(rows.isEmpty())throw new BadRequestException("Selected current sheet has no activities in "+month);
+            List<Row> rows=new ArrayList<>(current.data.rows.stream().filter(r->YearMonth.from(current.dates.get(r.id)).equals(month)).map(Row::copy).toList());
+            LinkedHashSet<String> currentHeaders=new LinkedHashSet<>(current.data.headers);currentHeaders.add("Source sheet");
+            currentHeaders.addAll(List.of("Date of activity","Author of activity"));
+            rows.forEach(row->{
+                row.cells.put("Source sheet",request.currentSheet());
+                if(row.get("Date of activity").isBlank())row.cells.put("Date of activity",row.get("Date"));
+                if(row.get("Author of activity").isBlank())row.cells.put("Author of activity",row.get("Author"));
+            });
+            Map<String,Integer> blogRows=new LinkedHashMap<>(),blogSkippedRows=new LinkedHashMap<>();
+            for(Sheet sheet:book) {
+                int index=book.getSheetIndex(sheet);
+                if(!BlogSheetReader.matches(sheet.getSheetName())||book.isSheetHidden(index)||book.isSheetVeryHidden(index))continue;
+                var supplement=blogs.read(sheet);
+                List<Row> selected=supplement.data().rows.stream().filter(row->supplement.months().get(row.id).equals(month)).map(Row::copy).toList();
+                rows.addAll(selected);currentHeaders.addAll(supplement.data().headers);
+                blogRows.put(sheet.getSheetName(),selected.size());blogSkippedRows.put(sheet.getSheetName(),supplement.undatedRows());
+            }
+            if(rows.size()>20_000)throw new BadRequestException("Generated current input exceeds 20,000 rows");
+            if(rows.isEmpty())throw new BadRequestException("Current sheet and blog supplements have no activities in "+month);
             for(String name:history) {
                 SheetData data=name.equals(request.currentSheet())?current:selected(book,name);
                 pastHeaders.addAll(data.data.headers);
@@ -87,7 +116,7 @@ public class WorkbookService {
             }
             if(past.size()>20_000)throw new BadRequestException("Generated trailing input exceeds 20,000 rows");
             pastHeaders.addAll(List.of("Trailing 90-day","Current total","Source sheet"));
-            return new PreparedWorkbook(new Data(current.data.headers,rows),past.isEmpty()?null:new Data(new ArrayList<>(pastHeaders),past),month.toString(),start.toString(),end.toString(),List.copyOf(history),missing);
+            return new PreparedWorkbook(new Data(new ArrayList<>(currentHeaders),rows),past.isEmpty()?null:new Data(new ArrayList<>(pastHeaders),past),month.toString(),start.toString(),end.toString(),List.copyOf(history),missing,Map.copyOf(blogRows),Map.copyOf(blogSkippedRows));
         }
     }
     private SheetData selected(XSSFWorkbook book,String name) {
@@ -95,6 +124,7 @@ public class WorkbookService {
         if(sheet==null)throw new BadRequestException("Unknown activity sheet: "+name);
         int index=book.getSheetIndex(sheet);
         if(book.isSheetHidden(index)||book.isSheetVeryHidden(index))throw new BadRequestException("Hidden sheets cannot be imported");
+        if(BlogSheetReader.matches(name))throw new BadRequestException("Blog sheets are appended automatically; select an activity input sheet here");
         return read(sheet);
     }
     private static String sheetKey(String value){return value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}

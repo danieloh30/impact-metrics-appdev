@@ -40,3 +40,20 @@ test('Raw workbook defaults to current and previous inputs without selecting its
  await expect(page.getByRole('checkbox',{name:/Bob csv/})).not.toBeChecked();
  await expect(page.getByRole('checkbox',{name:/Current month inputs/})).not.toBeChecked();
 });
+
+test('Blog supplements show reporting-month counts and undated exclusions without joining history',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.route('**/api/workbooks/inspect',route=>route.fulfill({json:{
+  sheets:[{name:'Current month inputs',eligible:true,rows:11,months:['2026-10'],reason:''},{name:'Previous months inputs',eligible:true,rows:402,months:['2026-09'],reason:''},
+   {name:'Markus blog data',eligible:true,blog:true,rows:288,months:['2026-09'],monthCounts:{'2026-09':11},undatedRows:0,reason:''},
+   {name:'Elder blog data',eligible:true,blog:true,rows:132,months:['2026-09'],monthCounts:{'2026-09':23},undatedRows:14,reason:''}],
+  suggestedMonth:'2026-10',suggestedCurrentSheet:'Current month inputs',suggestedHistorySheets:['Previous months inputs']
+ }}));
+ await page.goto('/');await page.getByLabel('Original Excel workbook').setInputFiles({name:'Blogs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});await page.getByRole('button',{name:'Read workbook',exact:true}).click();
+ await page.getByLabel('Reporting month').fill('2026-09');const blogs=page.locator('.blog-sheets');
+ await expect(blogs).toContainText('11 activities for 2026-09');await expect(blogs).toContainText('23 activities for 2026-09');await expect(blogs).toContainText('matched using Month');await expect(blogs).toContainText('14 rows have no Date or Month and will be excluded');
+ await expect(page.getByRole('option',{name:/Markus blog/})).toHaveCount(0);await expect(page.getByRole('checkbox',{name:/Elder blog/})).toHaveCount(0);
+ await expect(page.getByRole('checkbox',{name:/Previous months inputs/})).toBeChecked();
+ await page.getByLabel('Reporting month').fill('2026-10');await expect(blogs.getByText('0 activities for 2026-10',{exact:false})).toHaveCount(2);
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
+});

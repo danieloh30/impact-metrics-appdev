@@ -52,6 +52,7 @@ catch(RuntimeException failure) {
         Run run=create(current,trailing,true);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
+        run.workbook.put("blogRows",prepared.blogRows());run.workbook.put("blogSkippedRows",prepared.blogSkippedRows());
         Pipeline.event(run,"WorkbookPreparationAgent","Generated current-month and trailing inputs from Excel; "+prepared.missingBaselines()+" historical activities need baseline review");
         workspace.save(run);return run;
     }
