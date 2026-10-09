@@ -133,6 +133,12 @@ input::file-selector-button { cursor: pointer; background: #fff; border: 1px sol
 .review-panel p { font-size: 13px; color: #506887; margin: 0 0 14px; }
 .review-panel h2 { font-size: 19px; }
 .review-panel .eyebrow { font-size: 9px; margin-bottom: 10px; }
+.attendance-review { margin-top: 18px; padding-top: 16px; border-top: 1px solid #cadcf7; }
+.attendance-review h3 { font-size: 14px; margin-bottom: 10px; }
+.attendance-review ul { margin: 0 0 14px; padding-left: 20px; color: #3c587a; font-size: 13px; line-height: 1.65; }
+.attendance-review li + li { margin-top: 8px; }
+.review-panel .attendance-review-note { color: #60748e; font-size: 12px; margin-bottom: 0; }
+
 .checkbox { font-size: 12px; display: flex; align-items: flex-start; gap: 9px; line-height: 1.7; font-weight: 400; color: #3c587a; }
 .checkbox input { margin: 4px 0 0; accent-color: var(--blue); flex-shrink: 0; width: 14px; height: 14px; }
 .section { margin-top: 30px; }
@@ -323,3 +329,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @keyframes workbook-download{from{transform:translateX(-110%)}to{transform:translateX(365%)}}
 @media(max-width:700px){.workbook-progress{padding:18px}.workbook-progress-heading{align-items:flex-start}.workbook-progress-stages{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 @media(prefers-reduced-motion:reduce){.workbook-progress-track>span{animation:none;left:25%;width:50%}}
+
+/* Explain automatic phase changes before the user confirms them. */
+.phase-changes { margin: 16px 0; padding: 16px; border: 1px solid #c5d8f4; border-left: 3px solid #0f62fe; border-radius: 8px; background: #fff; }
+.phase-changes-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 10px; }
+.phase-changes-heading h3 { font-size: 14px; margin: 0; }
+.phase-changes-heading span { color: #245ac8; background: #edf3ff; border-radius: 5px; padding: 4px 8px; font-size: 11px; }
+.review-panel .phase-change-baseline { color: #60748e; font-size: 11px; margin-bottom: 10px; }
+.phase-change-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
+.phase-change-counts>div { background: #f4f7fc; border-radius: 6px; padding: 10px 12px; }
+.phase-change-counts dt { color: #60748e; font-size: 11px; }
+.phase-change-counts dd { margin: 4px 0 0; color: #23416b; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.review-panel .phase-changes-confirm { margin-bottom: 0; font-size: 12px; }
+@media(max-width:700px) { .phase-change-counts { grid-template-columns: 1fr; } }
