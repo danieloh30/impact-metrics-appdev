@@ -31,7 +31,7 @@ The exception is current-month data only. Historical rows still need a fresh lif
 
 ## Approvals and data safety
 
-Only runtimes is processed. Keep immutable original.xlsx, generated input snapshots, frozen instruction copies, structured JSON phase state, and versioned CSV exports under each run. The SPA owns phase approval, manual corrections, downloads, and confirmed history reset. Reset preserves instruction files and local sessions. Runtime data, workbooks, outputs, and credentials remain excluded from commits.
+Only runtimes is processed. Keep immutable original.xlsx, structured source rows, frozen instruction copies, JSON phase state, and immutable versioned JSON result datasets under each run. No CSV files are created during workbook preparation or any phase. Previews read structured results directly; approval digests hash their JSON bytes. Generate UTF-8 input snapshots, result CSVs, or ZIPs in memory only for explicit downloads and never persist them. Preserve separately uploaded legacy CSV inputs; read older saved CSV results only for compatibility. The SPA owns phase approval, manual corrections, downloads, and confirmed history reset. Reset preserves instruction files and local sessions. Runtime data, workbooks, outputs, and credentials remain excluded from commits.
 
 CSV compatibility: current uploads and all generated exports use UTF-8. Separately uploaded legacy trailing_90-day.csv may use Windows-1252. Cell separators and text values inside a workbook are independent of CSV delimiter/encoding rules.
 

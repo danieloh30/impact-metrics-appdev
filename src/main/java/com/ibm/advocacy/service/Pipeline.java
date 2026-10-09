@@ -3,8 +3,7 @@ package com.ibm.advocacy.service;
 import com.ibm.advocacy.agentic.InstructionReviewer;
 import com.ibm.advocacy.agentic.QualityReviewer;
 import com.ibm.advocacy.collector.MetricCollectors;
-import com.ibm.advocacy.csv.CsvCodec;
-import com.ibm.advocacy.model.Artifact;
+import com.ibm.advocacy.storage.ResultStore;
 import com.ibm.advocacy.model.Data;
 import com.ibm.advocacy.model.Event;
 import com.ibm.advocacy.model.Issue;
@@ -29,13 +28,13 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @io.quarkus.arc.Unremovable
 public class Pipeline {
     @Inject RuntimeWorkspace workspace;
-    @Inject CsvCodec csv;
+    @Inject ResultStore results;
     @Inject MetricCollectors collectors;
     @Inject RunService runs;
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; downloadable CSV snapshots; supplied views+duration resolve blank current URLs; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -88,7 +87,7 @@ public class Pipeline {
                 String key=Calculations.urlKey(row.get(URL));if(!key.isBlank())failed.add(key);row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),e instanceof InputMetricException,e instanceof InputMetricException input?input.metric:MetricCollectors.type(row.get(URL)));
             }
         }
-        store(run,1,"digital.csv",csv.output(source,digital));store(run,1,"follow-up.csv",csv.output(source,follow));
+        store(run,1,"digital.csv",Data.output(source,digital));store(run,1,"follow-up.csv",Data.output(source,follow));
         event(run,"DigitalMetricsAgent","Collected "+digital.size()+" digital activities; "+follow.size()+" require follow-up");workspace.save(run);
     }
     public void attendance(PhaseTask task) throws Exception {
@@ -106,7 +105,7 @@ public class Pipeline {
                 row.cells.put("Attendance hours",Calculations.format(Calculations.attendance(row)));person.add(row);
             } catch(IllegalArgumentException e) { row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),true,"ATTENDANCE"); }
         }
-        store(run,2,"digital.csv",stage(run,1,"digital.csv"));store(run,2,"in-person.csv",csv.output(source,person));store(run,2,"follow-up.csv",csv.output(source,follow));
+        store(run,2,"digital.csv",stage(run,1,"digital.csv"));store(run,2,"in-person.csv",Data.output(source,person));store(run,2,"follow-up.csv",Data.output(source,follow));
         event(run,"AttendanceAgent","Calculated attendance for "+person.size()+" activities");workspace.save(run);
     }
     public void attribution(PhaseTask task) throws Exception {
@@ -114,7 +113,7 @@ public class Pipeline {
         for(String name:List.of("digital.csv","in-person.csv","follow-up.csv")) {
             Data input=stage(run,2,name);List<Row> rows=new ArrayList<>();String metric=name.equals("digital.csv")?VIEWS:name.equals("in-person.csv")?"Attendance hours":null;
             for(Row row:input.rows)rows.addAll(Calculations.split(row,metric));
-            store(run,3,name,csv.output(input,rows));
+            store(run,3,name,Data.output(input,rows));
         }
         event(run,"AttributionAgent","Split authors × tools using conserved decimal allocations");workspace.save(run);
     }
@@ -145,7 +144,7 @@ List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
             row.cells.put(NOTE,input.note()+"; no fresh lifetime total or trailing delta calculated");
         }
         for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline")&&run.issues.stream().noneMatch(i->i.rowId().equals(row.id)&&i.metricType().equals("BASELINE")))issue(run,row,row.get(NOTE),true,"BASELINE");
-        store(run,4,"updated_90-day.csv",csv.output(source,rows));
+        store(run,4,"updated_90-day.csv",Data.output(source,rows));
         event(run,"Trailing90Agent","Refreshed "+source.rows.size()+" rows using "+attempted.size()+" resource groups");workspace.save(run);
     }
     public void finish(PhaseTask task) throws Exception {
@@ -156,7 +155,7 @@ List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
                 Row row=original.copy();row.cells.put(NOTE,OTHER.contains(row.type())?"Other activity — manual follow-up":"Unknown activity type — manual follow-up");rows.addAll(Calculations.split(row,null));
             }
             for(String name:List.of("digital.csv","in-person.csv"))store(run,5,name,stage(run,3,name));
-            store(run,5,"follow-up.csv",csv.output(source,rows));
+            store(run,5,"follow-up.csv",Data.output(source,rows));
         } else if(task.phase()==6) {
             List<Row> rows=new ArrayList<>();for(String name:List.of("digital.csv","in-person.csv","follow-up.csv"))for(Row row:stage(run,5,name).rows)rows.add(Calculations.finalRow(row));
             store(run,6,"current.csv",new Data(FINAL_HEADERS,rows));
@@ -171,8 +170,7 @@ List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
         for(String name:names) {
             Data data=stage(run,task.phase(),name);Set<String> ids=new HashSet<>();
             for(Row row:data.rows)if(!ids.add(row.id))throw new IllegalStateException("Duplicate source attribution: "+row.id);
-            byte[] bytes=csv.write(data);workspace.bytes(workspace.runPath(run.id,"output/"+version+"/"+name),bytes);
-            run.artifacts.put(name,new Artifact(name,version,task.phase(),data.rows.size(),RuntimeWorkspace.hash(bytes)));
+            run.artifacts.put(name,results.save(run.id,name,version,task.phase(),data));
         }
         if(task.phase()==7) {
             Data current=stage(run,7,"current.csv");if(!current.headers.equals(FINAL_HEADERS))throw new IllegalStateException("Invalid final export schema");
@@ -180,11 +178,16 @@ List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
         }
         run.version=version;String summary=PHASES.get(task.phase()-1)+": "+names.size()+" artifacts; "+run.issues.size()+" issues.";
         if(ai)try { run.review=qualityReviewer.review(summary+" "+run.issues.stream().map(Issue::reason).limit(10).toList()); }catch(Exception e) { run.review="AI review unavailable. "+summary; }
-        else run.review=summary+" Review the generated files before continuing.";
+        else run.review=summary+" Review the phase results before continuing.";
         event(run,"ValidationAgent",summary);workspace.save(run);return new PhaseResult(run.id,task.phase(),summary);
     }
-    Data stage(Run run,int phase,String name) throws Exception { return workspace.data(run.id,"phase-"+phase+"-"+name); }
-    void store(Run run,int phase,String name,Data data) throws Exception { workspace.data(run.id,"phase-"+phase+"-"+name,data); }
+    Data stage(Run run,int phase,String name) throws Exception {
+        String key="phase-"+phase+"-"+ResultStore.datasetName(name);
+        // Older JSON phase snapshots included the export suffix in their filename.
+        if(!Files.exists(workspace.runPath(run.id,"state/"+key+".json")))key="phase-"+phase+"-"+name;
+        return workspace.data(run.id,key);
+    }
+    void store(Run run,int phase,String name,Data data) throws Exception { workspace.data(run.id,"phase-"+phase+"-"+ResultStore.datasetName(name),data); }
     static void issue(Run run,Row row,String reason,boolean blocking,String metric) { run.issues.add(new Issue(row.id,row.get("Name of activity"),row.get(URL),reason,blocking,metric)); }
     static void event(Run run,String agent,String message) { run.events.add(new Event(run.events.size()+1L,Instant.now().toString(),agent,message)); }
     static String message(Exception e) { Throwable root=e;while(root.getCause()!=null&&root.getCause()!=root)root=root.getCause();return Optional.ofNullable(root.getMessage()).orElse(root.getClass().getSimpleName()); }

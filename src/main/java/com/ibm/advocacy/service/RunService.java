@@ -32,6 +32,7 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class RunService {
     @Inject RuntimeWorkspace workspace;
     @Inject CsvCodec csv;
+    @Inject com.ibm.advocacy.storage.ResultStore results;
     @Inject PhaseWorkflow workflow;
     @Inject com.ibm.advocacy.agentic.WorkbookWorkflow workbookWorkflow;
     @org.eclipse.microprofile.config.inject.ConfigProperty(name="metrics.instructions.sha256") String supportedInstructions;
@@ -48,12 +49,11 @@ catch(RuntimeException failure) {
     for(Throwable cause=failure;cause!=null;cause=cause.getCause())if(cause instanceof jakarta.ws.rs.WebApplicationException web)throw web;
     throw failure;
 }
-        byte[] current=csv.write(prepared.current()),trailing=prepared.trailing()==null?null:csv.write(prepared.trailing());
-        Run run=createPrepared(prepared.current(),prepared.trailing(),current,trailing);
+        Run run=createPrepared(prepared.current(),prepared.trailing(),null,null);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
         run.workbook.put("blogRows",prepared.blogRows());run.workbook.put("blogSkippedRows",prepared.blogSkippedRows());
-        Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows and downloadable input snapshots; "+prepared.missingBaselines()+" historical activities need baseline review");
+        Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows without intermediate CSV files; "+prepared.missingBaselines()+" historical activities need baseline review");
         workspace.save(run);return run;
     }
 public synchronized Run createSharePointWorkbook(byte[] bytes,String filename,String month,String currentSheet,List<String> historySheets,String sourceUrl) throws Exception {
@@ -63,7 +63,12 @@ public synchronized Run createSharePointWorkbook(byte[] bytes,String filename,St
 public synchronized byte[] input(String id,String name) throws Exception {
 
         if(!Set.of("AvocadoBot 2.csv","trailing_90-day.csv").contains(name))throw new BadRequestException("Unknown input file");
-        get(id);Path path=workspace.runPath(id,"rawdata/"+name);
+        Run run=get(id);
+        if(!run.workbook.isEmpty()) {
+            if(name.equals("trailing_90-day.csv")&&!run.trailing)throw new NotFoundException("Input is not available for this run");
+            return csv.write(workspace.data(id,name.equals("AvocadoBot 2.csv")?"source":"trailing-source"));
+        }
+        Path path=workspace.runPath(id,"rawdata/"+name);
         if(!Files.exists(path))throw new NotFoundException("Input is not available for this run");
         return Files.readAllBytes(path);
     }
@@ -73,15 +78,15 @@ public synchronized byte[] input(String id,String name) throws Exception {
         Data source=csv.read(current,false),past=trailing==null?null:csv.read(trailing,true,utf8Trailing?StandardCharsets.UTF_8:java.nio.charset.Charset.forName("windows-1252"));
         return createPrepared(source,past,current,trailing);
     }
-    /** Workbook rows stay structured; CSVs are downloadable snapshots, not the processing input. */
+    /** Workbook rows stay structured; CSV snapshots are generated in memory only when downloaded. */
     private Run createPrepared(Data source,Data past,byte[] current,byte[] trailing) throws Exception {
         if(source.rows.isEmpty())throw new BadRequestException("Current-month input has no activity rows");
         String instructions=Files.readString(workspace.path("RUN.md"))+"\n"+Files.readString(workspace.path("AGENTS.md"));
         if(!RuntimeWorkspace.hash(instructions.getBytes(StandardCharsets.UTF_8)).equals(supportedInstructions))throw new BadRequestException("RUN.md or AGENTS.md changed. Review the new rules and update the implemented contract and its supported instruction hash before importing.");
         for(String required:List.of("Phase 1:","Phase 2:","Phase 3:","Phase 4:","Phase 5:","Phase 6:","Phase 7:","Video Views"))if(!instructions.contains(required))throw new BadRequestException("Unsupported instructions: missing "+required);
         Run run=new Run();run.id=UUID.randomUUID().toString();run.createdAt=Instant.now().toString();run.currentRows=source.rows.size();run.trailing=past!=null;run.trailingRows=past==null?0:past.rows.size();
-        run.instructionHash=RuntimeWorkspace.hash(instructions.getBytes(StandardCharsets.UTF_8));run.inputHash=RuntimeWorkspace.hash(current);
-        workspace.bytes(workspace.runPath(run.id,"rawdata/AvocadoBot 2.csv"),current);
+        run.instructionHash=RuntimeWorkspace.hash(instructions.getBytes(StandardCharsets.UTF_8));run.inputHash=RuntimeWorkspace.hash(current==null?results.encode(source):current);
+        if(current!=null)workspace.bytes(workspace.runPath(run.id,"rawdata/AvocadoBot 2.csv"),current);
         if(trailing!=null)workspace.bytes(workspace.runPath(run.id,"rawdata/trailing_90-day.csv"),trailing);
         for(String name:List.of("RUN.md","AGENTS.md"))workspace.bytes(workspace.runPath(run.id,"instructions/"+name),Files.readAllBytes(workspace.path(name)));
         workspace.data(run.id,"source",source);if(past!=null)workspace.data(run.id,"trailing-source",past);
@@ -205,10 +210,14 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
         }
     }
     static void BigDecimalValidation(String value) { if(Calculations.number(value).signum()<0)throw new BadRequestException("Measured totals cannot be negative"); }
+    /** CSV is produced only for an explicit export; previews use artifactData directly. */
     public synchronized byte[] artifact(String id,String name,Integer version) throws Exception {
+        return csv.write(artifactData(id,name,version));
+    }
+    public synchronized Data artifactData(String id,String name,Integer version) throws Exception {
         if(!OUTPUTS.contains(name))throw new BadRequestException("Unknown artifact");Run run=get(id);Artifact artifact=run.artifacts.get(name);if(artifact==null)throw new NotFoundException("Artifact is not generated yet");
         int chosen=version==null?artifact.version():version;if(chosen<1||chosen>run.version)throw new BadRequestException("Invalid artifact version");
-        Path path=workspace.runPath(id,"output/"+chosen+"/"+name);if(!Files.exists(path))throw new NotFoundException("Artifact does not exist in this version");return Files.readAllBytes(path);
+        return results.load(id,name,chosen);
     }
     public synchronized byte[] zip(String id) throws Exception {
         Run run=get(id);ByteArrayOutputStream out=new ByteArrayOutputStream();

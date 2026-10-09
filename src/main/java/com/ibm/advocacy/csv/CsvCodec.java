@@ -58,10 +58,4 @@ public class CsvCodec {
         }
         return out.toString().getBytes(StandardCharsets.UTF_8);
     }
-    public Data output(Data source,List<Row> rows) {
-        LinkedHashSet<String> headers=new LinkedHashSet<>(source.headers);
-        headers.addAll(List.of(NOTE,"Attendance hours","total_reactions","total_comments","total_reposts","reactions_scraped_at"));
-        rows.forEach(r->headers.addAll(r.cells.keySet()));
-        return new Data(new ArrayList<>(headers),rows);
-    }
 }

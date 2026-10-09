@@ -6,7 +6,7 @@ Upload the original .xlsx workbook or read an authenticated SharePoint snapshot.
 
 Current month inputs is the primary activity source. Append reporting-month activities from Markus blog data (Date) and Elder blog data (Month). Blank blog Date/Month rows are excluded with counts for review. Previous months inputs supplies history within the inclusive three-calendar-month window ending on the reporting month's last day: September 2026 means July 1–September 30. Preserve historical Current total baselines; missing/invalid baselines require correction. Do not infer them from new view counts.
 
-Agents consume structured workbook rows directly. Downloadable AvocadoBot 2.csv and trailing_90-day.csv are snapshots for audit and compatibility, not required analysis inputs. Legacy CSV uploads remain supported. Keep raw data, run state, phase data, frozen instructions, and CSV exports inside runtimes. No IBM Bob, Python script, external skill invocation, or user CSV export is needed to run this workflow.
+Agents consume structured workbook rows directly. Store source rows, phase state, and immutable versioned results as JSON datasets. Do not generate, store, or re-read CSV files during workbook preparation, phase processing, previews, or approvals. Generate AvocadoBot 2.csv and trailing_90-day.csv snapshots only in memory when explicitly downloaded for audit or compatibility. Legacy CSV uploads remain supported. Keep raw data, run state, phase data, frozen instructions, and structured results inside runtimes. Generate CSV/ZIP exports in memory only on explicit download; never persist them. No IBM Bob, Python script, external skill invocation, or user CSV export is needed to run this workflow.
 
 ## Phase 1: digital content metrics calculation
 
@@ -16,13 +16,13 @@ With a URL, use the supported provider collectors: YouTube views, LinkedIn post 
 
 Without a URL, supplied numeric Views / attendance AND Duration (in hours) satisfy current-month collection. Preserve the supplied view count and record input evidence; do not create a No URL manual-collection issue. Zero views is valid. Invalid supplied numbers require correction. A missing field still requires collection. Digital views remain views; multiplying duration into attendance hours applies to in-person activities only.
 
-Write digital.csv and follow-up.csv with source columns and provenance. Pause for user approval in the SPA.
+Store digital and follow-up result datasets with source columns and provenance. Their download filenames are digital.csv and follow-up.csv. Pause for user approval in the SPA.
 
 ## Phase 2: in-person event calculation
 
 AttendanceAgent processes Booth duty; Conference keynote or breakout (proprietary or 3rd party); Conference workshop (proprietary or 3rd party); CSP or other partner presentation (digital or in-person); Customer meeting; Customer workshop; Customer presentation; Internal team member enablement; Meetup (user group).
 
-Booth duty goes to follow-up.csv pending verified Field Marketing leads. For other in-person activities, calculate Attendance hours = Views / attendance × max(Duration (in hours), 1). Blank duration defaults to one hour. A URL is not required. Attendance must be numeric and nonnegative; a supplied nonnumeric duration requires correction. Write in-person.csv and pause for approval.
+Booth duty goes to follow-up.csv pending verified Field Marketing leads. For other in-person activities, calculate Attendance hours = Views / attendance × max(Duration (in hours), 1). Blank duration defaults to one hour. A URL is not required. Attendance must be numeric and nonnegative; a supplied nonnumeric duration requires correction. Store the in-person result dataset (download filename in-person.csv) and pause for approval.
 
 ## Phase 3: splitting of entries
 
@@ -30,7 +30,7 @@ AttributionAgent splits explicit semicolon-separated or line-separated Author of
 
 ## Phase 4: trailing 90-day calculation
 
-Trailing90Agent processes prepared historical rows when present. Move historical Current total to Previous total, collect a fresh total once per shared resource URL, allocate it across that URL's rows, and subtract each previous baseline into Views / attendance. Current-month no-URL input evidence must not be reused as a fresh historical lifetime total. Missing fresh totals require collection; missing/invalid/negative baselines block approval until corrected. Negative deltas remain visible with a review note. Write updated_90-day.csv and pause for approval. Skip this phase when no historical rows were selected.
+Trailing90Agent processes prepared historical rows when present. Move historical Current total to Previous total, collect a fresh total once per shared resource URL, allocate it across that URL's rows, and subtract each previous baseline into Views / attendance. Current-month no-URL input evidence must not be reused as a fresh historical lifetime total. Missing fresh totals require collection; missing/invalid/negative baselines block approval until corrected. Negative deltas remain visible with a review note. Store the updated historical result dataset (download filename updated_90-day.csv) and pause for approval. Skip this phase when no historical rows were selected.
 
 For historical rows without URLs, the SPA shows the original Views / attendance, Duration (in hours), and recorded baseline. The user may explicitly keep valid original input values or edit attendance/duration, then approve the refreshed phase. Save that per-row review decision without rewriting source data. Such rows do not claim a fresh lifetime total or trailing delta; retain the recorded total unchanged and label Metric basis as retained/reviewed input. A baseline is not required when no delta is being calculated. Always include Original Views / attendance and Original Duration (in hours) in the historical export, including unresolved rows. Missing/invalid supplied input values must be edited to valid nonnegative numbers before this choice can resolve review. URL-based fresh total collection and baseline validation remain unchanged.
 
@@ -40,14 +40,14 @@ ExportAgent adds Analyst or press briefing, External conference CFP panel, Stand
 
 ## Phase 6: combine current month data for one export
 
-ExportAgent combines digital.csv, in-person.csv, and follow-up.csv into current.csv using the exact schema:
+ExportAgent combines the structured digital, in-person, and follow-up datasets into the current dataset (download filename current.csv) using the exact schema:
 
 Date,Author,Tool,Strategic initiative,Name of activity,Event,Collection,Type of activity,Trailing 90-day,Geography,Current total,Previous total,Views / attendance,Weight,Impact hours,Link / URL to resource,Notes / description,Column1,Column2,Scrape notes,total_reactions,total_comments,total_reposts,reactions_scraped_at
 
 ## Phase 7: current month totals and validation
 
-Copy Views / attendance to Current total. ValidationAgent checks unique attribution rows, conservation of source activities, and the exact final schema. Download CSVs individually or as a ZIP in the SPA. Phases 5–7 finish automatically after the required approvals. Model commentary is optional; Java rules determine calculations and review conditions.
+Copy Views / attendance to Current total. ValidationAgent checks unique attribution rows, conservation of source activities, and the exact final schema. Preview structured results in the SPA. Generate CSVs individually or as a ZIP only when downloaded, using the chosen immutable result version. Phases 5–7 finish automatically after the required approvals. Model commentary is optional; Java rules determine calculations and review conditions.
 
 ## Review and reproducibility
 
-Manual measurement popups show the immutable original views/attendance, duration, and recorded baseline for rows with or without URLs. Prefill the editable field from its matching input metric (baseline, duration, reactions, or views/attendance), or the latest user measurement if available. Source / collection notes are optional; when absent, record that no source note was provided rather than inventing evidence. Numeric, metric-type, phase and version validation remain required. Enter corrections through the SPA; regenerate artifacts and approve their new version. Approvals after phases 1–4 remain mandatory. Frozen copies of this RUN.md and AGENTS.md are saved per run; changing them does not modify an existing run. Never automatically recalculate follow-up metrics or fabricate missing dates, URLs, totals, or baselines.
+Manual measurement popups show the immutable original views/attendance, duration, and recorded baseline for rows with or without URLs. Prefill the editable field from its matching input metric (baseline, duration, reactions, or views/attendance), or the latest user measurement if available. Source / collection notes are optional; when absent, record that no source note was provided rather than inventing evidence. Numeric, metric-type, phase and version validation remain required. Enter corrections through the SPA; publish a new structured result version and approve its digest. Approval hashes cover the structured result bytes, independent of CSV formatting. Approvals after phases 1–4 remain mandatory. Frozen copies of this RUN.md and AGENTS.md are saved per run; changing them does not modify an existing run. Never automatically recalculate follow-up metrics or fabricate missing dates, URLs, totals, or baselines.
