@@ -26,3 +26,17 @@ test('workbook generates both CSV inputs and runs through the existing agents',a
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'../../../target/e2e-workbook-mobile.png',fullPage:true});expect(errors).toEqual([]);
 });
+
+test('Raw workbook defaults to current and previous inputs without selecting its Bob export for history',async({page})=>{
+ await page.route('**/api/workbooks/inspect',route=>route.fulfill({json:{
+  sheets:[{name:'Bob csv',eligible:true,rows:29,months:['2026-07','2026-08'],reason:''},{name:'Current month inputs',eligible:true,rows:11,months:['2026-10'],reason:''},{name:'Previous months inputs',eligible:true,rows:402,months:['2026-09'],reason:''}],
+  suggestedMonth:'2026-10',suggestedCurrentSheet:'Current month inputs',suggestedHistorySheets:['Previous months inputs']
+ }}));
+ await page.goto('/');await page.getByLabel('Original Excel workbook').setInputFiles({name:'Raw inputs.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('synthetic UI fixture')});
+ await page.getByRole('button',{name:'Read workbook',exact:true}).click();
+ await expect(page.getByLabel('Current-month sheet')).toHaveValue('Current month inputs');
+ await expect(page.getByRole('option',{name:'Current month inputs · 11 activities in sheet'})).toHaveCount(1);
+ await expect(page.getByRole('checkbox',{name:/Previous months inputs/})).toBeChecked();
+ await expect(page.getByRole('checkbox',{name:/Bob csv/})).not.toBeChecked();
+ await expect(page.getByRole('checkbox',{name:/Current month inputs/})).not.toBeChecked();
+});

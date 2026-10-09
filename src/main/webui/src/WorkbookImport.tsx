@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {WorkbookProgress} from './WorkbookProgress';
 
 type Sheet={name:string;eligible:boolean;rows:number;months:string[];reason:string};
-type Inspection={sheets:Sheet[];suggestedMonth:string;suggestedCurrentSheet:string;sourceToken?:string;filename?:string};
+type Inspection={sheets:Sheet[];suggestedMonth:string;suggestedCurrentSheet:string;suggestedHistorySheets?:string[];sourceToken?:string;filename?:string};
 
 export function WorkbookImport({busy,onImport}:{busy:boolean;onImport:(form:FormData,source:'file'|'sharepoint')=>Promise<unknown>}){
 const [source,setSource]=useState<'file'|'sharepoint'>('file'),[url,setUrl]=useState('');
@@ -16,7 +16,7 @@ const [file,setFile]=useState<File|null>(null),[inspection,setInspection]=useSta
  async function inspect(){
   if(source==='file'&&!file)return;if(source==='sharepoint'&&!url)return;const version=++generation.current;setLoading(true);setError('');setInspection(null);if(source==='sharepoint')setSession(s=>s?{...s,downloadStage:'OPENING'}:s);
   try{const form=new FormData();if(file)form.append('workbook',file);const response=await fetch(source==='file'?'/api/workbooks/inspect':'/api/workbooks/from-sharepoint',source==='file'?{method:'POST',body:form}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});const body=await response.json();if(!response.ok)throw new Error(body.error||'Cannot read workbook');if(version!==generation.current)return;
-   const result=body as Inspection;setInspection(result);const today=new Date();const defaultMonth=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;setMonth(defaultMonth);setCurrentSheet(result.suggestedCurrentSheet);setHistory(result.sheets.filter(s=>s.eligible&&s.name!==result.suggestedCurrentSheet).map(s=>s.name));
+   const result=body as Inspection;setInspection(result);const today=new Date();const defaultMonth=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;setMonth(defaultMonth);setCurrentSheet(result.suggestedCurrentSheet);setHistory(result.suggestedHistorySheets??result.sheets.filter(s=>s.eligible&&s.name!==result.suggestedCurrentSheet).map(s=>s.name));
   }catch(e){if(version===generation.current)setError((e as Error).message);if(source==='sharepoint')sessionAction(false,true);}finally{if(version===generation.current)setLoading(false);}
  }
  const eligible=inspection?.sheets.filter(s=>s.eligible)||[];

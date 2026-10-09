@@ -18,7 +18,7 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @ApplicationScoped
 public class WorkbookService {
     public record SheetInfo(String name, boolean eligible, int rows, List<String> months, String reason) {}
-    public record Inspection(List<SheetInfo> sheets, String suggestedMonth, String suggestedCurrentSheet) {}
+    public record Inspection(List<SheetInfo> sheets, String suggestedMonth, String suggestedCurrentSheet, List<String> suggestedHistorySheets) {}
     private record SheetData(Data data, Map<String,LocalDate> dates) {}
     private static final List<DateTimeFormatter> DATES=List.of(DateTimeFormatter.ISO_LOCAL_DATE,
         DateTimeFormatter.ofPattern("M/d/uuuu").withResolverStyle(ResolverStyle.STRICT),
@@ -48,7 +48,12 @@ public class WorkbookService {
             }
         }
         if(latest.isEmpty())throw new BadRequestException("No usable activity sheets found. Each needs Date of activity (or Date), Author, Type of activity and Link / URL to resource headers.");
-        return new Inspection(sheets,latest,suggested);
+        SheetInfo preferred=sheets.stream().filter(info->info.eligible()&&!info.months().isEmpty()&&sheetKey(info.name()).equals("current month inputs")).findFirst().orElse(null);
+        if(preferred!=null){suggested=preferred.name();latest=preferred.months().getLast();}
+        String current=suggested;
+        List<String> namedHistory=sheets.stream().filter(info->info.eligible()&&!info.name().equals(current)&&(sheetKey(info.name()).equals("previous months inputs")||sheetKey(info.name()).equals("previous months"))).map(SheetInfo::name).toList();
+        List<String> history=namedHistory.isEmpty()?sheets.stream().filter(info->info.eligible()&&!info.name().equals(current)).map(SheetInfo::name).toList():namedHistory;
+        return new Inspection(sheets,latest,suggested,history);
     }
     public PreparedWorkbook prepare(WorkbookRequest request) throws IOException {
         YearMonth month;try {month=YearMonth.parse(request.month());}catch(Exception e){throw new BadRequestException("Choose a reporting month (YYYY-MM)");}
@@ -92,6 +97,17 @@ public class WorkbookService {
         if(book.isSheetHidden(index)||book.isSheetVeryHidden(index))throw new BadRequestException("Hidden sheets cannot be imported");
         return read(sheet);
     }
+    private static String sheetKey(String value){return value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}
+    /** Map known source labels without substituting private deck/trip-report links for public URLs. */
+    private static String header(String value) {
+        String text=value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ");
+        String key=text.toLowerCase(Locale.ROOT);
+        if(key.equals("link / url to public resource"))return URL;
+        if(key.matches("author of activity\\s*\\([^()]+\\)"))return "Author of activity";
+        if(key.matches("tool\\s*\\([^()]+\\)"))return "Tool";
+        List<String> standard=new ArrayList<>(FINAL_HEADERS);standard.addAll(List.of("Date of activity","Author of activity","Name of event","Duration (in hours)"));
+        return standard.stream().filter(name->name.toLowerCase(Locale.ROOT).equals(key)).findFirst().orElse(text);
+    }
     private SheetData read(Sheet sheet) {
         if(sheet.getLastRowNum()>20_000)throw new BadRequestException("Sheet exceeds 20,000 rows: "+sheet.getSheetName());
         DataFormatter formatter=new DataFormatter(Locale.US);formatter.setUseCachedValuesForFormulaCells(true);
@@ -100,7 +116,7 @@ public class WorkbookService {
             org.apache.poi.ss.usermodel.Row row=sheet.getRow(n);if(row==null)continue;
             List<String> candidate=new ArrayList<>();
             if(row.getLastCellNum()>100)throw new BadRequestException("Sheet exceeds 100 columns");
-            for(int c=0;c<row.getLastCellNum();c++)candidate.add(formatter.formatCellValue(row.getCell(c)).replace('\u00a0',' ').strip());
+            for(int c=0;c<row.getLastCellNum();c++)candidate.add(header(formatter.formatCellValue(row.getCell(c))));
             if(candidate.contains("Type of activity")&&candidate.contains(URL)&&(candidate.contains("Author")||candidate.contains("Author of activity"))&&(candidate.contains("Date")||candidate.contains("Date of activity"))) {
                 headers=candidate;headerIndex=n;break;
             }
@@ -109,7 +125,7 @@ public class WorkbookService {
         while(!headers.isEmpty()&&headers.getLast().isBlank())headers.removeLast();
         Set<String> seen=new HashSet<>();for(int c=0;c<headers.size();c++) {
             String h=headers.get(c);if(h.isBlank()){h="Unnamed column "+(c+1);headers.set(c,h);}
-            if(!seen.add(h))throw new BadRequestException("Duplicate header: "+h);
+            if(!seen.add(h))throw new BadRequestException("Duplicate header after normalization: "+h);
         }
         String dateHeader=headers.contains("Date of activity")?"Date of activity":"Date";
         List<Row> result=new ArrayList<>();Map<String,LocalDate> dates=new LinkedHashMap<>();

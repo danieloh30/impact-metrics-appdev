@@ -16,14 +16,14 @@ public class WorkbookSourceService {
     @Inject RunService runs;
     private record Snapshot(SharePointCollector.Workbook workbook,Instant expires) {}
     private final Map<String,Snapshot> snapshots=new LinkedHashMap<>();
-    public record SourceInspection(List<WorkbookService.SheetInfo> sheets,String suggestedMonth,String suggestedCurrentSheet,String sourceToken,String filename) {}
+    public record SourceInspection(List<WorkbookService.SheetInfo> sheets,String suggestedMonth,String suggestedCurrentSheet,List<String> suggestedHistorySheets,String sourceToken,String filename) {}
     public synchronized SourceInspection inspect(String url) throws Exception {
         cleanup();var workbook=sharepoint.download(url);sharepoint.inspectionStage("INSPECTING");WorkbookService.Inspection inspection;
         try{inspection=workbooks.inspect(workbook.bytes());}catch(Exception e){sharepoint.inspectionStage("FAILED");throw e;}
         if(snapshots.size()>=5)snapshots.remove(snapshots.keySet().iterator().next());
         String token=UUID.randomUUID().toString();snapshots.put(token,new Snapshot(workbook,Instant.now().plusSeconds(1800)));
         sharepoint.inspectionStage("DONE");
-        return new SourceInspection(inspection.sheets(),inspection.suggestedMonth(),inspection.suggestedCurrentSheet(),token,workbook.filename());
+        return new SourceInspection(inspection.sheets(),inspection.suggestedMonth(),inspection.suggestedCurrentSheet(),inspection.suggestedHistorySheets(),token,workbook.filename());
     }
     public synchronized Run create(String token,String month,String currentSheet,List<String> historySheets) throws Exception {
         cleanup();Snapshot snapshot=snapshots.get(token);
