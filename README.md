@@ -176,7 +176,7 @@ A row appears in **Collection & data review** when the backend adds an entry to 
 |---|---|---|
 | Current digital row: no URL but valid supplied Views / attendance and Duration (in hours) | No collection issue | Proceeds using input metrics |
 | Current digital row: no URL and missing Views / attendance or Duration (in hours); or trailing row: no URL | Manual collection | Enter a verified measurement or acknowledge follow-up |
-| During URL collection: unsupported website (except the workbook blog hosts below), malformed URL, failed request, or unavailable metric | Manual collection | Enter a verified measurement, retry, or acknowledge unresolved collection |
+| During URL collection: unsupported website (except the configured blog/digital exclusions below), malformed URL, failed request, or unavailable metric | Manual collection | Enter a verified measurement, retry, or acknowledge unresolved collection |
 | LinkedIn login/admin access unavailable, or reactions/Video Views cannot be extracted | Manual collection | Enter a verified measurement, retry, or acknowledge unresolved collection |
 | Supplied current no-URL digital metrics are invalid or views are negative | Correction required | Must correct before approval |
 | In-person attendance is blank, nonnumeric, or negative | Correction required | Must correct before approval |
@@ -250,9 +250,25 @@ The **No manual updates flagged** status is emphasized with a bold, high-contras
 
 The SPA includes a sticky **Your next step** guide for SharePoint connection, both workbook reads, preparation, calculation-contract acceptance, phase corrections/approval, retry, and final downloads. The active section and control receive a visible outline. **Go to section** scrolls to and focuses the relevant control; transitions automatically bring new checkpoints into view, while routine polling and same-phase versions preserve the user's position. Reduced-motion users get immediate scrolling. Text editing and open dialogs pause automatic navigation. Unresolved optional collection items offer a shortcut to the acknowledgment control without checking it automatically. Source inputs collapse after preparation and can be reopened for a new reporting run. Approvals and downloads remain explicit user actions.
 
-### Workbook blog metrics
+### Blog and digital manual-check exclusions
 
-Blogs on `eldermoraes.com` and `the-main-thread.com` (including their `www` variants) use the workbook's supplied Views / attendance and never trigger manual URL collection. Zero is valid; missing, invalid, or negative views require a data correction. Duration is preserved and is not required for digital blog views. Historical blog rows retain supplied views and prior totals, with **Workbook blog input — not a trailing delta** provenance; they do not invent a fresh lifetime measurement. Other hosts keep their existing collection rules.
+Maintain the comma-separated `metrics.collection.manual-check-exclusions` list in `src/main/resources/application.properties` (or override `METRICS_COLLECTION_MANUAL_CHECK_EXCLUSIONS`). The defaults are:
+
+| Entry | Matching scope |
+|---|---|
+| `eldermoraes.com` | Entire host |
+| `www.the-main-thread.com` | Entire host |
+| `ibm.admin.webcasts.com` | Entire host |
+| `www.sigs.de` | Entire host |
+| `www.heise.de` | Entire host |
+| `www.infoq.com` | Entire host |
+| `quarkus.io/blog` | `/blog` and its descendants only |
+| `https://www.youtube.com/watch?v=OSsatFo8Pmc` | Only that watch video; extra tracking parameters allowed |
+| `www.kevindubois.com` | Entire host |
+
+Host matching ignores case and the optional `www` prefix; unrelated subdomains and lookalike hosts do not match. Path prefixes stop at a slash boundary, so `/blogger` is not covered by `/blog`. Query-specific rules require exact values and reject duplicate conflicting query values. Other YouTube videos still use normal collection.
+
+Matching digital content uses the supplied workbook Views / attendance without URL collection or a manual-collection issue. Zero is valid; missing, invalid, or negative views still require a data correction. Duration is preserved and not required for digital views. Historical rows retain supplied views and prior totals, with **Workbook content input — not a trailing delta** provenance. No fresh lifetime measurement or delta is invented. Existing verified overrides remain supported. The activities stay in results and author/tool attribution. Retry a previously published phase, or create a new run, to refresh its saved review issues under updated rules.
 
 ## One-action SharePoint preparation
 

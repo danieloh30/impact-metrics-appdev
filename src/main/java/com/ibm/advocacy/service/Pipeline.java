@@ -30,11 +30,12 @@ public class Pipeline {
     @Inject RuntimeWorkspace workspace;
     @Inject ResultStore results;
     @Inject MetricCollectors collectors;
+    @Inject com.ibm.advocacy.collector.ManualCheckExclusions manualCheckExclusions;
     @Inject RunService runs;
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; eldermoraes.com and the-main-thread.com use workbook views without manual collection, historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; configured blog/digital manual-check exclusions use workbook views without URL collection; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -56,13 +57,7 @@ public class Pipeline {
         final String metric;
         InputMetricException(String metric,String reason){super(reason);this.metric=metric;}
     }
-    static boolean workbookBlog(Row row) {
-        try {
-            String host=java.net.URI.create(row.get(URL).strip()).getHost();
-            return host!=null&&Set.of("eldermoraes.com","www.eldermoraes.com","the-main-thread.com","www.the-main-thread.com").contains(host.toLowerCase(Locale.ROOT));
-        } catch(IllegalArgumentException e) { return false; }
-    }
-    private String workbookBlogViews(Row row) {
+    private String suppliedContentViews(Row row) {
         try {
             BigDecimal views=Calculations.number(row.get(VIEWS));
             if(views.signum()<0)throw new IllegalArgumentException("Views / attendance cannot be negative");
@@ -70,10 +65,10 @@ public class Pipeline {
         } catch(IllegalArgumentException e) { throw new InputMetricException("VIEWS",message(e)); }
     }
     private Measurement digitalMeasurement(Run run,Row row) throws Exception {
-        if(workbookBlog(row)) {
+        if(manualCheckExclusions.matches(row.get(URL))) {
             Measurement override=run.measurements.get(Calculations.urlKey(row.get(URL)));
             if(override!=null)return override;
-            return new Measurement(workbookBlogViews(row),"INPUT_DATA",row.get(URL),run.createdAt,"Blog metrics supplied by workbook; host excluded from manual collection",false);
+            return new Measurement(suppliedContentViews(row),"INPUT_DATA",row.get(URL),run.createdAt,"Digital content metrics supplied by workbook; source excluded from manual collection",false);
         }
 
         if(row.get(URL).isBlank()&&!row.get(VIEWS).isBlank()&&!row.get("Duration (in hours)").isBlank()) {
@@ -97,7 +92,7 @@ public class Pipeline {
             Row row=original.copy();
             try {
                 if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
-                String key=Calculations.urlKey(row.get(URL));if(!workbookBlog(row)&&!key.isBlank()&&failed.contains(key)&&!run.measurements.containsKey(key))throw new IllegalArgumentException("Collection failed for this shared URL; manual collection required");
+                String key=Calculations.urlKey(row.get(URL));if(!manualCheckExclusions.matches(row.get(URL))&&!key.isBlank()&&failed.contains(key)&&!run.measurements.containsKey(key))throw new IllegalArgumentException("Collection failed for this shared URL; manual collection required");
                 Measurement m=digitalMeasurement(run,row);row.cells.put(VIEWS,m.value());row.cells.put(NOTE,m.type()+" collected "+m.collectedAt()+" — "+m.evidence());
                 if(m.type().equals("REACTIONS")) { row.cells.put("total_reactions",m.value());row.cells.put("reactions_scraped_at",m.collectedAt()); }
                 digital.add(row);
@@ -144,8 +139,8 @@ public class Pipeline {
             String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
             if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
             if(run.inputReviews.containsKey(row.id))continue;
-            if(workbookBlog(row)&&!run.measurements.containsKey(key)) {
-                try { workbookBlogViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
+            if(manualCheckExclusions.matches(row.get(URL))&&!run.measurements.containsKey(key)) {
+                try { suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
                 continue;
             }
             if(attempted.add(key))try { measurement(run,row); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
@@ -159,12 +154,12 @@ List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
 }
         List<Row> rows=Calculations.trailing(baselines,run.measurements);
         for(Row row:rows) {
-            if(workbookBlog(row)&&!run.measurements.containsKey(Calculations.urlKey(row.get(URL)))&&!run.inputReviews.containsKey(row.id)) {
+            if(manualCheckExclusions.matches(row.get(URL))&&!run.measurements.containsKey(Calculations.urlKey(row.get(URL)))&&!run.inputReviews.containsKey(row.id)) {
                 Row original=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
                 try {
-                    row.cells.put(VIEWS,workbookBlogViews(original));
-                    row.cells.put("Metric basis","Workbook blog input — not a trailing delta");
-                    row.cells.put(NOTE,"Blog host excluded from manual collection; workbook views retained; no fresh lifetime total or trailing delta calculated");
+                    row.cells.put(VIEWS,suppliedContentViews(original));
+                    row.cells.put("Metric basis","Workbook content input — not a trailing delta");
+                    row.cells.put(NOTE,"Content source excluded from manual collection; workbook views retained; no fresh lifetime total or trailing delta calculated");
                 } catch(InputMetricException e) { row.cells.put(NOTE,e.getMessage()); }
                 continue;
             }
