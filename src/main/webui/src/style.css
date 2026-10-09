@@ -293,7 +293,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workbook-rules{background:#f0f5ff;border-radius:12px;padding:18px 22px;margin-bottom:20px}.workbook-rules p{font-size:14px;margin-bottom:0}.workbook-next{margin-left:16px}.excluded-sheets{margin-bottom:20px;font-size:14px}.csv-import{margin-bottom:32px}.csv-import>summary{cursor:pointer;color:#617492;font-weight:500;margin:16px 0}.baseline-notice{color:#996216!important;background:#fff7e9;padding:12px;border-radius:8px}
 @media(max-width:700px){.workbook-panel{padding:22px}.workbook-upload{flex-direction:column;align-items:stretch;padding:18px}.workbook-selectors{grid-template-columns:1fr}.workbook-next{display:block;margin:12px 0}.workbook-panel h2{font-size:23px}}
 
-.workbook-source-tabs{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.workbook-source-tabs button[aria-pressed=true]{background:#edf3ff;border-color:#6f97eb;color:#245ac8}.sharepoint-upload{padding:22px;background:#f7faff;border:1px dashed #b9ccef;border-radius:12px}.sharepoint-upload label{display:grid;gap:10px;font-weight:500}.sharepoint-upload input{width:100%;font:inherit;padding:12px;border:1px solid #cbd6e7;border-radius:8px}.sharepoint-upload small{color:#71809a;font-size:13px}.sharepoint-status{background:#edf3ff;padding:12px;border-radius:8px}.sharepoint-upload .import-actions{margin:16px 0}
+/* Workbook source selection follows the default SharePoint-first workflow. */
+.workbook-source-tabs { display: inline-flex; max-width: 100%; gap: 4px; padding: 4px; margin: 18px 0 24px; border: 1px solid var(--line); border-radius: 12px; background: #f3f6fb; }
+.workbook-source-tabs button { min-width: 0; min-height: 44px; padding: 10px 18px; border: 1px solid transparent; background: transparent; border-radius: 8px; font-size: 14px; line-height: 1.35; color: var(--muted); }
+.workbook-source-tabs button[aria-pressed=true] { background: #fff; border-color: #cbd9f0; color: #245ac8; box-shadow: 0 2px 6px #1937590b; }
+.sharepoint-upload { padding: 24px; background: linear-gradient(135deg, #f7faff, #fbfcff); border: 1px solid #d5e0f0; border-radius: 12px; }
+.sharepoint-upload label { display: grid; gap: 10px; font-weight: 500; font-size: 14px; }
+.sharepoint-upload input { width: 100%; min-width: 0; min-height: 46px; font: inherit; padding: 12px 14px; border: 1px solid #cbd6e7; border-radius: 8px; background: #fff; }
+.sharepoint-upload small { display: block; color: #71809a; font-size: 12px; line-height: 1.65; }
+.sharepoint-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; margin: 18px 0; }
+.sharepoint-connection-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-width: 0; }
+.sharepoint-actions button { min-height: 44px; font-size: 13px; }
+.sharepoint-read { justify-content: center; white-space: nowrap; }
+.sharepoint-status { background: #edf3ff; border: 1px solid #dce7fb; color: #536b8e; padding: 12px 14px; margin: 0 0 16px; border-radius: 8px; font-size: 13px; }
+@media (max-width: 700px) {
+  .workbook-source-tabs { display: flex; width: 100%; }
+  .workbook-source-tabs button { flex: 1; padding: 9px 10px; font-size: 13px; }
+  .sharepoint-upload { padding: 18px; }
+  .sharepoint-actions { grid-template-columns: 1fr; gap: 12px; }
+  .sharepoint-connection-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .sharepoint-connection-controls button { padding: 9px 8px; font-size: 12px; line-height: 1.4; }
+  .sharepoint-read { width: 100%; }
+}
 
 .workbook-progress{margin-top:18px;padding:22px 24px;border:1px solid #cdddf6;border-radius:12px;background:linear-gradient(125deg,#f4f8ff,#fff);box-shadow:0 4px 16px #19375905}
 .workbook-progress-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;color:#233955;font-size:14px}.workbook-progress-heading [role=status]{display:flex;align-items:center;gap:10px}.workbook-progress-dot{width:8px;height:8px;border-radius:50%;background:#3868e8;box-shadow:0 0 0 4px #e4ecff;flex-shrink:0}.workbook-progress-time{color:#71809a;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
