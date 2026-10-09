@@ -34,3 +34,7 @@ The exception is current-month data only. Historical rows still need a fresh lif
 Only runtimes is processed. Keep immutable original.xlsx, generated input snapshots, frozen instruction copies, structured JSON phase state, and versioned CSV exports under each run. The SPA owns phase approval, manual corrections, downloads, and confirmed history reset. Reset preserves instruction files and local sessions. Runtime data, workbooks, outputs, and credentials remain excluded from commits.
 
 CSV compatibility: current uploads and all generated exports use UTF-8. Separately uploaded legacy trailing_90-day.csv may use Windows-1252. Cell separators and text values inside a workbook are independent of CSV delimiter/encoding rules.
+
+## Measurement review input context
+
+Load original cell values for URL rows as well as no-URL rows in phases 1, 2, and 4. Display original views/attendance, duration, and baseline separately from the editable measurement. Prefill the matching field or latest manual value; do not prefill a duration/baseline correction from the wrong column. Zero is a valid prefill. Notes are optional and bounded to 1,000 characters. Missing notes are recorded explicitly as not provided, not as verified source evidence. A user still confirms/saves the selected measurement; display of a prior period's count does not itself refresh a trailing lifetime total.

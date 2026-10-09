@@ -154,7 +154,8 @@ public synchronized byte[] input(String id,String name) throws Exception {
     public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence) throws Exception {
         synchronized(lock(id)) {
             Run run=get(id);if(!run.status.equals("AWAITING_APPROVAL")||run.version!=version||!Set.of(1,2,4).contains(run.phase))throw new ClientErrorException("Measurements require the current phase-1, phase-2 or phase-4 review",409);
-            BigDecimalValidation(value);if(evidence==null||evidence.isBlank())throw new BadRequestException("Record a source or collection note");
+            BigDecimalValidation(value);if(evidence!=null&&evidence.length()>1000)throw new BadRequestException("Source / collection note must be at most 1,000 characters");
+            evidence=evidence==null||evidence.isBlank()?"User confirmed measurement; source / collection note not provided":evidence.strip();
             Data source=workspace.data(id,run.phase==4?"trailing-source":"source");Row row=source.rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
             if(run.phase==1&&!DIGITAL.contains(row.type()))throw new BadRequestException("This is not a digital activity");
             if(run.phase==2&&(!PERSON.contains(row.type())||row.type().equals("booth duty")))throw new BadRequestException("Booth lead recalculation requires a separate request");
@@ -167,6 +168,17 @@ public synchronized byte[] input(String id,String name) throws Exception {
         }
     }
     private static String editableNumber(String value){try{return Calculations.format(Calculations.number(value));}catch(IllegalArgumentException invalid){return value;}}
+public record MeasurementInput(String originalViews,String originalDuration,String baseline,String views,String duration,String value,boolean canRetain) {}
+public synchronized MeasurementInput measurementInput(String id,String rowId,String type) throws Exception {
+    Run run=get(id);
+    if(!Set.of(1,2,4).contains(run.phase))throw new BadRequestException("Original measurement context is available during phases 1, 2, and 4");
+    if(type==null||!Set.of("VIEWS","VIDEO_VIEWS","REACTIONS","STARS","DOWNLOADS","ATTENDANCE","DURATION","BASELINE").contains(type))throw new BadRequestException("Unknown measurement type");
+    Row row=workspace.data(id,run.phase==4?"trailing-source":"source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
+    String initial=switch(type){case "DURATION"->row.get("Duration (in hours)");case "BASELINE"->row.get("Current total");case "REACTIONS"->row.get("total_reactions").isBlank()?row.get(VIEWS):row.get("total_reactions");default->row.get(VIEWS);};
+    String key=type.equals("DURATION")?"duration:"+row.id:type.equals("BASELINE")?"baseline:"+row.id:run.phase==2?"attendance:"+row.id:Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
+    Measurement saved=run.measurements.get(key);
+    return new MeasurementInput(row.get(VIEWS),row.get("Duration (in hours)"),row.get("Current total"),editableNumber(row.get(VIEWS)),editableNumber(row.get("Duration (in hours)")),editableNumber(saved==null?initial:saved.value()),false);
+}
     public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain) {}
     private Row trailingRow(Run run,String rowId) throws Exception {
         if(!run.trailing)throw new BadRequestException("This run has no historical input");
