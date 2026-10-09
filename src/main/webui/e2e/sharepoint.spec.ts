@@ -73,3 +73,14 @@ test('SharePoint download shows actual stages and elapsed time, then clears on s
  stage='OPENING';await read.click();await expect(panel).toBeVisible();await expect.poll(()=>attempt).toBe(2);release?.(undefined);
  await expect(panel).toBeHidden();await expect(page.getByRole('alert')).toContainText('HTTP 403');await expect(read).toBeEnabled();
 });
+
+test('SharePoint workbook link starts prefilled and remains editable',async({page})=>{
+ const defaultUrl="https://ibm-my.sharepoint.com/:x:/r/personal/alexandra_freeman_ibm_com/Documents/Developer%20Relations/Really%20useful%20numbers%20(RUN)/Inputs/AvocadoBot%202.0%20-%20Runtimes%20DA%20impact%20inputs.xlsx?d=wc4b8fb9134a44856ac3980cc9b39c53f&csf=1&web=1&e=7Ja7w9";
+ const edited='https://ibm-my.sharepoint.com/:x:/r/personal/test_ibm_com/Documents/Inputs/Other.xlsx';
+ let connectedUrl='';
+ await page.route('**/api/sharepoint/session',route=>{if(route.request().method()==='POST')connectedUrl=route.request().postDataJSON().url;return route.fulfill({json:{busy:false,status:'NOT_CONNECTED',message:'Connect SharePoint first.'}});});
+ await page.goto('/');await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();
+ const input=page.getByLabel('SharePoint workbook link');await expect(input).toHaveValue(defaultUrl);
+ await input.fill(edited);await page.getByRole('button',{name:'Upload Excel file',exact:true}).click();await page.getByRole('button',{name:'Import from SharePoint',exact:true}).click();await expect(input).toHaveValue(edited);
+ await page.getByRole('button',{name:'Connect SharePoint',exact:true}).click();await expect.poll(()=>connectedUrl).toBe(edited);
+});

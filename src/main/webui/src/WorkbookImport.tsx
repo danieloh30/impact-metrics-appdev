@@ -5,7 +5,7 @@ type Sheet={name:string;eligible:boolean;rows:number;months:string[];reason:stri
 type Inspection={sheets:Sheet[];suggestedMonth:string;suggestedCurrentSheet:string;suggestedHistorySheets?:string[];sourceToken?:string;filename?:string};
 
 export function WorkbookImport({busy,onImport}:{busy:boolean;onImport:(form:FormData,source:'file'|'sharepoint')=>Promise<unknown>}){
-const [source,setSource]=useState<'file'|'sharepoint'>('file'),[url,setUrl]=useState('');
+const [source,setSource]=useState<'file'|'sharepoint'>('file'),[url,setUrl]=useState("https://ibm-my.sharepoint.com/:x:/r/personal/alexandra_freeman_ibm_com/Documents/Developer%20Relations/Really%20useful%20numbers%20(RUN)/Inputs/AvocadoBot%202.0%20-%20Runtimes%20DA%20impact%20inputs.xlsx?d=wc4b8fb9134a44856ac3980cc9b39c53f&csf=1&web=1&e=7Ja7w9");
 const [session,setSession]=useState<{busy:boolean;status:string;message:string;downloadStage?:string}|null>(null);
 async function sessionAction(connect=false,quiet=false){try{if(!quiet)setError('');const response=await fetch('/api/sharepoint/session',connect?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})}:undefined);const body=await response.json();if(!response.ok)throw new Error(body.error||'SharePoint connection failed');setSession(body);}catch(e){if(!quiet)setError((e as Error).message);}}
 
