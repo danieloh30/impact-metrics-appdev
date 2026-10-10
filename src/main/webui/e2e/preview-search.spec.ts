@@ -1,0 +1,32 @@
+import {test,expect} from '@playwright/test';
+test('preview searches across pages, preserves focus, clears and resets for another dataset',async({page})=>{
+ const artifacts=Object.fromEntries(['current.csv','digital.csv'].map(name=>[name,{name,version:7,phase:7,rows:60,sha256:'fixture'}]));
+ const run={id:'search-run',createdAt:'2026-10-09T12:00:00Z',status:'COMPLETED',phase:7,version:7,currentRows:60,trailingRows:0,trailing:false,review:'',error:'',instructionHash:'fixture',issues:[],artifacts,events:[],approvals:[]};
+ const rows=Array.from({length:60},(_,i)=>({id:String(i),cells:{Author:i<30?'Daniel Oh':'Alex Soto',Tool:'IBM Runtimes','Name of activity':`Activity ${i}`}}));
+ const queries:string[]=[];
+ await page.route('**/api/runs',route=>route.fulfill({json:[run]}));
+ await page.route('**/api/runs/search-run',route=>route.fulfill({json:{run,approvalDigest:'digest'}}));
+ await page.route('**/api/runs/search-run/events*',route=>route.fulfill({contentType:'text/event-stream',body:''}));
+ await page.route('**/api/runs/search-run/artifacts/*/preview?**',async route=>{
+  const params=new URL(route.request().url()).searchParams,q=params.get('q')||'',offset=Number(params.get('offset')||0);queries.push(q);
+  const matches=rows.filter(row=>Object.values(row.cells).some(cell=>cell.toLowerCase().includes(q.trim().toLowerCase())));
+  if(q)await new Promise(resolve=>setTimeout(resolve,150));
+  await route.fulfill({json:{headers:['Author','Tool','Name of activity'],rows:matches.slice(offset,offset+25),total:matches.length,unfilteredTotal:rows.length}});
+ });
+ await page.addInitScript(()=>localStorage.setItem('impact-run','search-run'));await page.goto('/');
+ let preview=page.getByRole('region',{name:'current.csv preview'}),search=preview.getByRole('searchbox',{name:'Search preview'});
+ await expect(preview.getByRole('status')).toHaveText('1–25 of 60 rows');
+ await preview.getByRole('button',{name:'Next →',exact:true}).click();await expect(preview.getByRole('status')).toHaveText('26–50 of 60 rows');
+ await search.fill('aLeX');await expect(search).toBeFocused();
+ await expect(preview.getByRole('status')).toHaveText('1–25 of 30 matches (60 total rows)');await expect(search).toBeFocused();
+ await expect(preview.locator('tbody tr')).toHaveCount(25);await expect(preview.locator('tbody')).not.toContainText('Daniel Oh');
+ await preview.getByRole('button',{name:'Next →',exact:true}).click();await expect(preview.getByRole('status')).toHaveText('26–30 of 30 matches (60 total rows)');
+ await search.fill('absent & ?');await expect(preview.getByText('No rows match your search. Try another term or clear the search.')).toBeVisible();
+ expect(queries).toContain('absent & ?');await expect(preview.getByRole('button',{name:'Next →',exact:true})).toBeDisabled();
+ await preview.getByRole('button',{name:'Clear search'}).click();await expect(search).toHaveValue('');await expect(preview.getByRole('status')).toHaveText('1–25 of 60 rows');
+ await search.fill('Alex');await expect(preview.getByRole('status')).toContainText('30 matches');
+ await page.locator('.export-row').filter({has:page.getByText('digital.csv',{exact:true})}).getByRole('button',{name:'Preview',exact:true}).click();
+ preview=page.getByRole('region',{name:'digital.csv preview'});search=preview.getByRole('searchbox',{name:'Search preview'});
+ await expect(search).toHaveValue('');await expect(preview.getByRole('status')).toHaveText('1–25 of 60 rows');
+ await page.setViewportSize({width:390,height:844});await expect(search).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
