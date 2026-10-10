@@ -46,7 +46,7 @@ class RunWorkflowTest {
         Data finalData=csv.read(service.artifact(run.id,"current.csv",null),false);assertEquals(FINAL_HEADERS,finalData.headers);assertEquals(10,finalData.rows.size());
         assertTrue(finalData.rows.stream().allMatch(r->r.get("Current total").equals(r.get(VIEWS))));
         assertEquals(4,finalData.rows.stream().filter(r->r.get("Name of activity").equals("Digital")&&r.get(VIEWS).equals("25")).count());
-        assertEquals(4,finalData.rows.stream().filter(r->r.get("Name of activity").equals("Meeting")&&r.get(VIEWS).equals("12.5")).count());
+        assertEquals(4,finalData.rows.stream().filter(r->r.get("Name of activity").equals("Meeting")&&r.get(VIEWS).equals("13")).count());
         assertTrue(complete.events.stream().anyMatch(e->e.agent().equals("AttributionAgent")));assertTrue(complete.events.stream().anyMatch(e->e.agent().equals("InstructionAgent")));
         assertArrayEquals(input(),Files.readAllBytes(workspace.runPath(run.id,"rawdata/AvocadoBot 2.csv")));
         try(ZipInputStream zip=new ZipInputStream(new ByteArrayInputStream(service.zip(run.id)))) { Set<String> names=new HashSet<>();for(ZipEntry e;(e=zip.getNextEntry())!=null;)names.add(e.getName());assertEquals(Set.of("digital.csv","in-person.csv","follow-up.csv","current.csv"),names); }

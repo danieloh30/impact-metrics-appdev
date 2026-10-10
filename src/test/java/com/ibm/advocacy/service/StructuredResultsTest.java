@@ -70,7 +70,7 @@ class StructuredResultsTest {
         int oldHistoryVersion=fourth.artifacts.get("updated_90-day.csv").version();
         runs.reviewTrailingInput(run.id,fourth.version,workspace.data(run.id,"trailing-source").rows.getFirst().id,null,null,true,null);
         Run reviewed=await(run.id,"AWAITING_APPROVAL");noCsv(run.id);assertEquals("10",runs.artifactData(run.id,"updated_90-day.csv",null).rows.getFirst().get(VIEWS));
-        assertEquals("",runs.artifactData(run.id,"updated_90-day.csv",oldHistoryVersion).rows.getFirst().get(VIEWS));approve(reviewed);
+        assertEquals("10",runs.artifactData(run.id,"updated_90-day.csv",oldHistoryVersion).rows.getFirst().get(VIEWS));approve(reviewed);
         Run complete=await(run.id,"COMPLETED");noCsv(run.id);assertEquals(4,complete.approvals.size());assertEquals(5,complete.artifacts.size());
         Data finalData=runs.artifactData(run.id,"current.csv",null);assertEquals(FINAL_HEADERS,finalData.headers);assertEquals(5,finalData.rows.size());
         assertEquals(4,finalData.rows.stream().filter(r->r.get(VIEWS).equals("250")).count());

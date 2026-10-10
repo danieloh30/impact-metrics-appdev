@@ -31,10 +31,17 @@ public class MetricCollectors {
         } catch(Exception ignored) {}
         return "VIEWS";
     }
+    /** Upgrade public HTTP resources for collection; browser navigation supports either scheme. */
+    public static URI resourceUri(String url) throws IOException {
+        URI uri;
+        try {uri=URI.create(url.strip());}catch(IllegalArgumentException invalid){throw new IOException("Invalid resource URL",invalid);}
+        if(uri.getHost()==null||uri.getUserInfo()!=null||uri.getPort()>0||!("https".equalsIgnoreCase(uri.getScheme())||"http".equalsIgnoreCase(uri.getScheme())))throw new IOException("Resource URL must use HTTP or HTTPS with a public host");
+        return URI.create("https:"+uri.toString().substring(uri.toString().indexOf(':')+1));
+    }
     public Measurement collect(String url) throws Exception {
+
         if(!enabled)throw new IOException("Automatic collection disabled; enter a verified measurement");
-        URI uri=URI.create(url.strip());String host=Optional.ofNullable(uri.getHost()).orElse("").toLowerCase(Locale.ROOT);
-        if(!uri.getScheme().equalsIgnoreCase("https")||uri.getUserInfo()!=null||uri.getPort()>0)throw new IOException("Only public HTTPS resource URLs are supported");
+        URI uri=resourceUri(url);String host=Optional.ofNullable(uri.getHost()).orElse("").toLowerCase(Locale.ROOT);
         if(Set.of("linkedin.com","www.linkedin.com").contains(host))return linkedin.collect(uri);
         String value,evidence;
         if(Set.of("youtube.com","www.youtube.com","m.youtube.com","youtu.be").contains(host)) {

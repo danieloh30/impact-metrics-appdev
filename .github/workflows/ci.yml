@@ -1,0 +1,69 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/main/webui/package-lock.json
+      - name: Install frontend dependencies for browser transport tests
+        working-directory: src/main/webui
+        run: npm ci
+      - name: Install Chrome for Java SharePoint transport tests
+        working-directory: src/main/webui
+        run: npx playwright install --with-deps chrome
+      - name: Auto-merge guard regression tests
+        run: node .github/scripts/test-automerge.mjs
+      - name: Backend tests and package
+        run: ./mvnw -B verify -DskipITs
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/main/webui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/main/webui/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Mocked browser regression suite
+        env:
+          METRICS_URL: http://127.0.0.1:4173
+          METRICS_RESET_TESTS: 'false'
+        run: |
+          npx vite preview --host 127.0.0.1 --port 4173 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$METRICS_URL/" > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e

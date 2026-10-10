@@ -2,6 +2,7 @@ package com.ibm.advocacy.service;
 
 import com.ibm.advocacy.model.Measurement;
 import com.ibm.advocacy.model.Row;
+import com.ibm.advocacy.model.Data;
 
 import java.math.*;
 import java.net.*;
@@ -16,6 +17,20 @@ public final class Calculations {
         catch(NumberFormatException e) { throw new IllegalArgumentException("Invalid number: "+value); }
     }
     public static String format(BigDecimal n) { return n.stripTrailingZeros().toPlainString(); }
+    /** Apply reporting precision to copies after exact attribution/delta calculations. */
+    public static Data reported(Data source,boolean currentExport) {
+        List<Row> rows=new ArrayList<>();
+        for(Row original:source.rows) {
+            Row row=original.copy();
+            if(row.get(NOTE).equals("Only public HTTPS resource URLs are supported"))row.cells.put(NOTE,"Automatic collection is unavailable; open the resource and confirm or update its total.");
+            try {
+                row.cells.put(VIEWS,format(number(row.get(VIEWS)).setScale(0,RoundingMode.CEILING)));
+                if(currentExport)row.cells.put("Current total",row.get(VIEWS));
+            }catch(IllegalArgumentException invalid) { /* Preserve missing/invalid data for review. */ }
+            rows.add(row);
+        }
+        return new Data(source.headers,rows);
+    }
     public static BigDecimal attendance(Row row) {
         BigDecimal views=number(row.get(VIEWS));if(views.signum()<0)throw new IllegalArgumentException("Attendance cannot be negative");
         BigDecimal duration=row.get("Duration (in hours)").isBlank()?BigDecimal.ONE:number(row.get("Duration (in hours)"));

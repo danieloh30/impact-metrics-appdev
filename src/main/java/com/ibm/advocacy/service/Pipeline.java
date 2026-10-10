@@ -35,7 +35,7 @@ public class Pipeline {
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; reported views use ceiling after exact allocation; valid no-URL historical views are retained without manual review or a delta; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -140,7 +140,7 @@ public class Pipeline {
         for(Row row:source.rows) {
             String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
             if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
-            if(run.inputReviews.containsKey(row.id))continue;
+            if(run.inputReviews.containsKey(row.id)||TrailingEligibility.suppliedWithoutUrl(row))continue;
             if(manualCheckExclusions.matches(row.get(URL))) {
                 try { if(!run.measurements.containsKey(key)||!run.measurements.get(key).manual())suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
                 continue;
@@ -149,7 +149,7 @@ public class Pipeline {
         }
         List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
             Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
-            boolean retained=run.inputReviews.containsKey(row.id)||manualCheckExclusions.matches(row.get(URL));
+            boolean retained=run.inputReviews.containsKey(row.id)||manualCheckExclusions.matches(row.get(URL))||TrailingEligibility.suppliedWithoutUrl(row);
             if(!retained)try { if(Calculations.number(row.get("Current total")).signum()<0)throw new IllegalArgumentException("Previous baseline cannot be negative"); }
             catch(IllegalArgumentException e) { issue(run,row,row.get("Current total").isBlank()?"Previous baseline is missing in the historical metrics workbook":"Invalid previous baseline — "+e.getMessage(),true,"BASELINE"); }
             baselines.add(row);
@@ -165,6 +165,7 @@ public class Pipeline {
                 for(int i=0;i<shares.size();i++)contentOverrides.put(group.getValue().get(i).id,Calculations.format(shares.get(i)));
             }
         }
+        for(Row row:source.rows)if(TrailingEligibility.suppliedWithoutUrl(row))fresh.remove("blank:"+row.id);
         List<Row> rows=Calculations.trailing(baselines,fresh);
         for(Row row:rows) {
             if(manualCheckExclusions.matches(row.get(URL))&&!run.inputReviews.containsKey(row.id)) {
@@ -176,7 +177,17 @@ public class Pipeline {
                 } catch(InputMetricException e) { row.cells.put(NOTE,e.getMessage()); }
                 continue;
             }
-            var input=run.inputReviews.get(row.id);if(input==null)continue;
+            var input=run.inputReviews.get(row.id);
+            Row supplied=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
+            if(input==null&&TrailingEligibility.suppliedWithoutUrl(supplied)) {
+                Row original=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
+                row.cells.put(VIEWS,original.get(VIEWS));row.cells.put("Current total",original.get("Current total"));row.cells.put("Previous total",original.get("Current total"));
+                row.cells.put("Metric basis","Supplied historical input — not a trailing delta");
+                row.cells.put(NOTE,"Historical workbook views retained; no URL collection, fresh lifetime total or trailing delta calculated");
+                continue;
+            }
+            if(input==null)continue;
+
             Row original=source.rows.stream().filter(r->r.id.equals(row.id)).findFirst().orElseThrow();
             row.cells.put(VIEWS,input.views());row.cells.put("Duration (in hours)",input.duration());
             row.cells.put("Current total",original.get("Current total"));row.cells.put("Previous total",original.get("Current total"));

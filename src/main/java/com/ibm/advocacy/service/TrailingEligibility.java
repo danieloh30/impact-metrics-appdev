@@ -13,7 +13,13 @@ public final class TrailingEligibility {
         String flag=row.get("Trailing 90-day").strip().toLowerCase(Locale.ROOT);
         return flag.isBlank()?DIGITAL.contains(row.type()):Set.of("yes","true","1").contains(flag);
     }
-    public static String baseline(Row row) {
+/** Supplied no-URL historical views are retained as input, never treated as a fresh total. */
+public static boolean suppliedWithoutUrl(Row row) {
+    if(!row.get(URL).isBlank())return false;
+    try{return Calculations.number(row.get(VIEWS)).signum()>=0;}catch(IllegalArgumentException invalid){return false;}
+}
+public static String baseline(Row row) {
+
         String value=row.get("Current total");
         return value.startsWith("Missing or invalid baseline — manual review required")?"":value;
     }

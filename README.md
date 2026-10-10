@@ -4,7 +4,7 @@ Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. 
 
 ## Start locally
 
-Requires Java 21+, Node 20.19+ or 22.12+, and npm. The Maven wrapper is included. On this Mac, `dev.sh` finds the installed Homebrew JDK when system Java is not configured.
+Requires Java 25+, Node 20.19+ or 22.12+, and npm. The Maven wrapper is included. On this Mac, `dev.sh` finds the installed SDKMAN/Homebrew JDK when system Java is not configured. Select a Java 25+ installation.
 
 ```bash
 cd /Users/danieloh/developer-advocacy/tools/impact-metrics-appdev
@@ -156,11 +156,11 @@ Endpoint: `GET /api/runs/{id}/measurement-input?rowId=...&type=...` returns immu
 
 ## Review original trailing input values
 
-For a historical row without a URL, choose its **Enter views** (or baseline correction) action to open **Review original input**. The app reads original values from the saved historical row, including runs imported before this feature. The dialog shows original Views / attendance, Duration (in hours), and the recorded previous baseline. Its editable attendance and duration fields are prefilled from the original row or the last saved input review.
+Historical rows without a URL and with valid nonnegative supplied views now pass automatically; no collection, baseline, or duration review is required. For an unresolved historical row without a URL, choose its **Enter views** (or baseline correction) action to open **Review original input**. The app reads original values from the saved historical row, including runs imported before this feature. The dialog shows original Views / attendance, Duration (in hours), and the recorded previous baseline. Its editable attendance and duration fields are prefilled from the original row or the last saved input review.
 
 - **Keep original values** records an explicit review without changing the source values or requiring a collection note.
 - **Save edited inputs & refresh review** saves nonnegative numeric attendance and duration; a review note is optional. Original source data remains unchanged.
-- **Enter a fresh total instead** switches to the existing verified-measurement form. Its total starts blank so an initial attendance count cannot accidentally be submitted as a fresh lifetime total.
+- **Enter a fresh total instead** switches to the existing verified-measurement form. Its total starts with the recorded previous total, or the latest saved measurement, in attributed row units.
 
 After keeping/editing, collection and baseline issues for that row clear; approve phase 4 to complete the run. Baselines are required for actual trailing deltas, not for this explicit decision to retain input data without computing a delta. Missing input values cannot be kept until valid numbers are entered. Saved decisions survive refresh/restart, require the current review version, and are limited to no-URL rows in phase 4.
 
@@ -175,13 +175,14 @@ A row appears in **Collection & data review** when the backend adds an entry to 
 | Condition | Review category | Approval behavior |
 |---|---|---|
 | Current digital row: no URL but valid supplied Views / attendance and Duration (in hours) | No collection issue | Proceeds using input metrics |
-| Current digital row: no URL and missing Views / attendance or Duration (in hours); or trailing row: no URL | Manual collection | Enter a verified measurement or acknowledge follow-up |
+| Current digital row: no URL and missing Views / attendance or Duration (in hours); or trailing row: no URL and missing/invalid supplied views | Manual collection | Enter a verified measurement or acknowledge follow-up |
+| Historical row: no URL and valid supplied Views / attendance (including zero) | No collection issue | Retains supplied views; no baseline/duration or fresh delta required |
 | During URL collection: unsupported website (except the configured blog/digital exclusions below), malformed URL, failed request, or unavailable metric | Manual collection | Enter a verified measurement, retry, or acknowledge unresolved collection |
 | LinkedIn login/admin access unavailable, or reactions/Video Views cannot be extracted | Manual collection | Enter a verified measurement, retry, or acknowledge unresolved collection |
 | Supplied current no-URL digital metrics are invalid or views are negative | Correction required | Must correct before approval |
 | In-person attendance is blank, nonnumeric, or negative | Correction required | Must correct before approval |
 | Duration is supplied but nonnumeric | Correction required | Must correct before approval |
-| Trailing baseline is blank, nonnumeric, or negative for a row calculating a delta (explicitly retained/reviewed no-URL inputs are exempt) | Correction required | Must correct before approval |
+| Trailing baseline is blank, nonnumeric, or negative for a row calculating a delta (automatically supplied or explicitly retained/reviewed no-URL inputs are exempt) | Correction required | Must correct before approval |
 
 Missing in-person duration defaults to one hour. Manual entries require a nonnegative numeric value and the expected metric type. Source / collection notes are optional (maximum 1,000 characters); omitted notes are recorded as not provided. Entering a measurement regenerates the phase artifacts and creates a new version for approval. Collection issues are scoped to the current phase; trailing collection reports one collection issue per shared URL group.
 
@@ -191,7 +192,7 @@ Implementation: [review panel](src/main/webui/src/main.tsx), [phase issue rules]
 
 ## Verification
 
-Validation passed: **70 Java tests**, the TypeScript/Vite build, and **15 browser checks**. Automated verification covers the two-workbook SharePoint flow with synthetic transport, month-named sheet selection, date/year cutoffs, source isolation, snapshot reuse/expiry, both source hashes and immutable bytes, removed import endpoints, and the seven-phase workflow. Browser regressions cover one connection control, independent reads/errors, both default URLs, changing the reporting month without rereading, download progress, blog counts, missing-sheet warnings, preserved review/approval behavior, and mobile layout. Real-Chrome tests use synthetic cookies and loopback HTTP responses to check saved authentication and downloads without contacting IBM. A live read of AppDev Advocacy impact metrics 2026 succeeded with the saved session on both IBM hosts; its August and September input sheets were eligible. Live access still depends on IBM permissions and sign-in policy.
+Validation passed: **98 Java tests**, the TypeScript/Vite build, and **39 browser checks**. Automated verification covers the two-workbook SharePoint flow with synthetic transport, month-named sheet selection, date/year cutoffs, source isolation, snapshot reuse/expiry, both source hashes and immutable bytes, removed import endpoints, and the seven-phase workflow. Browser regressions cover one connection control, independent reads/errors, both default URLs, changing the reporting month without rereading, download progress, blog counts, missing-sheet warnings, preserved review/approval behavior, and mobile layout. Real-Chrome tests use synthetic cookies and loopback HTTP responses to check saved authentication and downloads without contacting IBM. A live read of AppDev Advocacy impact metrics 2026 succeeded with the saved session on both IBM hosts; its August and September input sheets were eligible. Live access still depends on IBM permissions and sign-in policy.
 
 Java tests mirror the service package in `src/test/java/com/ibm/advocacy/service`. Use Quarkus Dev UI/MCP testing, or `./mvnw test` in CI. For browser tests, start an isolated server from the project root in a separate terminal:
 
@@ -287,10 +288,22 @@ The metrics workbook's monthly sheets also contain one-off in-person activities 
 
 Configured collection exclusions with valid workbook views stay in digital results rather than `follow-up.csv` and create no manual collection issue. Historical excluded content retains supplied views and prior totals without requiring a baseline for a delta that is not being calculated. Missing or invalid views still need correction, and fresh-total overrides for non-excluded sources still need a valid previous baseline. Explicit overrides on excluded content are retained as supplied content values (allocated across shared URL rows), never as a delta.
 
-Baseline cells preserve their actual values; missing values are not replaced with error-message text. Baseline review always opens the baseline editor, even for a blank URL, rather than the input-retention form. Popups identify workbook, sheet, row, author, and tool. Historical shares such as 0.6667 are valid attributed values and differ from original attendee counts; historical monthly metrics sheets may omit duration. The app does not round shares up to one or substitute AvocadoBot values into a historical baseline. Current-month attendance uses the existing one-hour minimum for its calculation.
+Baseline cells preserve their actual values; missing values are not replaced with error-message text. Baseline review always opens the baseline editor, even for a blank URL, rather than the input-retention form. Popups identify workbook, sheet, row, author, and tool. Historical shares such as 0.6667 are valid attributed values and differ from original attendee counts; historical monthly metrics sheets may omit duration. The app preserves original shares and baselines internally, rounds reported views up after calculation, and never substitutes AvocadoBot values into a historical baseline. Current-month attendance uses the existing one-hour minimum for its calculation.
 
 Retry the relevant phase to refresh existing saved review issues and eligible result rows. A new run also refreshes preparation counts and immutable source snapshots. Earlier approved outputs and original workbook bytes are preserved.
 
 When only blocking review cards remain in Phase 1 or 4, **Refresh data review** re-runs the phase under the current collection rules. When unresolved collection is also present, the same action is labeled **Retry unresolved collection**. This refresh publishes a new version without changing original source snapshots or automatically approving a phase.
 
 Historical verified measurement fields default to the previous Current total (shown as Previous total), or the latest saved measurement. They edit the attributed author/tool share; the server converts that share to a shared resource total once, preserving the existing trailing allocation and avoiding a second division. Baseline edits still edit only the previous baseline. Current-month inputs retain their own defaults. When the historical sheet has no Duration (in hours) column, review omits duration and keeping/editing supplied views requires no duration. HTTP and HTTPS resource links can be opened in the browser; automatic collection remains restricted to approved HTTPS resources.
+
+## Reporting precision and automatic historical inputs
+
+Every result preview and CSV/ZIP export rounds `Views / attendance` up to an integer using mathematical ceiling (`166.5` becomes `167`). Attribution and deltas are calculated with exact decimals before reporting; originals, historical baselines, durations, and internal snapshots remain precise. `current.csv` Current total mirrors its rounded views. Ceiling each row can increase aggregate reported totals. Negative-delta warnings remain visible even when rounding produces zero.
+
+A historical row with no URL and valid supplied nonnegative Views / attendance is retained automatically, including zero; it creates no collection/baseline issue and requires no duration. Missing or invalid views still require review. Retained inputs carry **Supplied historical input — not a trailing delta** provenance; they never claim a fresh lifetime total. HTTP resource links remain clickable and supported collectors upgrade them to HTTPS. Unsupported hosts retain a meaningful manual-collection reason; the obsolete HTTPS-only warning is removed. Retry the historical phase to refresh saved issues.
+
+## Daily dependency updates and auto-merge
+
+`.github/dependabot.yml` checks Maven, frontend npm, and GitHub Actions dependencies daily. Quarkus platform BOMs/plugins and Quarkiverse extensions are grouped so related upgrades are proposed together. The platform BOM manages core extension versions; explicitly versioned POI/Quinoa and other dependencies are checked directly.
+
+Java 25 CI runs the backend tests/package and the frontend build/browser suite. A separate auto-merge workflow handles only Dependabot PRs from this repository after **CI** succeeds for the exact PR head commit. It enables squash auto-merge and respects required GitHub checks/reviews; it never checks out or executes PR code with its write token. Failed checks leave the PR open. Repository auto-merge is enabled. See [GitHub's Dependabot automation guide](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions).

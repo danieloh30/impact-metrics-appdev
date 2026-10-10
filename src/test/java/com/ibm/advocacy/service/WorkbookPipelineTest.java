@@ -65,6 +65,6 @@ class WorkbookPipelineTest {
     }
     @Test void currentInputEvidenceCannotSupplyTrailingLifetimeMeasurement() throws Exception {
         byte[] history="Author,Tool,Type of activity,Name of activity,Current total,Views / attendance,Duration (in hours),Link / URL to resource\nA,X,Recorded video,History,50,10,2,\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        Run current=csvRun("10","2",history);assertTrue(current.issues.isEmpty());approve(current);approve(await(current.id,"AWAITING_APPROVAL"));approve(await(current.id,"AWAITING_APPROVAL"));Run trailing=await(current.id,"AWAITING_APPROVAL");assertEquals(4,trailing.phase);assertTrue(trailing.issues.getFirst().reason().contains("No URL"));Data data=csv.read(runs.artifact(current.id,"updated_90-day.csv",null),false);assertEquals("",data.rows.getFirst().get(VIEWS));assertEquals("50",data.rows.getFirst().get("Current total"));
+        Run current=csvRun("10","2",history);assertTrue(current.issues.isEmpty());approve(current);approve(await(current.id,"AWAITING_APPROVAL"));approve(await(current.id,"AWAITING_APPROVAL"));Run trailing=await(current.id,"AWAITING_APPROVAL");assertEquals(4,trailing.phase);assertTrue(trailing.issues.isEmpty());Data data=csv.read(runs.artifact(current.id,"updated_90-day.csv",null),false);assertEquals("10",data.rows.getFirst().get(VIEWS));assertEquals("Supplied historical input — not a trailing delta",data.rows.getFirst().get("Metric basis"));assertEquals("50",data.rows.getFirst().get("Current total"));
     }
 }

@@ -109,7 +109,7 @@ public class WorkbookService {
                     row.cells.put("Source sheet",name);
                     String baseline=row.get("Current total");boolean validBaseline=true;
                     try { if(Calculations.number(baseline).signum()<0)throw new IllegalArgumentException(); }
-                    catch(IllegalArgumentException e) { validBaseline=false;if(!exclusions.matches(row.get(URL)))missing++; }
+                    catch(IllegalArgumentException e) { validBaseline=false;if(!exclusions.matches(row.get(URL))&&!TrailingEligibility.suppliedWithoutUrl(row))missing++; }
                     // A raw submission can have multiple authors/tools; split its recorded baseline conservatively.
                     List<Row> split=Calculations.split(row,null);
                     if(split.size()>1&&validBaseline) {

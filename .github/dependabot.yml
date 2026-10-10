@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: daily
+      time: '09:00'
+      timezone: America/New_York
+    groups:
+      quarkus-platform-and-extensions:
+        patterns:
+          - 'io.quarkus*'
+          - 'io.quarkiverse*'
+    open-pull-requests-limit: 10
+  - package-ecosystem: npm
+    directory: /src/main/webui
+    schedule:
+      interval: daily
+      time: '09:00'
+      timezone: America/New_York
+    groups:
+      frontend-dependencies:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: '09:00'
+      timezone: America/New_York
+    groups:
+      github-actions:
+        patterns: ['*']
