@@ -2,6 +2,28 @@
 
 Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. Read two SharePoint workbooks, select a reporting month, review phase approvals, enter verified measurements, preview results, and download CSVs or a ZIP. Workbook cells feed specialized agents and Java decimal calculations directly. CSV files are generated in memory only when downloaded; no intermediate CSV files are created. No IBM Bob or Python execution is required.
 
+## See the workflow
+
+The screenshots below use representative sample data to illustrate the interface.
+
+### 1. Connect your SharePoint workbooks
+
+Choose a reporting month, connect once, and read both workbooks with one action. Source details and progress make each step easy to follow.
+
+![SharePoint import with reporting-month selection, two workbook sources, and guided preparation](docs/screenshots/sharepoint-import.png)
+
+### 2. Review what the agents changed
+
+Each checkpoint highlights changes from the previous phase, any manual updates needed, and the next approval action.
+
+![Phase review showing attendance calculations, changes from the previous phase, and the no-manual-updates status](docs/screenshots/phase-review.png)
+
+### 3. Search your results and export
+
+Filter preview rows by author, tool, activity, or other cell text across every page. Download individual CSV files or the complete ZIP when the run is ready.
+
+![Completed results with CSV downloads and a searchable current.csv preview](docs/screenshots/searchable-results.png)
+
 ## Start locally
 
 Requires Java 25+, Node 20.19+ or 22.12+, and npm. The Maven wrapper is included. On this Mac, `dev.sh` finds the installed SDKMAN/Homebrew JDK when system Java is not configured. Select a Java 25+ installation.
