@@ -35,7 +35,7 @@ public class Pipeline {
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; reported views use ceiling after exact allocation; valid no-URL historical views are retained without manual review or a delta; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; DZone public article Views with explicit approximate evidence for K/M/B display; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; reported views use ceiling after exact allocation; valid no-URL historical views are retained without manual review or a delta; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; DZone background public article Views with phase-scoped browser reuse, explicit progress and approximate evidence for K/M/B display; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -46,12 +46,15 @@ public class Pipeline {
         }
         event(run,"InstructionAgent","Checked frozen RUN.md and AGENTS.md");workspace.save(run);
     }
-    Measurement measurement(Run run,Row row) throws Exception {
+    Measurement measurement(Run run,Row row,CollectionTracker progress) throws Exception {
         String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
-        if(run.measurements.containsKey(key))return run.measurements.get(key);
+        if(run.measurements.containsKey(key)) {Measurement cached=run.measurements.get(key);progress.success(row,cached,true);return cached;}
         if(key.startsWith("blank:"))throw new IllegalArgumentException("No URL — manual collection required");
-        Measurement measurement=collectors.collect(row.get(URL));
-        run.measurements.put(key,measurement);workspace.save(run);return measurement;
+        progress.checking(row);
+        try {
+            Measurement measurement=collectors.collect(row.get(URL));
+            run.measurements.put(key,measurement);progress.success(row,measurement,false);return measurement;
+        } catch(Exception failure) {progress.failed(row,failure);throw failure;}
     }
     private static class InputMetricException extends IllegalArgumentException {
         final String metric;
@@ -64,7 +67,7 @@ public class Pipeline {
             return Calculations.format(views);
         } catch(IllegalArgumentException e) { throw new InputMetricException("VIEWS",message(e)); }
     }
-    private Measurement digitalMeasurement(Run run,Row row) throws Exception {
+    private Measurement digitalMeasurement(Run run,Row row,CollectionTracker progress) throws Exception {
         if(manualCheckExclusions.matches(row.get(URL))) {
             Measurement override=run.measurements.get(Calculations.urlKey(row.get(URL)));
             if(override!=null&&override.manual())return override;
@@ -83,24 +86,27 @@ public class Pipeline {
             if(override!=null)return override;
             return new Measurement(Calculations.format(Calculations.number(views)),"INPUT_DATA","",run.createdAt,"Supplied Views / attendance and Duration (in hours); no URL required",false);
         }
-        return measurement(run,row);
+        return measurement(run,row,progress);
     }
     public void digital(PhaseTask task) throws Exception {
         Run run=workspace.load(task.runId());run.issues.clear();Data source=workspace.data(run.id,"source");
         List<Row> digital=new ArrayList<>(),follow=new ArrayList<>();Set<String> failed=new HashSet<>();
-        for(Row original:source.rows)if(DIGITAL.contains(original.type())) {
-            Row row=original.copy();
-            try {
-                if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
-                String key=Calculations.urlKey(row.get(URL));if(!manualCheckExclusions.matches(row.get(URL))&&!key.isBlank()&&failed.contains(key)&&!run.measurements.containsKey(key))throw new IllegalArgumentException("Collection failed for this shared URL; manual collection required");
-                Measurement m=digitalMeasurement(run,row);row.cells.put(VIEWS,m.value());row.cells.put(NOTE,m.type()+" collected "+m.collectedAt()+" — "+m.evidence());
-                if(m.type().equals("REACTIONS")) { row.cells.put("total_reactions",m.value());row.cells.put("reactions_scraped_at",m.collectedAt()); }
-                digital.add(row);
-            } catch(Exception e) {
-                if(e instanceof java.util.concurrent.CancellationException)throw e;
-                String key=Calculations.urlKey(row.get(URL));if(!key.isBlank())failed.add(key);row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),e instanceof InputMetricException,e instanceof InputMetricException input?input.metric:MetricCollectors.type(row.get(URL)));
+        CollectionTracker progress=new CollectionTracker(workspace,run,source.rows.stream().filter(row->DIGITAL.contains(row.type())&&!row.get(URL).isBlank()&&!manualCheckExclusions.matches(row.get(URL))).toList(),collectors.backgroundDzone());
+        try(AutoCloseable browserBatch=collectors.batch()) {
+            for(Row original:source.rows)if(DIGITAL.contains(original.type())) {
+                Row row=original.copy();
+                try {
+                    if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
+                    String key=Calculations.urlKey(row.get(URL));if(!manualCheckExclusions.matches(row.get(URL))&&!key.isBlank()&&failed.contains(key)&&!run.measurements.containsKey(key))throw new IllegalArgumentException("Collection failed for this shared URL; manual collection required");
+                    Measurement m=digitalMeasurement(run,row,progress);row.cells.put(VIEWS,m.value());row.cells.put(NOTE,m.type()+" collected "+m.collectedAt()+" — "+m.evidence());
+                    if(m.type().equals("REACTIONS")) { row.cells.put("total_reactions",m.value());row.cells.put("reactions_scraped_at",m.collectedAt()); }
+                    digital.add(row);
+                } catch(Exception e) {
+                    if(e instanceof java.util.concurrent.CancellationException)throw e;
+                    String key=Calculations.urlKey(row.get(URL));if(!key.isBlank())failed.add(key);row.cells.put(NOTE,message(e));follow.add(row);issue(run,row,message(e),e instanceof InputMetricException,e instanceof InputMetricException input?input.metric:MetricCollectors.type(row.get(URL)));
+                }
             }
-        }
+        } finally {progress.finish(runs.cancelled(run.id));}
         store(run,1,"digital.csv",Data.output(source,digital));store(run,1,"follow-up.csv",Data.output(source,follow));
         event(run,"DigitalMetricsAgent","Collected "+digital.size()+" digital activities; "+follow.size()+" require follow-up");workspace.save(run);
     }
@@ -137,16 +143,19 @@ public class Pipeline {
         Data originalSource=workspace.data(run.id,"trailing-source");
         Data source=new Data(originalSource.headers,originalSource.rows.stream().filter(TrailingEligibility::includes).map(original->{Row row=original.copy();row.cells.put("Current total",TrailingEligibility.baseline(row));return row;}).toList());
         run.trailingRows=source.rows.size();Set<String> attempted=new HashSet<>();
-        for(Row row:source.rows) {
-            String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
-            if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
-            if(run.inputReviews.containsKey(row.id)||TrailingEligibility.suppliedWithoutUrl(row))continue;
-            if(manualCheckExclusions.matches(row.get(URL))) {
-                try { if(!run.measurements.containsKey(key)||!run.measurements.get(key).manual())suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
-                continue;
+        CollectionTracker progress=new CollectionTracker(workspace,run,source.rows.stream().filter(row->!row.get(URL).isBlank()&&!run.inputReviews.containsKey(row.id)&&!TrailingEligibility.suppliedWithoutUrl(row)&&!manualCheckExclusions.matches(row.get(URL))).toList(),collectors.backgroundDzone());
+        try(AutoCloseable browserBatch=collectors.batch()) {
+            for(Row row:source.rows) {
+                String key=Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
+                if(runs.cancelled(run.id))throw new java.util.concurrent.CancellationException("Run cancelled");
+                if(run.inputReviews.containsKey(row.id)||TrailingEligibility.suppliedWithoutUrl(row))continue;
+                if(manualCheckExclusions.matches(row.get(URL))) {
+                    try { if(!run.measurements.containsKey(key)||!run.measurements.get(key).manual())suppliedContentViews(row); } catch(InputMetricException e) { issue(run,row,message(e),true,e.metric); }
+                    continue;
+                }
+                if(attempted.add(key))try { measurement(run,row,progress); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
             }
-            if(attempted.add(key))try { measurement(run,row); } catch(Exception e) { issue(run,row,message(e),false,MetricCollectors.type(row.get(URL))); }
-        }
+        } finally {progress.finish(runs.cancelled(run.id));}
         List<Row> baselines=new ArrayList<>();for(Row original:source.rows) {
             Row row=original.copy();Measurement baseline=run.measurements.get("baseline:"+row.id);if(baseline!=null)row.cells.put("Current total",baseline.value());
             boolean retained=run.inputReviews.containsKey(row.id)||manualCheckExclusions.matches(row.get(URL))||TrailingEligibility.suppliedWithoutUrl(row);

@@ -39,6 +39,9 @@ public class MetricCollectors {
         if(uri.getHost()==null||uri.getUserInfo()!=null||uri.getPort()>0||!("https".equalsIgnoreCase(uri.getScheme())||"http".equalsIgnoreCase(uri.getScheme())))throw new IOException("Resource URL must use HTTP or HTTPS with a public host");
         return URI.create("https:"+uri.toString().substring(uri.toString().indexOf(':')+1));
     }
+    /** Reuse one isolated DZone browser for this phase without sharing it across worker threads. */
+    public AutoCloseable batch() { return dzone==null?()->{}:dzone.batch(); }
+    public boolean backgroundDzone() { return dzone==null||dzone.backgroundMode(); }
     public Measurement collect(String url) throws Exception {
 
         if(!enabled)throw new IOException("Automatic collection disabled; enter a verified measurement");

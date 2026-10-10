@@ -137,7 +137,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
     }
     void enqueue(Run run,int phase) throws Exception {
         if(!active.add(run.id))throw new ClientErrorException("Run is busy",409);
-        run.phase=phase;run.status="RUNNING_PHASE";run.error="";workspace.save(run);
+        run.phase=phase;run.status="RUNNING_PHASE";run.error="";run.collectionProgress=null;workspace.save(run);
         workers.submit(()->execute(run.id,phase));
     }
     void execute(String id,int phase) {
