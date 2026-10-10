@@ -34,8 +34,27 @@ jobs:
         run: npx playwright install --with-deps chrome
       - name: Auto-merge guard regression tests
         run: node .github/scripts/test-automerge.mjs
+      - name: Install virtual desktop for minimized Chrome tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth openbox x11-utils
       - name: Backend tests and package
-        run: ./mvnw -B verify -DskipITs
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" bash -euo pipefail <<'VIRTUAL_DESKTOP'
+          openbox --sm-disable > /tmp/impact-metrics-window-manager.log 2>&1 &
+          window_manager_pid=$!
+          trap 'kill "$window_manager_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'; then break; fi
+            sleep 1
+          done
+          if ! xprop -root _NET_SUPPORTING_WM_CHECK | grep -q 'window id'; then
+            cat /tmp/impact-metrics-window-manager.log
+            echo 'Virtual desktop window manager did not become ready.' >&2
+            exit 1
+          fi
+          ./mvnw -B verify -DskipITs
+          VIRTUAL_DESKTOP
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
