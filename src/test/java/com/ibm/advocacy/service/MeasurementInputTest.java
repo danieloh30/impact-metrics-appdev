@@ -32,7 +32,7 @@ class MeasurementInputTest {
         byte[] history="Author,Tool,Type of activity,Name of activity,Current total,Views / attendance,Duration (in hours),Link / URL to resource\nA,X,Recorded video,Historical post,800,1000,2,https://blog.example.com/post\n".getBytes(StandardCharsets.UTF_8);
         Run run=runs.create(input("Customer meeting","10","1",""),history);runs.start(run.id,true);
         for(int n=0;n<3;n++){Run review=await(run.id);runs.approve(run.id,review.phase,review.version,RunService.digest(review),false);}Run phase4=await(run.id);
-        assertEquals("1000",runs.measurementInput(run.id,"t1","VIEWS").value());assertEquals("800",runs.measurementInput(run.id,"t1","BASELINE").value());assertEquals("2",runs.measurementInput(run.id,"t1","DURATION").value());
+        assertEquals("800",runs.measurementInput(run.id,"t1","VIEWS").value());assertEquals("800",runs.measurementInput(run.id,"t1","BASELINE").value());assertEquals("2",runs.measurementInput(run.id,"t1","DURATION").value());
         runs.measured(run.id,phase4.version,"t1","1200","VIEWS","");assertTrue(await(run.id).issues.isEmpty());Row row=csv.read(runs.artifact(run.id,"updated_90-day.csv",null),false).rows.getFirst();assertEquals("400",row.get(VIEWS));assertEquals("1000",row.get("Original Views / attendance"));assertEquals("Trailing delta",row.get("Metric basis"));
     }
     @Test void optionalNotesDoNotRelaxNumericTypeLengthOrRowValidation() throws Exception {

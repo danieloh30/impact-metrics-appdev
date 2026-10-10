@@ -53,5 +53,19 @@ class TrailingInputReviewTest {
     @Test void retainWithoutBaselineDoesNotInventTotalsAndMissingInputNeedsEditing() throws Exception {
         Run noBaseline=phase4("","30","2","");assertTrue(noBaseline.issues.stream().anyMatch(Issue::blocking));runs.reviewTrailingInput(noBaseline.id,noBaseline.version,"t1",null,null,true,"");Run reviewed=await(noBaseline.id,"AWAITING_APPROVAL");assertTrue(reviewed.issues.isEmpty());Row data=csv.read(runs.artifact(noBaseline.id,"updated_90-day.csv",null),false).rows.getFirst();assertEquals("",data.get("Current total"));assertEquals("",data.get("Previous total"));assertEquals("30",data.get(VIEWS));
         Run missing=phase4("90","","2","");assertFalse(runs.trailingInput(missing.id,"t1").canRetain());assertThrows(BadRequestException.class,()->runs.reviewTrailingInput(missing.id,missing.version,"t1",null,null,true,""));runs.reviewTrailingInput(missing.id,missing.version,"t1","0","2",false,"Verified zero attendance");assertTrue(await(missing.id,"AWAITING_APPROVAL").issues.isEmpty());
-    }
+    }@Test void historicalReviewOmitsAbsentDurationAndCanKeepOrEditViews() throws Exception {
+    Run run=phase4("78","78","","");Data source=workspace.data(run.id,"trailing-source");source.headers.remove("Duration (in hours)");source.rows.getFirst().cells.remove("Duration (in hours)");workspace.data(run.id,"trailing-source",source);
+    var context=runs.trailingInput(run.id,"t1");assertFalse(context.hasDuration());assertTrue(context.canRetain());
+    runs.reviewTrailingInput(run.id,run.version,"t1",null,null,true,"");Run kept=await(run.id,"AWAITING_APPROVAL");assertTrue(kept.issues.isEmpty());assertEquals("",kept.inputReviews.get("t1").duration());
+    runs.reviewTrailingInput(run.id,kept.version,"t1","90",null,false,"");Run edited=await(run.id,"AWAITING_APPROVAL");assertTrue(edited.issues.isEmpty());assertEquals("90",edited.inputReviews.get("t1").views());assertEquals("",edited.inputReviews.get("t1").duration());assertEquals("",csv.read(runs.artifact(run.id,"updated_90-day.csv",null),false).rows.getFirst().get("Duration (in hours)"));
+}
+@Test void historicalMeasuredSharesDefaultToBaselineAndAreNotDividedTwice() throws Exception {
+    Run run=phase4("1966.5","0","","http://dzone.com/articles/architecting-autonomous-network-ecosystems");Data source=workspace.data(run.id,"trailing-source");Row second=source.rows.getFirst().copy();second.id="t2";source.rows.add(second);workspace.data(run.id,"trailing-source",source);
+    assertEquals("1966.5",runs.measurementInput(run.id,"t1","VIEWS").value());assertTrue(runs.measurementInput(run.id,"t1","VIEWS").attributed());
+    given().contentType("application/json").body(Map.of("version",run.version,"rowId","t1","value","1966.5","type","VIEWS","attributed",true)).post("/api/runs/"+run.id+"/measurements").then().statusCode(202);
+    Run confirmed=await(run.id,"AWAITING_APPROVAL");assertTrue(confirmed.issues.isEmpty());assertEquals("3933",confirmed.measurements.values().stream().filter(m->m.type().equals("VIEWS")).findFirst().orElseThrow().value());
+    Data result=csv.read(runs.artifact(run.id,"updated_90-day.csv",null),false);assertEquals(2,result.rows.size());assertTrue(result.rows.stream().allMatch(row->row.get("Current total").equals("1966.5")&&row.get(VIEWS).equals("0")));assertEquals("1966.5",runs.measurementInput(run.id,"t1","VIEWS").value());
+    runs.measured(run.id,confirmed.version,"t1","2000","VIEWS","",true);Run edited=await(run.id,"AWAITING_APPROVAL");assertEquals("2000",runs.measurementInput(run.id,"t2","VIEWS").value());assertTrue(csv.read(runs.artifact(run.id,"updated_90-day.csv",null),false).rows.stream().allMatch(row->row.get(VIEWS).equals("33.5")));
+}
+
 }

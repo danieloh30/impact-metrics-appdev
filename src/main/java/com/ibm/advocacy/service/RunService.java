@@ -168,6 +168,9 @@ public synchronized byte[] input(String id,String name) throws Exception {
     }
     public boolean cancelled(String id) { return cancelled.contains(id); }
     public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence) throws Exception {
+        return measured(id,version,rowId,value,type,evidence,false);
+    }
+    public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence,boolean attributed) throws Exception {
         synchronized(lock(id)) {
             Run run=get(id);if(!run.status.equals("AWAITING_APPROVAL")||run.version!=version||!Set.of(1,2,4).contains(run.phase))throw new ClientErrorException("Measurements require the current phase-1, phase-2 or phase-4 review",409);
             BigDecimalValidation(value);if(evidence!=null&&evidence.length()>1000)throw new BadRequestException("Source / collection note must be at most 1,000 characters");
@@ -179,6 +182,10 @@ public synchronized byte[] input(String id,String name) throws Exception {
             boolean correction=run.issues.stream().anyMatch(i->i.rowId().equals(rowId)&&i.blocking()&&i.metricType().equals(type));
             if(!expected.equals(type)&&!correction)throw new BadRequestException("Required measurement type: "+expected);
             String key=type.equals("DURATION")?"duration:"+row.id:type.equals("BASELINE")?"baseline:"+row.id:run.phase==2?"attendance:"+row.id:Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
+            if(attributed) {
+                if(run.phase!=4||Set.of("BASELINE","DURATION").contains(type))throw new BadRequestException("Attributed totals are available only for historical resource measurements");
+                value=Calculations.format(Calculations.number(value).multiply(java.math.BigDecimal.valueOf(historicalGroupSize(source,row))));
+            }
             run.measurements.put(key,new Measurement(Calculations.format(Calculations.number(value)),type,row.get(URL),Instant.now().toString(),evidence,true));
             Pipeline.event(run,"Manual collection","Recorded "+type+" for "+row.id+"; refreshing review artifacts");enqueue(run,run.phase);return run;
         }
@@ -189,18 +196,26 @@ private static SourceContext sourceContext(Run run,Row row) {
     String filename=row.get("Source workbook");if(filename.isBlank())filename=String.valueOf(run.workbook.getOrDefault(run.phase==4?"historyFilename":"filename",run.phase==4?"Historical input":"Current input"));
     return new SourceContext(filename,row.get("Source sheet"),row.id,row.get("Author of activity").isBlank()?row.get("Author"):row.get("Author of activity"),row.get("Tool"));
 }
-public record MeasurementInput(String originalViews,String originalDuration,String baseline,String views,String duration,String value,boolean canRetain,SourceContext source) {}
+private static long historicalGroupSize(Data data,Row row) {
+    String key=Calculations.urlKey(row.get(URL));
+    return key.isBlank()?1:Math.max(1,data.rows.stream().filter(TrailingEligibility::includes).filter(other->Calculations.urlKey(other.get(URL)).equals(key)).count());
+}
+public record MeasurementInput(String originalViews,String originalDuration,String baseline,String views,String duration,String value,boolean canRetain,SourceContext source,boolean hasDuration,boolean attributed) {}
 public synchronized MeasurementInput measurementInput(String id,String rowId,String type) throws Exception {
     Run run=get(id);
     if(!Set.of(1,2,4).contains(run.phase))throw new BadRequestException("Original measurement context is available during phases 1, 2, and 4");
     if(type==null||!Set.of("VIEWS","VIDEO_VIEWS","REACTIONS","STARS","DOWNLOADS","ATTENDANCE","DURATION","BASELINE").contains(type))throw new BadRequestException("Unknown measurement type");
-    Row row=workspace.data(id,run.phase==4?"trailing-source":"source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
+    Data data=workspace.data(id,run.phase==4?"trailing-source":"source");Row row=data.rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
     String initial=switch(type){case "DURATION"->row.get("Duration (in hours)");case "BASELINE"->TrailingEligibility.baseline(row);case "REACTIONS"->row.get("total_reactions").isBlank()?row.get(VIEWS):row.get("total_reactions");default->row.get(VIEWS);};
     String key=type.equals("DURATION")?"duration:"+row.id:type.equals("BASELINE")?"baseline:"+row.id:run.phase==2?"attendance:"+row.id:Calculations.urlKey(row.get(URL));if(key.isBlank())key="blank:"+row.id;
     Measurement saved=run.measurements.get(key);
-    return new MeasurementInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),editableNumber(row.get(VIEWS)),editableNumber(row.get("Duration (in hours)")),editableNumber(saved==null?initial:saved.value()),false,sourceContext(run,row));
+    boolean attributed=run.phase==4&&!Set.of("BASELINE","DURATION").contains(type);
+    if(attributed&&!editableNumber(TrailingEligibility.baseline(row)).isBlank())initial=TrailingEligibility.baseline(row);
+    String selected=saved==null?initial:saved.value();
+    if(attributed&&saved!=null)selected=Calculations.format(Calculations.number(saved.value()).divide(java.math.BigDecimal.valueOf(historicalGroupSize(data,row)),6,java.math.RoundingMode.HALF_UP));
+    return new MeasurementInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),editableNumber(row.get(VIEWS)),editableNumber(row.get("Duration (in hours)")),editableNumber(selected),false,sourceContext(run,row),row.cells.containsKey("Duration (in hours)"),attributed);
 }
-    public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain,SourceContext source) {}
+    public record TrailingInput(String originalViews,String originalDuration,String baseline,String views,String duration,boolean canRetain,SourceContext source,boolean hasDuration) {}
     private Row trailingRow(Run run,String rowId) throws Exception {
         if(!run.trailing)throw new BadRequestException("This run has no historical input");
         Row row=workspace.data(run.id,"trailing-source").rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown historical row"));
@@ -209,20 +224,20 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
     }
     public synchronized TrailingInput trailingInput(String id,String rowId) throws Exception {
         Run run=get(id);Row row=trailingRow(run,rowId);var reviewed=run.inputReviews.get(rowId);boolean valid=true;
-        try{BigDecimalValidation(row.get(VIEWS));BigDecimalValidation(row.get("Duration (in hours)"));}catch(IllegalArgumentException|BadRequestException e){valid=false;}
-        return new TrailingInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),reviewed==null?editableNumber(row.get(VIEWS)):reviewed.views(),reviewed==null?editableNumber(row.get("Duration (in hours)")):reviewed.duration(),valid,sourceContext(run,row));
+        try{BigDecimalValidation(row.get(VIEWS));if(row.cells.containsKey("Duration (in hours)"))BigDecimalValidation(row.get("Duration (in hours)"));}catch(IllegalArgumentException|BadRequestException e){valid=false;}
+        return new TrailingInput(row.get(VIEWS),row.get("Duration (in hours)"),TrailingEligibility.baseline(row),reviewed==null?editableNumber(row.get(VIEWS)):reviewed.views(),reviewed==null?editableNumber(row.get("Duration (in hours)")):reviewed.duration(),valid,sourceContext(run,row),row.cells.containsKey("Duration (in hours)"));
     }
     public synchronized Run reviewTrailingInput(String id,int version,String rowId,String views,String duration,boolean keepOriginal,String note) throws Exception {
         synchronized(lock(id)) {
             Run run=get(id);
             if(!run.status.equals("AWAITING_APPROVAL")||run.phase!=4||run.version!=version)throw new ClientErrorException("Input review requires the current trailing phase review",409);
             Row row=trailingRow(run,rowId);
-            String count=keepOriginal?row.get(VIEWS):views,hours=keepOriginal?row.get("Duration (in hours)"):duration;
-            try{BigDecimalValidation(count);BigDecimalValidation(hours);}catch(IllegalArgumentException e){throw new BadRequestException("Enter valid nonnegative views / attendance and duration");}
+            boolean hasDuration=row.cells.containsKey("Duration (in hours)");String count=keepOriginal?row.get(VIEWS):views,hours=hasDuration?(keepOriginal?row.get("Duration (in hours)"):duration):"";
+            try{BigDecimalValidation(count);if(hasDuration)BigDecimalValidation(hours);}catch(IllegalArgumentException e){throw new BadRequestException(hasDuration?"Enter valid nonnegative views / attendance and duration":"Enter valid nonnegative views / attendance");}
             if(note!=null&&note.length()>1000)throw new BadRequestException("Review note must be at most 1,000 characters");
             String evidence=note==null||note.isBlank()?keepOriginal?"User retained original historical inputs":"User reviewed and edited historical inputs":note.strip();
-            run.inputReviews.put(rowId,new com.ibm.advocacy.model.InputReview(Calculations.format(Calculations.number(count)),Calculations.format(Calculations.number(hours)),evidence,!keepOriginal));
-            Pipeline.event(run,"Input review",(keepOriginal?"Retained":"Edited")+" supplied attendance/views and duration for "+rowId+"; no fresh lifetime total or delta claimed");enqueue(run,4);return run;
+            run.inputReviews.put(rowId,new com.ibm.advocacy.model.InputReview(Calculations.format(Calculations.number(count)),hasDuration?Calculations.format(Calculations.number(hours)):"",evidence,!keepOriginal));
+            Pipeline.event(run,"Input review",(keepOriginal?"Retained":"Edited")+" supplied attendance/views"+(hasDuration?" and duration":"")+" for "+rowId+"; no fresh lifetime total or delta claimed");enqueue(run,4);return run;
         }
     }
     static void BigDecimalValidation(String value) { if(Calculations.number(value).signum()<0)throw new BadRequestException("Measured totals cannot be negative"); }
