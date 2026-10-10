@@ -15,6 +15,7 @@ Use Current month inputs plus same-month Markus/Elder blogs for current data. Us
 | Resource | Measurement |
 |---|---|
 | youtube.com / youtu.be | Video view count |
+| dzone.com/articles/ | Article Views via Quarkus Playwright; abbreviated K/M/B counts are explicitly approximate |
 | linkedin.com/posts/, /feed/update/, /pulse/ | Total reactions; not comments or reposts |
 | linkedin.com/events/ | Video Views from the post analytics Video performance section |
 | github.com | Repository stars from the public GitHub API |
@@ -54,3 +55,5 @@ Preserve the actual Current total cell value, including blanks or invalid text. 
 Historical verified measurements default to the previous Current total or latest saved measurement, expressed as this attributed row's share. Convert a confirmed share to the shared resource total once before the existing group allocation; do not divide the previous share again. Baseline corrections are independent. Historical input retention validates and edits duration only when the original row has the Duration (in hours) column; absent duration is not required or fabricated. Resource links support safe HTTP/HTTPS browser navigation while automatic collection retains its HTTPS restriction.
 
 Round every reported Views / attendance up using mathematical ceiling (166.5 -> 167), after exact allocation and delta calculations. Preserve raw workbook values, historical baselines, durations, and internal precision. Preview and CSV/ZIP downloads use the same rounding; current.csv Current total mirrors its rounded views. Per-row rounding can increase reported aggregate totals. Negative deltas retain their warning even when their rounded value is zero. Public HTTP resource URLs are upgraded to HTTPS for automatic collection; do not show the obsolete HTTPS-only manual warning.
+
+DZone collection reads only the public article Views counter in a short-lived isolated Chrome context. A regular visible Chrome window is used by default because DZone can block headless requests. No authentication sessions are reused. Save the resource URL, collection time, and exact/approximate counter evidence in results. Use the collected resource total in existing current attribution and historical shared-URL delta rules. If access or the counter is unavailable, require retry or manual entry without inventing a total or replacing a baseline.

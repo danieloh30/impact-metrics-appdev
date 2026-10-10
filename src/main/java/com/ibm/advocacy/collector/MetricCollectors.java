@@ -19,6 +19,7 @@ public class MetricCollectors {
     @ConfigProperty(name="metrics.collection.enabled") boolean enabled;
     @Inject ObjectMapper mapper;
     @Inject LinkedInCollector linkedin;
+    @Inject DZoneCollector dzone;
     private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).followRedirects(HttpClient.Redirect.NEVER).build();
     private static final Set<String> HOSTS=Set.of("youtube.com","www.youtube.com","m.youtube.com","youtu.be","github.com","www.github.com","api.github.com","registry.terraform.io");
     public static String type(String url) {
@@ -43,6 +44,7 @@ public class MetricCollectors {
         if(!enabled)throw new IOException("Automatic collection disabled; enter a verified measurement");
         URI uri=resourceUri(url);String host=Optional.ofNullable(uri.getHost()).orElse("").toLowerCase(Locale.ROOT);
         if(Set.of("linkedin.com","www.linkedin.com").contains(host))return linkedin.collect(uri);
+        if(Set.of("dzone.com","www.dzone.com").contains(host))return dzone.collect(uri);
         String value,evidence;
         if(Set.of("youtube.com","www.youtube.com","m.youtube.com","youtu.be").contains(host)) {
             if(host.equals("youtu.be"))uri=URI.create("https://www.youtube.com/watch?v="+URLEncoder.encode(uri.getPath().substring(1),java.nio.charset.StandardCharsets.UTF_8));
