@@ -161,7 +161,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
         } finally { active.remove(id); }
     }
     public synchronized Run retry(String id) throws Exception {
-        synchronized(lock(id)) { Run run=get(id);if(!run.status.equals("FAILED_RETRYABLE")&&!(run.status.equals("AWAITING_APPROVAL")&&Set.of(1,4).contains(run.phase)))throw new ClientErrorException("Retry an interrupted phase or a current collection review",409);cancelled.remove(id);enqueue(run,run.phase);return run; }
+        synchronized(lock(id)) { Run run=get(id);if(!run.status.equals("FAILED_RETRYABLE")&&!(run.status.equals("AWAITING_APPROVAL")&&Set.of(1,4).contains(run.phase)))throw new ClientErrorException("Retry an interrupted phase or a current collection review",409);cancelled.remove(id);Pipeline.event(run,"Collection retry","Retrying phase "+run.phase+" from saved source rows; successful and manual measurements are reused, failed requests are attempted again");enqueue(run,run.phase);return run; }
     }
     public synchronized Run cancel(String id) throws Exception {
         synchronized(lock(id)) { Run run=get(id);if(Set.of("COMPLETED","CANCELLED").contains(run.status))throw new ClientErrorException("Run is already finished",409);cancelled.add(id);if(!active.contains(id)){run.status="CANCELLED";workspace.save(run);}else run.status="CANCELLING";return run; }

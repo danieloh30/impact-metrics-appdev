@@ -2,6 +2,7 @@ package com.ibm.advocacy.collector;
 
 import com.ibm.advocacy.model.Measurement;
 import com.microsoft.playwright.*;
+import com.google.gson.JsonObject;
 import com.microsoft.playwright.options.WaitUntilState;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -18,9 +19,10 @@ import java.util.regex.*;
 public class DZoneCollector {
     @ConfigProperty(name="metrics.dzone.browser-channel",defaultValue="chrome") String channel="chrome";
     @ConfigProperty(name="metrics.dzone.browser-executable") Optional<String> executable=Optional.empty();
-    @ConfigProperty(name="metrics.dzone.headless",defaultValue="true") boolean headless=true;
+    @ConfigProperty(name="metrics.dzone.headless",defaultValue="false") boolean headless=false;
+    @ConfigProperty(name="metrics.dzone.minimized",defaultValue="true") boolean minimized=true;
     private final ThreadLocal<Session> sessions=new ThreadLocal<>();
-    public boolean backgroundMode() { return headless; }
+    public boolean backgroundMode() { return headless||minimized; }
     private static final Pattern COUNTER=Pattern.compile("(?i)^\\s*((?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?)\\s*([KMB]?)\\s+Views\\s*$");
     record Count(String value,String label,boolean approximate) {}
 
@@ -43,7 +45,7 @@ public class DZoneCollector {
         if(!article(uri))throw new IOException("DZone collection supports public /articles/ URLs only");
         try {
             Response response=page.navigate(uri.toString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30000));
-            if(response==null||response.status()!=200)throw new IOException("DZone "+(headless?"background collection blocked or unavailable":"blocked or unavailable")+" (HTTP "+(response==null?"unknown":response.status())+"); retry later or enter verified views manually. No visible browser fallback is opened.");
+            if(response==null||response.status()!=200)throw new IOException("DZone "+(backgroundMode()?"background collection blocked or unavailable":"blocked or unavailable")+" (HTTP "+(response==null?"unknown":response.status())+"); retry unresolved collection or enter verified views manually.");
             if(!article(URI.create(page.url())))throw new IOException("DZone redirected away from a supported article");
             Locator label=page.locator("#activity-view-container .view-count");
             label.first().waitFor(new Locator.WaitForOptions().setTimeout(10000));
@@ -66,9 +68,38 @@ public class DZoneCollector {
     }
     Browser launch(Playwright playwright) {
         var options=new BrowserType.LaunchOptions().setHeadless(headless);
+        if(!headless&&minimized)options.setArgs(List.of("--no-startup-window"));
         if(executable.isPresent())options.setExecutablePath(Path.of(executable.get()));
         else if(!channel.isBlank())options.setChannel(channel);
         return playwright.chromium().launch(options);
+    }
+    /** Create the collection window already minimized, before any article is loaded. */
+    Page openPage(Browser chrome,BrowserContext context) {
+        if(headless||!minimized)return context.newPage();
+        CDPSession control=chrome.newBrowserCDPSession();
+        try {
+            // macOS may restore the first Chrome window while finishing app startup.
+            // Settle startup while --no-startup-window keeps every window absent.
+            if(System.getProperty("os.name","").toLowerCase(Locale.ROOT).contains("mac")) {
+                try {Thread.sleep(1200);}catch(InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();throw new PlaywrightException("DZone browser startup interrupted",interrupted);
+                }
+            }
+            var contexts=control.send("Target.getBrowserContexts").getAsJsonArray("browserContextIds");
+            if(contexts.size()!=1)throw new PlaywrightException("DZone isolated browser context could not be identified");
+            JsonObject target=new JsonObject();target.addProperty("url","about:blank");target.addProperty("browserContextId",contexts.get(0).getAsString());
+            target.addProperty("newWindow",true);target.addProperty("background",true);target.addProperty("windowState","minimized");
+            JsonObject[] created=new JsonObject[1];
+            Page page=context.waitForPage(()->created[0]=control.send("Target.createTarget",target));
+            JsonObject lookup=new JsonObject();lookup.addProperty("targetId",created[0].get("targetId").getAsString());
+            JsonObject window=control.send("Browser.getWindowForTarget",lookup);
+            JsonObject bounds=new JsonObject();bounds.addProperty("windowState","minimized");
+            JsonObject update=new JsonObject();update.add("windowId",window.get("windowId"));update.add("bounds",bounds);
+            control.send("Browser.setWindowBounds",update);
+            if(!control.send("Browser.getWindowForTarget",lookup).getAsJsonObject("bounds").get("windowState").getAsString().equals("minimized"))
+                throw new PlaywrightException("DZone collection window could not be kept minimized");
+            return page;
+        } finally {control.detach();}
     }
     void restrict(BrowserContext context) {
         Set<String> checked=new HashSet<>();
@@ -93,7 +124,7 @@ public class DZoneCollector {
                     try {
                         playwright=Playwright.create();chrome=launch(playwright);
                         context=chrome.newContext(new Browser.NewContextOptions().setAcceptDownloads(false).setServiceWorkers(com.microsoft.playwright.options.ServiceWorkerPolicy.BLOCK));
-                        restrict(context);page=context.newPage();
+                        restrict(context);page=openPage(chrome,context);
                     } catch(RuntimeException failure) {close();throw failure;}
                 }
                 return read(page,uri);

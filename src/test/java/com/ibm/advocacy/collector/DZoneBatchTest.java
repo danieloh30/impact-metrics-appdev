@@ -10,8 +10,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class DZoneBatchTest {
  final URI first=URI.create("https://dzone.com/articles/first"),second=URI.create("https://dzone.com/articles/second");
  static class SyntheticCollector extends DZoneCollector {
-  int launches;Browser browser;
+  int launches;Browser browser;Page page;
+  SyntheticCollector(){headless=true;}
   @Override Browser launch(Playwright playwright) {assertTrue(backgroundMode());launches++;browser=super.launch(playwright);return browser;}
+  @Override Page openPage(Browser chrome,BrowserContext context){page=super.openPage(chrome,context);return page;}
   @Override void restrict(BrowserContext context) {
    context.route("**/*",route->{boolean blocked=route.request().url().endsWith("/blocked");route.fulfill(new Route.FulfillOptions().setStatus(blocked?403:200).setContentType("text/html").setBody(blocked?"<h1>Blocked</h1>":"<h1>Article</h1><div id='activity-view-container'><span class='view-count'>3.7K Views</span></div>"));});
   }
@@ -32,11 +34,28 @@ class DZoneBatchTest {
   SyntheticCollector collector=new SyntheticCollector();
   try(var batch=collector.batch()) {
    IOException failure=assertThrows(IOException.class,()->collector.collect(URI.create("https://dzone.com/articles/blocked")));
-   assertTrue(failure.getMessage().contains("background collection"));assertTrue(failure.getMessage().contains("HTTP 403"));assertTrue(failure.getMessage().contains("No visible browser fallback"));
+   assertTrue(failure.getMessage().contains("background collection"));assertTrue(failure.getMessage().contains("HTTP 403"));assertTrue(failure.getMessage().contains("retry unresolved collection"));
    assertEquals("3700",collector.collect(first).value());assertEquals(1,collector.launches);
   }
   assertFalse(collector.browser.isConnected());
  }
+@Test void defaultRegularChromeCreatesOneMinimizedWindowAndKeepsItMinimizedAcrossArticles() throws Exception {
+ SyntheticCollector collector=new SyntheticCollector();collector.headless=false;assertTrue(collector.minimized);assertTrue(collector.backgroundMode());
+ try(var batch=collector.batch()) {
+  assertEquals("3700",collector.collect(first).value());assertMinimized(collector);
+  assertEquals("3700",collector.collect(second).value());assertMinimized(collector);
+  assertEquals(1,collector.launches);assertEquals(1,collector.browser.contexts().size());assertEquals(1,collector.page.context().pages().size());
+ }
+ assertFalse(collector.browser.isConnected());
+}
+void assertMinimized(SyntheticCollector collector) {
+ CDPSession page=collector.page.context().newCDPSession(collector.page),browser=collector.browser.newBrowserCDPSession();
+ try {
+  var target=page.send("Target.getTargetInfo").getAsJsonObject("targetInfo");
+  var lookup=new com.google.gson.JsonObject();lookup.add("targetId",target.get("targetId"));
+  assertEquals("minimized",browser.send("Browser.getWindowForTarget",lookup).getAsJsonObject("bounds").get("windowState").getAsString());
+ }finally {page.detach();browser.detach();}
+}
  @Test void launchFailureClosesPartialSessionAndDoesNotRelaunchForEveryArticle() throws Exception {
   SyntheticCollector collector=new SyntheticCollector(){@Override Browser launch(Playwright playwright){launches++;throw new PlaywrightException("Synthetic browser launch failure");}};
   try(var batch=collector.batch()) {

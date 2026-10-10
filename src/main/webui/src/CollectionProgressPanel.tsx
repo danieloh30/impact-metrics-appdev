@@ -14,7 +14,7 @@ export function CollectionProgressPanel({progress,active}:{progress:CollectionPr
   <div className="collection-stats"><div><strong>{progress.collected}</strong><span>Fresh measurements</span></div><div><strong>{progress.cached}</strong><span>Saved measurements reused</span></div><div className={progress.failed?'collection-needs-review':''}><strong>{progress.failed}</strong><span>Need review</span></div></div>
   {progress.activity&&<p className="collection-current"><strong>{progress.provider}: {progress.activity}</strong><span>{progress.resource}</span></p>}
   <p className="collection-detail">{progress.detail}</p>
-  {progress.dzoneIncluded&&<p className="collection-mode">{progress.backgroundDzone?'DZone checks run in the background; no browser windows are opened.':'Visible DZone collection is configured. One browser window is reused for this phase.'}</p>}
+  {progress.dzoneIncluded&&<p className="collection-mode">{progress.backgroundDzone?'DZone checks run in the background. Regular Chrome stays minimized; headless mode is optional.':'Visible DZone collection is configured. One browser window is reused for this phase.'}</p>}
   {progress.lastError&&<p className="collection-warning"><strong>Collection needs attention.</strong> {progress.lastError}</p>}
   {progress.state==='COMPLETE'&&progress.failed>0&&<p className="collection-mode">Checks completed includes failed checks. Review the collection items below; unavailable values were not invented.</p>}
  </section>;
