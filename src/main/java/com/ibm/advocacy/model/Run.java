@@ -15,4 +15,6 @@ public class Run {
     public LinkedHashMap<String,Artifact> artifacts=new LinkedHashMap<>();
     public Map<String,InputReview> inputReviews=new LinkedHashMap<>();
     public LinkedHashMap<String,Measurement> measurements=new LinkedHashMap<>();
+    public LinkedHashMap<String,MonthEndValue> monthEndValues=new LinkedHashMap<>();
+    public int reportingRevision=0;
 }

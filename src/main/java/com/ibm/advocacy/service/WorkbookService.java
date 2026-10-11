@@ -93,6 +93,7 @@ public class WorkbookService {
                 if(!BlogSheetReader.matches(sheet.getSheetName())||book.isSheetHidden(index)||book.isSheetVeryHidden(index))continue;
                 var supplement=blogs.read(sheet);
                 List<Row> selected=supplement.data().rows.stream().filter(row->supplement.months().get(row.id).equals(month)).map(Row::copy).toList();
+                selected.forEach(row->{row.cells.put("Trailing 90-day","No");row.cells.put("Current total","");row.cells.put("Previous total","");});
                 rows.addAll(selected);currentHeaders.addAll(supplement.data().headers);
                 blogRows.put(sheet.getSheetName(),selected.size());blogSkippedRows.put(sheet.getSheetName(),supplement.undatedRows());
             }
@@ -136,6 +137,24 @@ public class WorkbookService {
         if(book.isSheetHidden(index)||book.isSheetVeryHidden(index))throw new BadRequestException("Hidden sheets cannot be imported");
         if(BlogSheetReader.matches(name))throw new BadRequestException("Blog sheets are appended automatically; select an activity input sheet here");
         return read(sheet);
+    }
+    /** Retain all monthly rows for reporting, including one-off activities excluded from collection. */
+    public Data reportingSnapshot(byte[] bytes,List<String> names) throws IOException {
+        List<Row> rows=new ArrayList<>();LinkedHashSet<String> headers=new LinkedHashSet<>();
+        try(XSSFWorkbook book=open(bytes)) {
+            for(String name:names) {
+                Data data=selected(book,name).data;headers.addAll(data.headers);
+                for(Row original:data.rows) {
+                    List<Row> split=Calculations.split(original,null);
+                    for(String metric:List.of("Current total","Previous total",VIEWS))try {
+                        var values=Calculations.allocate(Calculations.number(original.get(metric)),split.size());
+                        for(int i=0;i<split.size();i++)split.get(i).cells.put(metric,Calculations.format(values.get(i)));
+                    }catch(IllegalArgumentException ignored) { /* Missing values remain missing. */ }
+                    rows.addAll(split);
+                }
+            }
+        }
+        return new Data(new ArrayList<>(headers),rows);
     }
     /** Only explicitly named monthly input sheets supply the separate metrics workbook history. */
     private static int[] monthlyLabel(String name) {

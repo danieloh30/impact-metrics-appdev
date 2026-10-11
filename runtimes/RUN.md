@@ -1,5 +1,17 @@
 # RUN metrics — Quarkus workbook and agent workflow
 
+## Month-end reporting and pivot charts
+
+SharePoint runs use DA metric model 2026 in the separate AppDev Advocacy impact metrics workbook as the authoritative source of activity units, weights and trailing eligibility. Never use AvocadoBot's older DA metric model or guess an absent rule. Geography comes from the historical workbook's Ranges author lookup. Missing rules remain explicit exclusions.
+
+Reporting uses the selected month's last day, after that month has closed. A live measurement collected later cannot establish a past month-end value. The selected monthly input sheet is treated as a user-accepted month-end snapshot only when its named month matches the reporting month. Sheet names do not independently prove observation dates; show this limitation. Older available monthly sheets remain baselines, not selected-month totals. Missing or ambiguous month-end totals require an explicit dated user confirmation. Keep its as-of date separate from when the confirmation was entered. Preserve original workbook and agent values for audit.
+
+Current one-time attendance uses its already allocated attendance-hours result without multiplying duration or allocating again. Ignore the sales-delivered workshop exception: AppDev does not submit that activity. Markus blog data and Elder blog data contributions are one-time inputs for the selected month: Trailing 90-day = No, no Current total or Previous total, exact attributed views × the applicable model weight. Other digital current contributions use the month-end total minus its previous total, once. Historical growth uses the month-end total minus the preceding total, once, then the model weight. Compute impact from exact values before rounding reported views. Do not remove zero-impact LinkedIn rows for expiration.
+
+Unresolved follow-ups, retained historical inputs without verified growth, absent model rules, unavailable month-end totals and negative deltas are excluded from pivots with reasons. Reporting month is distinct from original activity date. Combined reporting gives current contributions precedence over matching historical activity/author/tool rows and excludes duplicate attribution keys. Keep independent current and historical-growth scopes available.
+
+Build three SUM pivots: Type of activity / Impact hours; Tool / Impact hours; and Type of activity / Views / attendance filtered solely to Tool = IBM Bob. Preserve unit labels because Bob measures vary by activity. SPA charts, reporting detail and on-demand Excel/CSV downloads use the same exact eligible aggregates. Excel includes typed source rows, native SUM PivotTables and cached charts. Processing remains structured; no intermediate CSV files are created.
+
 ## Source and preparation
 
 Read two authenticated SharePoint .xlsx snapshots: AvocadoBot 2.0 - Runtimes DA impact inputs for current activities, and AppDev Advocacy impact metrics 2026 for historical metrics. Choose a reporting month in the SPA. WorkbookPreparationAgent uses Apache POI to read cells, cached formulas, and saved dates without evaluating formulas/macros/external links. Excel cells define columns: commas inside text are content, not column separators. Numeric cells use their stored numeric value rather than a formatted display such as 1,000, 25%, or a currency string.
@@ -46,7 +58,7 @@ Date,Author,Tool,Strategic initiative,Name of activity,Event,Collection,Type of 
 
 ## Phase 7: current month totals and validation
 
-Copy Views / attendance to Current total. ValidationAgent checks unique attribution rows, conservation of source activities, and the exact final schema. Preview structured results in the SPA. Generate CSVs individually or as a ZIP only when downloaded, using the chosen immutable result version. Phases 5–7 finish automatically after the required approvals. Model commentary is optional; Java rules determine calculations and review conditions.
+For legacy runs, copy Views / attendance to Current total. For SharePoint MONTH_END runs, derive current.csv from the month-end reporting rules above: retain exact monthly comparison totals, enrich the model fields, and mark unavailable cutoff values as excluded. ValidationAgent checks unique attribution rows, conservation of source activities, and the final schema. Preview structured results in the SPA. Generate CSVs individually or as a ZIP only when downloaded, using the chosen immutable result version. Phases 5–7 finish automatically after the required approvals. Model commentary is optional; Java rules determine calculations and review conditions.
 
 ## Review and reproducibility
 

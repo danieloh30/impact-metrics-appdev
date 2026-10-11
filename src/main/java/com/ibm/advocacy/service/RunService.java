@@ -32,6 +32,8 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class RunService {
     @Inject RuntimeWorkspace workspace;
     @Inject CsvCodec csv;
+    @Inject MonthlyReporting reporting;
+    @Inject ReportingWorkbook reportingWorkbook;
     @Inject com.ibm.advocacy.storage.ResultStore results;
     @Inject PhaseWorkflow workflow;
     @Inject com.ibm.advocacy.agentic.WorkbookWorkflow workbookWorkflow;
@@ -70,6 +72,7 @@ public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String cur
     workspace.bytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"),historyBytes);
     run.workbook.put("source","SharePoint");run.workbook.put("sourceUrl",currentUrl);
     run.workbook.put("historySourceUrl",historyUrl);run.workbook.put("historyFilename",historyFilename);run.workbook.put("historySha256",RuntimeWorkspace.hash(historyBytes));
+    run.workbook.put("reportingPolicy","MONTH_END");run.workbook.put("metricModel","DA metric model 2026");
     workspace.save(run);return run;
 }
 public synchronized byte[] input(String id,String name) throws Exception {
@@ -253,7 +256,34 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
             Artifact current=run.artifacts.get("current.csv");
             data=TrailingReporting.enrich(data,current==null?null:results.load(id,"current.csv",current.version()));
         }
-        return Calculations.reported(data,name.equals("current.csv"));
+        if(name.equals("current.csv")||name.equals("updated_90-day.csv"))data=reporting.artifact(run,data,name.equals("current.csv"));
+        return Calculations.reported(data,name.equals("current.csv")&&!"MONTH_END".equals(run.workbook.get("reportingPolicy")));
+    }
+    public synchronized MonthlyReporting.Report report(String id,String scope) throws Exception {
+        Run run=get(id);return reporting.build(run,rawArtifact(run,"current.csv"),rawArtifact(run,"updated_90-day.csv"),rawArtifact(run,"follow-up.csv"),scope);
+    }
+    private Data rawArtifact(Run run,String name) throws Exception {
+        Artifact artifact=run.artifacts.get(name);return artifact==null?new Data():results.load(run.id,name,artifact.version());
+    }
+    public synchronized byte[] reportingDownload(String id,String scope,boolean excel) throws Exception {
+        MonthlyReporting.Report report=report(id,scope);return excel?reportingWorkbook.write(report):csv.write(Calculations.reported(report.details(),false));
+    }
+    public synchronized Run confirmMonthEnd(String id,int revision,String contribution,String rowId,String value,String asOf,String note) throws Exception {
+        synchronized(lock(id)) {
+            Run run=get(id);
+            if(!run.status.equals("COMPLETED"))throw new ClientErrorException("Complete the agent phases before confirming reporting values",409);
+            if(run.reportingRevision!=revision)throw new ClientErrorException("Reporting values changed; reload the report before saving",409);
+            if(!Set.of("current","trailing").contains(contribution))throw new BadRequestException("Unknown contribution");
+            String month=String.valueOf(run.workbook.getOrDefault("month",""));
+            if(month.isBlank()||!java.time.YearMonth.parse(month).atEndOfMonth().toString().equals(asOf))throw new BadRequestException("Measurement date must be the reporting month's last day");
+            if(!java.time.LocalDate.parse(asOf).isBefore(java.time.LocalDate.now()))throw new BadRequestException("The reporting month must close before confirming a month-end total");
+            BigDecimalValidation(value);if(note!=null&&note.length()>1000)throw new BadRequestException("Month-end evidence note must be at most 1000 characters");
+            note=note==null||note.isBlank()?"User confirmed total as of "+asOf:note.strip();
+            Data data=rawArtifact(run,contribution.equals("current")?"current.csv":"updated_90-day.csv");
+            if(data.rows.stream().noneMatch(row->row.id.equals(rowId)))throw new BadRequestException("Unknown reporting row");
+            run.monthEndValues.put(contribution+":"+rowId,new com.ibm.advocacy.model.MonthEndValue(Calculations.format(Calculations.number(value)),asOf,note.strip(),Instant.now().toString()));
+            run.reportingRevision++;Pipeline.event(run,"Month-end reporting","Confirmed "+contribution+" total for "+rowId+" as of "+asOf);workspace.save(run);return run;
+        }
     }
     public synchronized byte[] zip(String id) throws Exception {
         Run run=get(id);ByteArrayOutputStream out=new ByteArrayOutputStream();

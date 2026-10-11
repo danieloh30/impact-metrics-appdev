@@ -1,0 +1,62 @@
+package com.ibm.advocacy.service;
+
+import com.ibm.advocacy.model.*;
+import com.ibm.advocacy.storage.RuntimeWorkspace;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.junit.jupiter.api.*;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.*;
+
+@QuarkusTest
+class MonthlyReportingApiTest {
+    @Inject RunService runs;
+    @Inject RuntimeWorkspace workspace;
+    @Inject MonthlyReporting reporting;
+    void row(Sheet sheet,int n,String... values){var row=sheet.createRow(n);for(int c=0;c<values.length;c++)row.createCell(c).setCellValue(values[c]);}
+    byte[] history(boolean duplicate) throws Exception {
+        try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+            Sheet model=book.createSheet("DA metric model 2026");row(model,0,"Outbound/Inbound","Trailing 90 days?","Activities","Media type","Unit Measure","Weight");row(model,1,"Outbound","No","Customer workshop","workshop","Attendance hours","10");if(duplicate)row(model,2,"Outbound","No","Customer workshop","workshop","Attendance hours","2");
+            Sheet old=book.createSheet("DA metric model");row(old,0,"Activities","Weight");row(old,1,"Customer workshop","2");
+            Sheet snapshot=book.createSheet("September inputs");row(snapshot,0,"Date","Author","Tool","Name of activity","Type of activity","Link / URL to resource","Current total","Previous total","Trailing 90-day","Views / attendance");row(snapshot,1,"2026-09-10","Daniel Oh","IBM Bob","Workshop","Customer workshop","","10","0","No","10");
+            Sheet ranges=book.createSheet("Ranges");row(ranges,0,"","","","","","","","Author","Geography");row(ranges,1,"","","","","","","","Daniel Oh","AMER");
+            book.write(out);return out.toByteArray();
+        }
+    }
+    Run fixture() throws Exception {
+        for(String name:List.of("RUN.md","AGENTS.md"))workspace.bytes(workspace.path(name),Files.readAllBytes(Path.of("runtimes",name)));
+        Run run=runs.create("Date,Author,Tool,Name of activity,Type of activity,Views / attendance,Link / URL to resource\n2026-09-10,Daniel Oh,IBM Bob,Workshop,Customer workshop,10,\n".getBytes(),null);
+        run.status="COMPLETED";run.workbook.put("month","2026-09");run.workbook.put("historySheets",List.of("September inputs"));run.workbook.put("reportingPolicy","MONTH_END");
+        workspace.bytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"),history(false));
+        Data data=workspace.data(run.id,"source");List<Row> rows=new ArrayList<>();for(Row source:data.rows)rows.add(Calculations.finalRow(source));
+        run.version=1;run.phase=7;run.artifacts.put("current.csv",new Artifact("current.csv",1,7,1,"fixture"));workspace.bytes(workspace.runPath(run.id,"output/1/current.json"),new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(new Data(com.ibm.advocacy.model.MetricsSchema.FINAL_HEADERS,rows)));workspace.save(run);return run;
+    }
+    @Test void modelLookupUsesOnly2026SheetAndRejectsDuplicateRules() throws Exception {
+        Run run=fixture();var model=reporting.context(run);assertEquals("10",model.rules().get("customer workshop").weight());assertEquals("AMER",model.geography().get("daniel oh"));assertTrue(model.sameMonth());
+        workspace.bytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"),history(true));assertThrows(jakarta.ws.rs.BadRequestException.class,()->reporting.context(run));
+    }
+    @Test void apiPivotsAndBothDownloadsShareTheSameExactTotals() throws Exception {
+        Run run=fixture();given().get("/api/runs/"+run.id+"/reporting").then().statusCode(200).body("impact",equalTo("100")).body("included",equalTo(1)).body("bob[0].metrics",equalTo("10"));
+        given().get("/api/runs/"+run.id+"/reporting?scope=bad").then().statusCode(400);
+        String csv=given().get("/api/runs/"+run.id+"/reporting/download?format=csv").then().statusCode(200).contentType("text/csv").extract().asString();assertTrue(csv.contains("Impact hours"));assertTrue(csv.contains("100"));
+        byte[] excel=given().get("/api/runs/"+run.id+"/reporting/download?format=xlsx").then().statusCode(200).contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").extract().asByteArray();try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(excel))){assertEquals(100,book.getSheet("Report").getRow(5).getCell(1).getNumericCellValue());}
+        Row row=runs.artifactData(run.id,"current.csv",null).rows.getFirst();assertEquals("10",row.get("Weight"));assertEquals("100",row.get("Impact hours"));assertEquals("AMER",row.get("Geography"));
+    }
+    @Test void monthEndConfirmationRejectsWrongCutoffUnknownRowsAndStaleRevision() throws Exception {
+        Run run=fixture();String rowId=workspace.data(run.id,"source").rows.getFirst().id;
+        assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"current",rowId,"100","2026-10-01",""));
+        assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"current","missing","100","2026-09-30",""));
+        assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"current",rowId,"-1","2026-09-30",""));
+        runs.confirmMonthEnd(run.id,0,"current",rowId,"100","2026-09-30",null);assertEquals(1,runs.get(run.id).reportingRevision);
+        assertEquals("1000",runs.report(run.id,"current").impact());
+        assertFalse(runs.report(run.id,"current").details().rows.getFirst().get("Recorded at").isBlank());
+        assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,0,"current",rowId,"100","2026-09-30",""));
+        Run saved=runs.get(run.id);saved.status="READY";workspace.save(saved);assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,1,"current",rowId,"100","2026-09-30",""));
+    }
+}

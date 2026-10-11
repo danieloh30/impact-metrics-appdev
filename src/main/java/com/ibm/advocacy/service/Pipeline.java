@@ -32,10 +32,11 @@ public class Pipeline {
     @Inject MetricCollectors collectors;
     @Inject com.ibm.advocacy.collector.ManualCheckExclusions manualCheckExclusions;
     @Inject RunService runs;
+    @Inject MonthlyReporting reporting;
     @Inject InstructionReviewer instructionReviewer;
     @Inject QualityReviewer qualityReviewer;
     @ConfigProperty(name="metrics.ai.enabled") boolean ai;
-    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; reported views use ceiling after exact allocation; valid no-URL historical views are retained without manual review or a delta; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; DZone background public article Views with phase-scoped browser reuse, explicit progress and approximate evidence for K/M/B display; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; exact 24-column current export; Current total = Views / attendance; no follow-up recalculation; runtimes only.";
+    public static final String CONTRACT="Workbook cell data directly to agents; structured results throughout phases; CSV only on download; supplied views+duration resolve blank current URLs; reported views use ceiling after exact allocation; valid no-URL historical views are retained without manual review or a delta; trailing eligibility honors Yes/No, blank flags default to digital only; preserve numeric baseline cells; configured blog/digital manual-check exclusions use workbook views without URL collection and no baseline is required when no delta is calculated; exact host/path/video rules; historical input is not a fresh delta; seven RUN phases in order; approve 1,2,3,4; unresolved digital exclusively follow-up; reactions only; DZone background public article Views with phase-scoped browser reuse, explicit progress and approximate evidence for K/M/B display; GitHub stars; attendance * max(duration,1); authors*tools divisor; six-decimal conserved allocation; trailing old Current to Previous, new total / URL row count, delta; legacy 24-column export; SharePoint month-end reporting uses DA metric model 2026 weights, units and geography; Markus/Elder supplements one-time No with blank comparison totals; exact impact before view ceiling; later live measurements cannot establish a past month-end; three SUM pivots with IBM Bob tool filter; combined overlap suppression; unresolved reporting exclusions; no follow-up recalculation; runtimes only.";
     public void instructions(PhaseTask task) throws Exception {
         String text=Files.readString(workspace.runPath(task.runId(),"instructions/RUN.md"))+"\n"+Files.readString(workspace.runPath(task.runId(),"instructions/AGENTS.md"));
         Run run=workspace.load(task.runId());
@@ -205,7 +206,7 @@ public class Pipeline {
         }
         for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline")&&run.issues.stream().noneMatch(i->i.rowId().equals(row.id)&&i.metricType().equals("BASELINE")))issue(run,row,row.get(NOTE),true,"BASELINE");
         rows=rows.stream().map(TrailingReporting::normalize).toList();
-        store(run,4,"updated_90-day.csv",Data.output(source,rows));
+        store(run,4,"updated_90-day.csv",reporting.artifact(run,Data.output(source,rows),false));
         event(run,"Trailing90Agent","Refreshed "+source.rows.size()+" rows using "+attempted.size()+" resource groups");workspace.save(run);
     }
     public void finish(PhaseTask task) throws Exception {
@@ -221,7 +222,7 @@ public class Pipeline {
             List<Row> rows=new ArrayList<>();for(String name:List.of("digital.csv","in-person.csv","follow-up.csv"))for(Row row:stage(run,5,name).rows)rows.add(Calculations.finalRow(row));
             store(run,6,"current.csv",new Data(FINAL_HEADERS,rows));
         } else if(task.phase()==7) {
-            Data data=stage(run,6,"current.csv");for(Row row:data.rows)row.cells.put("Current total",row.get(VIEWS));store(run,7,"current.csv",data);
+            Data data=stage(run,6,"current.csv");for(Row row:data.rows)row.cells.put("Current total",row.get(VIEWS));store(run,7,"current.csv",reporting.artifact(run,data,true));
         }
         event(run,"ExportAgent",PHASES.get(task.phase()-1)+" complete");workspace.save(run);
     }
@@ -234,7 +235,13 @@ public class Pipeline {
             run.artifacts.put(name,results.save(run.id,name,version,task.phase(),data));
         }
         if(task.phase()==7) {
-            Data current=stage(run,7,"current.csv");if(!current.headers.equals(FINAL_HEADERS))throw new IllegalStateException("Invalid final export schema");
+            Data current=stage(run,7,"current.csv");
+            boolean monthEnd="MONTH_END".equals(run.workbook.get("reportingPolicy"));
+            boolean validSchema=monthEnd?current.headers.size()>=FINAL_HEADERS.size()
+                    &&current.headers.subList(0,FINAL_HEADERS.size()).equals(FINAL_HEADERS)
+                    &&current.headers.containsAll(List.of("Reporting month","Reporting status","Reporting reason","Exact reporting metric","As of"))
+                    &&new HashSet<>(current.headers).size()==current.headers.size():current.headers.equals(FINAL_HEADERS);
+            if(!validSchema)throw new IllegalStateException("Invalid final export schema");
             long represented=current.rows.stream().map(r->r.id.split("/")[0]).distinct().count();if(represented!=run.currentRows)throw new IllegalStateException("Source-row conservation failed");
         }
         run.version=version;String summary=PHASES.get(task.phase()-1)+": "+names.size()+" artifacts; "+run.issues.size()+" issues.";
