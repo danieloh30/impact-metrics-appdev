@@ -1,0 +1,23 @@
+import {test,expect} from '@playwright/test';
+
+test('historical impact area charts import once, preserve month gaps, and make Bob optional',async({page})=>{
+ const months=Array.from({length:13},(_,i)=>{const date=new Date(Date.UTC(2025,8+i,1));return date.toISOString().slice(0,7);});
+ const run={id:'trend-run',createdAt:'2026-10-11T12:00:00Z',status:'COMPLETED',phase:7,version:7,currentRows:2,trailingRows:1,trailing:true,review:'Complete',error:'',instructionHash:'fixture',issues:[],artifacts:{},events:[],approvals:[],workbook:{month:'2026-09',currentSheet:'Current month inputs',historySheets:['September inputs'],windowStart:'2026-07-01',windowEnd:'2026-09-30',missingBaselines:0}};
+ const aggregate={name:'Recorded video',currentImpact:'80',trailingImpact:'20',impact:'100',metrics:'200',unit:'Views',rows:2};
+ let reads=0,ready=false;
+ await page.addInitScript(()=>localStorage.setItem('impact-run','trend-run'));
+ await page.route('**/api/**',async route=>{const url=new URL(route.request().url());let body:unknown={};
+  if(url.pathname==='/api/runs')body=[run];else if(url.pathname==='/api/runs/trend-run')body={run,approvalDigest:'fixture'};
+  else if(url.pathname.endsWith('/reporting/history')){reads++;expect(route.request().postDataJSON().url).toContain('Advocacy%20RUN%20metrics%202026.xlsx');ready=true;body={...run,reportingRevision:1};}
+  else if(url.pathname.endsWith('/reporting')){const data={months,available:months.map((_,i)=>ready?i!==1:i===12),series:[{name:'Recorded video',values:months.map((_,i)=>i===12?'100':ready&&i!==1?String(1000+i*200):null)},{name:'Blog post / slide shares / .io updates',values:months.map((_,i)=>i===12?'0':ready&&i!==1?String(2000+i*100):null)}]};body={month:'2026-09',cutoff:'2026-09-30',scope:'combined',revision:ready?1:0,complete:true,included:2,excluded:0,impact:'100',activity:[aggregate],tool:[{...aggregate,name:'IBM Bob'}],bob:[aggregate],details:{rows:[]},warnings:[],trends:{channel:data,tool:{...data,series:[{name:'IBM Bob',values:data.series[0].values}]},source:ready?{filename:'Advocacy RUN metrics 2026.xlsx',sheet:'AppDev Advocacy',endMonth:'2026-09'}:{},warnings:[]}};}
+  else if(url.pathname==='/api/sharepoint/session')body={busy:false,status:'CONNECTED',message:'Signed in',downloadStage:'DONE'};
+  await route.fulfill({json:body});
+ });
+ await page.goto('/');const channel=page.getByRole('article',{name:'Impact hours by channel (activities)'});await expect(channel.getByRole('img')).toBeVisible();await expect.poll(()=>reads).toBe(1);await expect(page.getByRole('region',{name:'Historical chart workbook'})).toContainText('Advocacy RUN metrics 2026.xlsx');
+ await expect(page.getByRole('article',{name:'Impact hours by tool'}).getByRole('img')).toBeVisible();await expect(page.getByRole('heading',{name:'IBM Bob metrics by activity type',exact:true})).toHaveCount(0);
+ await channel.getByRole('button',{name:'Show pivot table'}).click();await expect(channel).toContainText('Sep 25');await expect(channel).toContainText('Sep 26');await expect(channel).toContainText('Unavailable');await expect(channel).toContainText('1,000');await channel.getByRole('button',{name:'Show chart'}).click();
+ const video=channel.getByRole('button',{name:'Recorded video',exact:true});await video.click();await expect(video).toHaveAttribute('aria-pressed','false');await video.click();await expect(video).toHaveAttribute('aria-pressed','true');
+ await channel.getByRole('combobox',{name:'Inspect month'}).selectOption('12');await expect(channel.getByRole('status')).toContainText('Sep 26 · 100 impact hours');
+ await page.getByRole('checkbox',{name:'Show optional IBM Bob metrics by activity type'}).check();await expect(page.getByRole('heading',{name:'IBM Bob metrics by activity type',exact:true})).toBeVisible();await expect(page.locator('#download-report')).toHaveAttribute('href',/bob=true&format=xlsx/);
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

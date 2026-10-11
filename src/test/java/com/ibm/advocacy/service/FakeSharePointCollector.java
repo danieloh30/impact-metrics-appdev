@@ -14,6 +14,7 @@ public class FakeSharePointCollector extends SharePointCollector {
     public static volatile byte[] lastBytes;
     @Override public Workbook download(String url) throws Exception {
         var uri=fileUri(url);downloads.incrementAndGet();
+        if(uri.getPath().contains("Advocacy RUN metrics")) {lastBytes=new ImpactTrendsTest().fixture();return new Workbook(lastBytes,"Advocacy RUN metrics 2026.xlsx",uri.toASCIIString());}
         lastBytes=uri.getHost().equals("ibm.sharepoint.com")?history():new WorkbookImportTest().fixture(false);
         return new Workbook(lastBytes,uri.getHost().equals("ibm.sharepoint.com")?"AppDev metrics.xlsx":"SharePoint activities.xlsx",uri.toASCIIString());
     }

@@ -59,4 +59,15 @@ class MonthlyReportingApiTest {
         assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,0,"current",rowId,"100","2026-09-30",""));
         Run saved=runs.get(run.id);saved.status="READY";workspace.save(saved);assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,1,"current",rowId,"100","2026-09-30",""));
     }
+    @Test void chartHistorySnapshotImportsSeparatelyAndDoesNotReplaceAgentSources() throws Exception {
+        Run run=fixture();byte[] original=Files.readAllBytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"));
+        String url="https://ibm.sharepoint.com/sites/DEPT-DeveloperRelations/Shared%20Documents/Advocacy%20RUN%20metrics%202026.xlsx";
+        given().contentType("application/json").body(Map.of("revision",0,"url",url)).post("/api/runs/"+run.id+"/reporting/history").then().statusCode(200).body("reportingRevision",equalTo(1));
+        assertArrayEquals(original,Files.readAllBytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx")));assertTrue(Files.isRegularFile(workspace.runPath(run.id,"rawdata/chart-history-1.xlsx")));
+        given().get("/api/runs/"+run.id+"/reporting").then().statusCode(200).body("trends.channel.months[0]",equalTo("2025-09")).body("trends.channel.months[12]",equalTo("2026-09")).body("trends.tool.series[0].values[12]",equalTo("100")).body("trends.source.endMonth",equalTo("2026-09"));
+        given().contentType("application/json").body(Map.of("revision",0,"url",url)).post("/api/runs/"+run.id+"/reporting/history").then().statusCode(409);
+        given().contentType("application/json").body(Map.of("revision",1,"url",url,"endMonth","2026-08")).post("/api/runs/"+run.id+"/reporting/history").then().statusCode(400);assertEquals(1,runs.get(run.id).reportingRevision);
+        byte[] firstSnapshot=Files.readAllBytes(workspace.runPath(run.id,"rawdata/chart-history-1.xlsx"));
+        runs.importChartHistory(run.id,1,url,null);assertArrayEquals(firstSnapshot,Files.readAllBytes(workspace.runPath(run.id,"rawdata/chart-history-1.xlsx")));assertTrue(Files.isRegularFile(workspace.runPath(run.id,"rawdata/chart-history-2.xlsx")));
+    }
 }

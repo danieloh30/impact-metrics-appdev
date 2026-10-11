@@ -20,11 +20,12 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class MonthlyReporting {
     @Inject RuntimeWorkspace workspace;
     @Inject WorkbookService workbooks;
+    @Inject ImpactTrends trends;
     public record Rule(String unit,String weight,String trailing) {}
     public record Context(Map<String,Rule> rules,Map<String,String> geography,Data snapshot,boolean sameMonth) {}
     public record Aggregate(String name,String currentImpact,String trailingImpact,String impact,String metrics,String unit,int rows) {}
     public record Report(String month,String cutoff,String scope,int revision,boolean complete,int included,int excluded,
-                         String impact,List<Aggregate> activity,List<Aggregate> tool,List<Aggregate> bob,Data details,List<String> warnings) {}
+                         String impact,List<Aggregate> activity,List<Aggregate> tool,List<Aggregate> bob,Data details,List<String> warnings,ImpactTrends.Timeline trends) {}
     static String key(String value) {return value.strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}
     static boolean oneTime(Row row) {return row.id.toLowerCase(Locale.ROOT).startsWith("markus blog data:")||row.id.toLowerCase(Locale.ROOT).startsWith("elder blog data:")||BlogSheetReader.matches(row.get("Source sheet"));}
     static BigDecimal nonnegative(String value) {BigDecimal n=Calculations.number(value);if(n.signum()<0)throw new IllegalArgumentException("Negative metric");return n;}
@@ -142,7 +143,13 @@ public class MonthlyReporting {
     }
     public Report build(Run run,Data current,Data trailing,Data follow,String scope) throws Exception {
         if(!Set.of("current","trailing","combined").contains(scope))throw new BadRequestException("Unknown reporting scope");
-        return build(run,current,trailing,follow,scope,context(run));
+        Report report=build(run,current,trailing,follow,scope,context(run));
+        if(report.month().isBlank())return report;
+        ImpactTrends.Snapshot history=null;Map<String,Object> source=new LinkedHashMap<>();
+        Object metadata=run.workbook.get("chartHistory");if(metadata instanceof Map<?,?> map)map.forEach((key,value)->source.put(String.valueOf(key),value));
+        Path historyFile=workspace.runPath(run.id,"rawdata/"+String.valueOf(source.getOrDefault("snapshotFilename","chart-history.xlsx")));
+        if(Files.isRegularFile(historyFile))history=trends.read(Files.readAllBytes(historyFile),String.valueOf(source.getOrDefault("filename","")),String.valueOf(source.getOrDefault("endMonth","")));
+        return new Report(report.month(),report.cutoff(),report.scope(),report.revision(),report.complete(),report.included(),report.excluded(),report.impact(),report.activity(),report.tool(),report.bob(),report.details(),report.warnings(),ImpactTrends.build(report.month(),report.activity(),report.tool(),history,Map.copyOf(source),report.included()>0||report.excluded()==0));
     }
     static Report build(Run run,Data current,Data trailing,Data follow,String scope,Context context) {
         Set<String> unresolved=new HashSet<>();follow.rows.forEach(row->unresolved.add(row.id));
@@ -164,7 +171,8 @@ public class MonthlyReporting {
         if(selected.size()>eligible.size())warnings.add((selected.size()-eligible.size())+" rows are excluded. Review the detail reasons before treating this report as complete.");
         if(run.status.equals("COMPLETED"))warnings.add("Monthly workbook values are treated as month-end assertions. Their sheet labels alone do not prove when they were measured.");
         BigDecimal total=eligible.stream().map(row->Calculations.number(row.get("Impact hours"))).reduce(BigDecimal.ZERO,BigDecimal::add);
-        return new Report(month,month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString(),scope,run.reportingRevision,run.status.equals("COMPLETED"),eligible.size(),selected.size()-eligible.size(),Calculations.format(total),aggregate(eligible,"Type of activity"),aggregate(eligible,"Tool"),aggregate(eligible.stream().filter(row->row.get("Tool").equals("IBM Bob")).toList(),"Type of activity"),details,warnings);
+        var activity=aggregate(eligible,"Type of activity");var tool=aggregate(eligible,"Tool");
+        return new Report(month,month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString(),scope,run.reportingRevision,run.status.equals("COMPLETED"),eligible.size(),selected.size()-eligible.size(),Calculations.format(total),activity,tool,aggregate(eligible.stream().filter(row->row.get("Tool").equals("IBM Bob")).toList(),"Type of activity"),details,warnings,month.isBlank()?null:ImpactTrends.build(month,activity,tool,null,Map.of(),!eligible.isEmpty()||selected.isEmpty()));
     }
     static List<Aggregate> aggregate(List<Row> rows,String field) {
         Map<String,List<Row>> groups=new TreeMap<>();for(Row row:rows)groups.computeIfAbsent(row.get(field),k->new ArrayList<>()).add(row);

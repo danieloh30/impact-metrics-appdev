@@ -31,14 +31,18 @@ public class RunResource {
     public record InputReview(@Min(1) int version,@NotBlank String rowId,String views,String duration,boolean keepOriginal,@Size(max=1000) String note) {}
     public record Manual(@Min(1) int version,@NotBlank String rowId,@NotBlank String value,@NotBlank String type,@Size(max=1000) String evidence,boolean attributed) {}
     public record MonthEnd(@Min(0) int revision,@NotBlank String contribution,@NotBlank String rowId,@NotBlank String value,@NotBlank String asOf,@Size(max=1000) String note) {}
+    public record ChartHistory(@Min(0) int revision,@NotBlank String url,String endMonth) {}
+    @POST @Path("/runs/{id}/reporting/history") public Run chartHistory(@PathParam("id") String id,@Valid ChartHistory body) throws Exception {
+        if(body==null)throw new BadRequestException("Chart history workbook required");return service.importChartHistory(id,body.revision(),body.url(),body.endMonth());
+    }
     @GET @Path("/runs/{id}/reporting") public com.ibm.advocacy.service.MonthlyReporting.Report reporting(@PathParam("id") String id,@QueryParam("scope") @DefaultValue("combined") String scope) throws Exception {return service.report(id,scope);}
     @POST @Path("/runs/{id}/reporting/measurements") public Run monthEnd(@PathParam("id") String id,@Valid MonthEnd body) throws Exception {
         if(body==null)throw new BadRequestException("Month-end measurement required");return service.confirmMonthEnd(id,body.revision(),body.contribution(),body.rowId(),body.value(),body.asOf(),body.note());
     }
-    @GET @Path("/runs/{id}/reporting/download") public Response reportingDownload(@PathParam("id") String id,@QueryParam("scope") @DefaultValue("combined") String scope,@QueryParam("format") @DefaultValue("xlsx") String format) throws Exception {
+    @GET @Path("/runs/{id}/reporting/download") public Response reportingDownload(@PathParam("id") String id,@QueryParam("scope") @DefaultValue("combined") String scope,@QueryParam("format") @DefaultValue("xlsx") String format,@QueryParam("bob") @DefaultValue("false") boolean bob) throws Exception {
         if(!Set.of("xlsx","csv").contains(format))throw new BadRequestException("Unknown reporting format");
         String type=format.equals("xlsx")?"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"text/csv; charset=utf-8";
-        return Response.ok(service.reportingDownload(id,scope,format.equals("xlsx")),type).header("Content-Disposition","attachment; filename=\"monthly-report-"+scope+"."+format+"\"").header("X-Content-Type-Options","nosniff").build();
+        return Response.ok(service.reportingDownload(id,scope,format.equals("xlsx"),bob),type).header("Content-Disposition","attachment; filename=\"monthly-report-"+scope+"."+format+"\"").header("X-Content-Type-Options","nosniff").build();
     }
     @GET @Path("/config") public Map<String,Object> config() { return Map.of("phases",PHASES,"contract",Pipeline.CONTRACT,"outputs",OUTPUTS); }
     @GET @Path("/linkedin/session") public Map<String,Object> session() { return linkedin.session(); }

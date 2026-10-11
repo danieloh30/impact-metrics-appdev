@@ -15,8 +15,10 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 /** On-demand Excel export: typed detail, native SUM pivots, and cached summary charts. */
 @ApplicationScoped
 public class ReportingWorkbook {
+    private static final String[] TREND_COLORS={"19692b","0c5571","299dc1","bf6b31","8d3294","65a645","ea7846","545d8b","9dbb5f","d046b0","328a80","bb9237","606eb1","ad4862","83bede","557745","dbad72","53565a","6f497d","ca8ba1","174b36","97703c","4693a5","948675"};
     private static final Set<String> NUMBERS=Set.of("Current total","Previous total",VIEWS,"Weight","Impact hours","Exact reporting metric","Exact trailing growth");
-    public byte[] write(MonthlyReporting.Report report) throws IOException {
+    public byte[] write(MonthlyReporting.Report report) throws IOException {return write(report,false);}
+    public byte[] write(MonthlyReporting.Report report,boolean includeBob) throws IOException {
         try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
             XSSFSheet overview=book.createSheet("Report");
             line(overview,0,"AppDev advocacy impact",report.month());line(overview,1,"As of",report.cutoff());line(overview,2,"Scope",report.scope());
@@ -30,7 +32,13 @@ public class ReportingWorkbook {
             details(book,"All reporting rows",report.details());
             List<Row> eligible=report.details().rows.stream().filter(row->row.get("Reporting status").equals("Included")).toList();
             XSSFSheet source=details(book,"Eligible data",new Data(report.details().headers,eligible));
-            summaries(book,"Activity summary",report.activity(),false,report.month());summaries(book,"Tool summary",report.tool(),false,report.month());summaries(book,"Bob summary",report.bob(),true,report.month());
+            summaries(book,"Activity summary",report.activity(),false,report.month(),false);summaries(book,"Tool summary",report.tool(),false,report.month(),false);summaries(book,"Bob summary",report.bob(),true,report.month(),includeBob);
+            if(report.trends()!=null) {
+                timeline(book,"Channel history","Impact hours by channel (activities)",report.trends().channel());timeline(book,"Tool history","Impact hours by tool",report.trends().tool());
+                var notes=book.createSheet("Chart history source");int r=0;for(var entry:report.trends().source().entrySet())line(notes,r++,entry.getKey(),entry.getValue());
+                line(notes,r++,"Selected month",report.month()+"; processed "+report.scope()+" contribution replaces the published column");for(String warning:report.trends().warnings())line(notes,r++,"Source note",warning);
+                notes.setColumnWidth(0,26*256);notes.setColumnWidth(1,95*256);
+            }
             if(!eligible.isEmpty()) {
                 pivot(book,"Activity pivot",source,report.details().headers,"Type of activity","Impact hours",false);
                 pivot(book,"Tool pivot",source,report.details().headers,"Tool","Impact hours",false);
@@ -70,7 +78,7 @@ public class ReportingWorkbook {
         pivot.getPivotCacheDefinition().getCTPivotCacheDefinition().setRefreshOnLoad(true);
         sheet.setColumnWidth(0,55*256);sheet.setColumnWidth(1,25*256);
     }
-    private static void summaries(XSSFWorkbook book,String name,List<MonthlyReporting.Aggregate> rows,boolean bob,String month) {
+    private static void summaries(XSSFWorkbook book,String name,List<MonthlyReporting.Aggregate> rows,boolean bob,String month,boolean plot) {
         XSSFSheet sheet=book.createSheet(name);String[] headers={"Activity / tool","Current impact hours","Historical growth impact hours","Total impact hours","Allocated metrics","Metric unit"};
         var head=sheet.createRow(0);for(int c=0;c<headers.length;c++)head.createCell(c).setCellValue(headers[c]);
         for(int i=0;i<rows.size();i++) {
@@ -78,7 +86,7 @@ public class ReportingWorkbook {
             row.createCell(1).setCellValue(Double.parseDouble(a.currentImpact()));row.createCell(2).setCellValue(Double.parseDouble(a.trailingImpact()));row.createCell(3).setCellValue(Double.parseDouble(a.impact()));row.createCell(4).setCellValue(Double.parseDouble(a.metrics()));row.createCell(5).setCellValue(a.unit());
         }
         sheet.createFreezePane(0,1);sheet.setColumnWidth(0,60*256);for(int c=1;c<6;c++)sheet.setColumnWidth(c,28*256);
-        if(rows.isEmpty())return;
+        if(rows.isEmpty()||!plot)return;
         var drawing=sheet.createDrawingPatriarch();var anchor=drawing.createAnchor(0,0,0,0,7,0,20,25);var chart=drawing.createChart(anchor);
         chart.setTitleText(name+" — "+month);chart.setTitleOverlay(false);
         var category=chart.createCategoryAxis(AxisPosition.LEFT);category.setTitle(bob?"Activity type":"Activity type / tool");
@@ -89,5 +97,18 @@ public class ReportingWorkbook {
             var series=bars.addSeries(labels,XDDFDataSourcesFactory.fromNumericCellRange(sheet,new CellRangeAddress(1,rows.size(),column,column)));series.setTitle(headers[column],null);
         }
         chart.getOrAddLegend().setPosition(LegendPosition.BOTTOM);chart.plot(bars);
+    }
+    private static void timeline(XSSFWorkbook book,String name,String title,ImpactTrends.Chart data) {
+        XSSFSheet sheet=book.createSheet(name);var header=sheet.createRow(0);header.createCell(0).setCellValue("Month");
+        for(int s=0;s<data.series().size();s++)header.createCell(s+1).setCellValue(data.series().get(s).name());
+        for(int m=0;m<data.months().size();m++) {var row=sheet.createRow(m+1);row.createCell(0).setCellValue(data.months().get(m));for(int s=0;s<data.series().size();s++){String value=data.series().get(s).values().get(m);if(value!=null)row.createCell(s+1).setCellValue(Double.parseDouble(value));}}
+        sheet.createFreezePane(1,1);sheet.setColumnWidth(0,18*256);for(int s=0;s<data.series().size();s++)sheet.setColumnWidth(s+1,28*256);
+        if(data.series().isEmpty())return;
+        var drawing=sheet.createDrawingPatriarch();int start=data.months().size()+3;var chart=drawing.createChart(drawing.createAnchor(0,0,0,0,0,start,6,start+27));chart.setTitleText(title);chart.setTitleOverlay(false);
+        var category=chart.createCategoryAxis(AxisPosition.BOTTOM);category.setTitle("Reporting month");var value=chart.createValueAxis(AxisPosition.LEFT);value.setTitle("Impact hours");value.setNumberFormat("#,##0");value.setCrosses(AxisCrosses.AUTO_ZERO);category.crossAxis(value);value.crossAxis(category);
+        var area=(XDDFAreaChartData)chart.createData(ChartTypes.AREA,category,value);area.setGrouping(Grouping.STACKED);
+        var months=XDDFDataSourcesFactory.fromStringCellRange(sheet,new CellRangeAddress(1,data.months().size(),0,0));
+        for(int s=0;s<data.series().size();s++){var series=area.addSeries(months,XDDFDataSourcesFactory.fromNumericCellRange(sheet,new CellRangeAddress(1,data.months().size(),s+1,s+1)));series.setTitle(data.series().get(s).name(),null);series.setFillProperties(new org.apache.poi.xddf.usermodel.XDDFSolidFillProperties(org.apache.poi.xddf.usermodel.XDDFColor.from(HexFormat.of().parseHex(TREND_COLORS[s%TREND_COLORS.length]))));}
+        chart.displayBlanksAs(DisplayBlanks.GAP);chart.getOrAddLegend().setPosition(LegendPosition.RIGHT);chart.plot(area);
     }
 }

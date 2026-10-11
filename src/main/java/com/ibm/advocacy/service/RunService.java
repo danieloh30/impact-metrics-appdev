@@ -34,6 +34,8 @@ public class RunService {
     @Inject CsvCodec csv;
     @Inject MonthlyReporting reporting;
     @Inject ReportingWorkbook reportingWorkbook;
+    @Inject ImpactTrends impactTrends;
+    @Inject com.ibm.advocacy.collector.SharePointCollector chartCollector;
     @Inject com.ibm.advocacy.storage.ResultStore results;
     @Inject PhaseWorkflow workflow;
     @Inject com.ibm.advocacy.agentic.WorkbookWorkflow workbookWorkflow;
@@ -262,11 +264,23 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
     public synchronized MonthlyReporting.Report report(String id,String scope) throws Exception {
         Run run=get(id);return reporting.build(run,rawArtifact(run,"current.csv"),rawArtifact(run,"updated_90-day.csv"),rawArtifact(run,"follow-up.csv"),scope);
     }
+    public synchronized Run importChartHistory(String id,int revision,String url,String endMonth) throws Exception {
+        Run run=get(id);
+        if(!run.status.equals("COMPLETED"))throw new ClientErrorException("Complete the agent phases before reading chart history",409);
+        if(run.reportingRevision!=revision)throw new ClientErrorException("Reporting changed; reload before reading chart history",409);
+        var workbook=chartCollector.download(url);var snapshot=impactTrends.read(workbook.bytes(),workbook.filename(),endMonth);
+        Map<String,Object> source=new LinkedHashMap<>();source.put("filename",workbook.filename());source.put("sourceUrl",workbook.sourceUrl());source.put("sha256",RuntimeWorkspace.hash(workbook.bytes()));source.put("sheet",ImpactTrends.SHEET);source.put("endMonth",snapshot.endMonth());source.put("importedAt",Instant.now().toString());
+        String snapshotFilename="chart-history-"+(run.reportingRevision+1)+".xlsx";source.put("snapshotFilename",snapshotFilename);
+        workspace.bytes(workspace.runPath(id,"rawdata/"+snapshotFilename),workbook.bytes());run.workbook.put("chartHistory",source);run.reportingRevision++;Pipeline.event(run,"Historical chart input","Read "+workbook.filename()+" / "+ImpactTrends.SHEET+" ending "+snapshot.endMonth()+"; snapshot "+snapshotFilename);workspace.save(run);return run;
+    }
     private Data rawArtifact(Run run,String name) throws Exception {
         Artifact artifact=run.artifacts.get(name);return artifact==null?new Data():results.load(run.id,name,artifact.version());
     }
     public synchronized byte[] reportingDownload(String id,String scope,boolean excel) throws Exception {
-        MonthlyReporting.Report report=report(id,scope);return excel?reportingWorkbook.write(report):csv.write(Calculations.reported(report.details(),false));
+        return reportingDownload(id,scope,excel,false);
+    }
+    public synchronized byte[] reportingDownload(String id,String scope,boolean excel,boolean bob) throws Exception {
+        MonthlyReporting.Report report=report(id,scope);return excel?reportingWorkbook.write(report,bob):csv.write(Calculations.reported(report.details(),false));
     }
     public synchronized Run confirmMonthEnd(String id,int revision,String contribution,String rowId,String value,String asOf,String note) throws Exception {
         synchronized(lock(id)) {

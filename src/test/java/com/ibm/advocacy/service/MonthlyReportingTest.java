@@ -75,7 +75,8 @@ class MonthlyReportingTest {
             for(String name:List.of("Activity pivot","Tool pivot","IBM Bob pivot")) {
                 var pivot=book.getSheet(name).getPivotTables().getFirst();assertEquals("sum",pivot.getCTPivotTableDefinition().getDataFields().getDataFieldArray(0).getSubtotal().toString());assertTrue(pivot.getPivotCacheDefinition().getCTPivotCacheDefinition().getRefreshOnLoad());
             }
-            for(String name:List.of("Activity summary","Tool summary","Bob summary"))assertEquals(1,book.getSheet(name).getDrawingPatriarch().getCharts().size());
+            for(String name:List.of("Channel history","Tool history"))assertEquals(1,book.getSheet(name).getDrawingPatriarch().getCharts().size());
+            assertNull(book.getSheet("Bob summary").getDrawingPatriarch());
             assertEquals(166.5,book.getSheet("Bob summary").getRow(1).getCell(4).getNumericCellValue());assertEquals(1,book.getSheet("Eligible data").getTables().size());
         }
     }

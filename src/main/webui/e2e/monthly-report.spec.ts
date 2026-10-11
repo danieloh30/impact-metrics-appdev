@@ -15,7 +15,7 @@ test('month-end pivots support scope, exact totals, detail search and dated conf
  });
  await page.goto('/');await page.getByRole('button',{name:/Oct 11.*2 activities/}).click();
  const section=page.getByRole('region',{name:'Month-end pivots and charts'});await expect(section).toContainText('91.5');await expect(section).toContainText('2026-09-30');
- await expect(section.getByRole('link',{name:'Download pivots & charts .xlsx ↓'})).toHaveAttribute('href','/api/runs/month-end/reporting/download?scope=combined&format=xlsx');
+ await expect(section.getByRole('link',{name:'Download pivots & charts .xlsx ↓'})).toHaveAttribute('href','/api/runs/month-end/reporting/download?scope=combined&bob=false&format=xlsx');
  await section.getByRole('button',{name:'Show pivot table'}).first().click();await expect(section).toContainText('Historical growth impact hours');await expect(section).toContainText('83.25');
  await section.getByRole('combobox',{name:'Reporting scope'}).selectOption('trailing');await expect.poll(()=>scopes.includes('trailing')).toBe(true);
  await section.getByRole('searchbox',{name:'Search reporting detail'}).fill('Missing dated');await expect(section.locator('.report-detail tbody tr')).toHaveCount(1);
