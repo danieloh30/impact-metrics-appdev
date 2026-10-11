@@ -34,6 +34,22 @@ class ReportingPolicyTest {
         try(ZipInputStream zip=new ZipInputStream(new ByteArrayInputStream(runs.zip(r.id)))){assertEquals("updated_90-day.csv",zip.getNextEntry().getName());assertArrayEquals(runs.artifact(r.id,"updated_90-day.csv",null),zip.readAllBytes());}
         assertArrayEquals(original,Files.readAllBytes(workspace.runPath(r.id,"output/1/updated_90-day.json")));
     }
+    @Test void legacyTrailingExportsAndFiltersUseCorrectedInterpretationWithoutRewritingSnapshots() throws Exception {
+        Run r=run();r.version=1;r.workbook.put("historySha256","baseline-hash");
+        Row delta=new Row("delta",Map.of(VIEWS,"433.5","Weight","0.5","Impact hours","999","Metric basis","Trailing delta","Name of activity","Measured article"));
+        Row retained=new Row("keep",Map.of(VIEWS,"9000","Weight","0.8","Impact hours","7200","Metric basis","Workbook content input — not a trailing delta","Name of activity","Retained article"));
+        Row unresolved=new Row("missing",Map.of(VIEWS,"","Metric basis","Unresolved trailing delta","Name of activity","Missing article"));
+        r.artifacts.put("updated_90-day.csv",results.save(r.id,"updated_90-day.csv",1,4,Data.output(new Data(List.of("Type of activity",URL,"Author"),List.of()),List.of(delta,retained,unresolved))));workspace.save(r);
+        Path snapshot=workspace.runPath(r.id,"output/1/updated_90-day.json");byte[] original=Files.readAllBytes(snapshot);
+        String endpoint="/api/runs/"+r.id+"/artifacts/updated_90-day.csv/preview";
+        given().queryParam("basis","growth").get(endpoint).then().statusCode(200).body("total",org.hamcrest.Matchers.is(1)).body("unfilteredTotal",org.hamcrest.Matchers.is(3)).body("rows[0].cells.'Impact hours'",org.hamcrest.Matchers.is("216.75")).body("reporting.exactGrowth",org.hamcrest.Matchers.is("433.5")).body("reporting.retainedRows",org.hamcrest.Matchers.is(1));
+        given().queryParam("basis","retained").queryParam("q","Retained").get(endpoint).then().statusCode(200).body("total",org.hamcrest.Matchers.is(1)).body("rows[0].cells.'Impact hours'",org.hamcrest.Matchers.is(""));
+        given().queryParam("basis","unresolved").get(endpoint).then().statusCode(200).body("total",org.hamcrest.Matchers.is(1));
+        given().queryParam("basis","unsupported").get(endpoint).then().statusCode(400);
+        Data exported=csv.read(runs.artifact(r.id,"updated_90-day.csv",null),false);assertEquals(3,exported.rows.size());assertEquals("216.75",exported.rows.getFirst().get("Impact hours"));assertEquals("999",exported.rows.getFirst().get("Original Impact hours"));
+        try(ZipInputStream zip=new ZipInputStream(new ByteArrayInputStream(runs.zip(r.id)))){zip.getNextEntry();assertArrayEquals(runs.artifact(r.id,"updated_90-day.csv",null),zip.readAllBytes());}
+        assertArrayEquals(original,Files.readAllBytes(snapshot));
+    }
     @Test void currentExportRoundsOnlyReportingValuesAndMirrorsCurrentTotal() {
         Data source=new Data(List.of(VIEWS,"Current total","Duration (in hours)","Attendance hours"),List.of(new Row("one",Map.of(VIEWS,"12.5","Current total","12.5","Duration (in hours)","1.5","Attendance hours","12.5")),new Row("tiny",Map.of(VIEWS,"0.000001")),new Row("invalid",Map.of(VIEWS,"bad")),new Row("blank",Map.of(VIEWS,""))));
         Data report=Calculations.reported(source,true);assertEquals(List.of("13","1","bad",""),report.rows.stream().map(r->r.get(VIEWS)).toList());assertEquals("13",report.rows.getFirst().get("Current total"));assertEquals("1.5",report.rows.getFirst().get("Duration (in hours)"));assertEquals("12.5",report.rows.getFirst().get("Attendance hours"));assertEquals("12.5",source.rows.getFirst().get(VIEWS));

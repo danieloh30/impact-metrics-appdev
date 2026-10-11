@@ -248,7 +248,12 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
     public synchronized Data artifactData(String id,String name,Integer version) throws Exception {
         if(!OUTPUTS.contains(name))throw new BadRequestException("Unknown artifact");Run run=get(id);Artifact artifact=run.artifacts.get(name);if(artifact==null)throw new NotFoundException("Artifact is not generated yet");
         int chosen=version==null?artifact.version():version;if(chosen<1||chosen>run.version)throw new BadRequestException("Invalid artifact version");
-        return Calculations.reported(results.load(id,name,chosen),name.equals("current.csv"));
+        Data data=results.load(id,name,chosen);
+        if(name.equals("updated_90-day.csv")) {
+            Artifact current=run.artifacts.get("current.csv");
+            data=TrailingReporting.enrich(data,current==null?null:results.load(id,"current.csv",current.version()));
+        }
+        return Calculations.reported(data,name.equals("current.csv"));
     }
     public synchronized byte[] zip(String id) throws Exception {
         Run run=get(id);ByteArrayOutputStream out=new ByteArrayOutputStream();

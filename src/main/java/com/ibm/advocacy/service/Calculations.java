@@ -75,7 +75,7 @@ public final class Calculations {
             if(m==null) { group.getValue().forEach(r->r.cells.put(NOTE,"Current measurement unavailable — prior total retained; delta not calculated"));continue; }
             List<BigDecimal> allocations=allocate(number(m.value()),group.getValue().size());
             for(int i=0;i<allocations.size();i++) {
-                Row row=group.getValue().get(i);row.cells.put("Metric basis","Trailing delta");row.cells.put("Current total",format(allocations.get(i)));
+                Row row=group.getValue().get(i);row.cells.put("Metric basis","Trailing delta");row.cells.put("Measured at",m.collectedAt());row.cells.put("Current total",format(allocations.get(i)));
                 try { BigDecimal delta=allocations.get(i).subtract(number(row.get("Previous total")));row.cells.put(VIEWS,format(delta));row.cells.put(NOTE,(delta.signum()<0?"Negative delta — review; ":"")+m.type()+" collected "+m.collectedAt()+(m.evidence()==null||m.evidence().isBlank()?"":"; "+m.evidence())); }
                 catch(IllegalArgumentException e) { row.cells.put(NOTE,"Invalid previous baseline — "+e.getMessage()); }
             }

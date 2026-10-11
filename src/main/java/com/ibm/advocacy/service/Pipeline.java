@@ -204,6 +204,7 @@ public class Pipeline {
             row.cells.put(NOTE,input.note()+"; no fresh lifetime total or trailing delta calculated");
         }
         for(Row row:rows)if(row.get(NOTE).startsWith("Invalid previous baseline")&&run.issues.stream().noneMatch(i->i.rowId().equals(row.id)&&i.metricType().equals("BASELINE")))issue(run,row,row.get(NOTE),true,"BASELINE");
+        rows=rows.stream().map(TrailingReporting::normalize).toList();
         store(run,4,"updated_90-day.csv",Data.output(source,rows));
         event(run,"Trailing90Agent","Refreshed "+source.rows.size()+" rows using "+attempted.size()+" resource groups");workspace.save(run);
     }

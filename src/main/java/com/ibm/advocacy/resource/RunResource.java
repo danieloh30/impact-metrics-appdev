@@ -6,6 +6,7 @@ import com.ibm.advocacy.model.Data;
 import com.ibm.advocacy.model.Run;
 import com.ibm.advocacy.service.Pipeline;
 import com.ibm.advocacy.service.RunService;
+import com.ibm.advocacy.service.TrailingReporting;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.common.annotation.Blocking;
@@ -53,12 +54,16 @@ public class RunResource {
     @POST @Path("/runs/{id}/retry") public Response retry(@PathParam("id") String id) throws Exception { return accepted(service.retry(id)); }
     @POST @Path("/runs/{id}/cancel") public Run cancel(@PathParam("id") String id) throws Exception { return service.cancel(id); }
     @GET @Path("/runs/{id}/artifacts") public Collection<Artifact> artifacts(@PathParam("id") String id) throws Exception { return service.get(id).artifacts.values(); }
-    @GET @Path("/runs/{id}/artifacts/{name}/preview") public Map<String,Object> preview(@PathParam("id") String id,@PathParam("name") String name,@QueryParam("version") Integer version,@QueryParam("offset") @DefaultValue("0") @Min(0) int offset,@QueryParam("limit") @DefaultValue("50") @Min(1) @Max(200) int limit,@QueryParam("q") @Size(max=200) String query) throws Exception {
+    @GET @Path("/runs/{id}/artifacts/{name}/preview") public Map<String,Object> preview(@PathParam("id") String id,@PathParam("name") String name,@QueryParam("version") Integer version,@QueryParam("offset") @DefaultValue("0") @Min(0) int offset,@QueryParam("limit") @DefaultValue("50") @Min(1) @Max(200) int limit,@QueryParam("q") @Size(max=200) String query,@QueryParam("basis") @DefaultValue("all") String basis) throws Exception {
         Data data=service.artifactData(id,name,version);
         String term=query==null?"":query.strip().toLowerCase(Locale.ROOT);
-        var matches=term.isEmpty()?data.rows:data.rows.stream().filter(row->data.headers.stream().anyMatch(header->{String value=row.get(header);return value!=null&&value.toLowerCase(Locale.ROOT).contains(term);})).toList();
+        if(!Set.of("all","growth","retained","unresolved").contains(basis))throw new BadRequestException("Unknown reporting basis");
+        var matches=data.rows.stream().filter(row->basis.equals("all")||row.get("Growth classification").equals(basis))
+            .filter(row->term.isEmpty()||data.headers.stream().anyMatch(header->row.get(header).toLowerCase(Locale.ROOT).contains(term))).toList();
         int start=Math.min(offset,matches.size()),end=Math.min(start+limit,matches.size());
-        return Map.of("headers",data.headers,"rows",matches.subList(start,end),"total",matches.size(),"unfilteredTotal",data.rows.size());
+        Map<String,Object> response=new LinkedHashMap<>(Map.of("headers",data.headers,"rows",matches.subList(start,end),"total",matches.size(),"unfilteredTotal",data.rows.size()));
+        if(name.equals("updated_90-day.csv"))response.put("reporting",TrailingReporting.summary(data,service.get(id)));
+        return response;
     }
     @GET @Path("/runs/{id}/artifacts/{name}/download") @Produces("text/csv") public Response download(@PathParam("id") String id,@PathParam("name") String name,@QueryParam("version") Integer version) throws Exception { return Response.ok(service.artifact(id,name,version),"text/csv; charset=utf-8").header("Content-Disposition","attachment; filename=\""+name+"\"").header("X-Content-Type-Options","nosniff").build(); }
     @GET @Path("/runs/{id}/download-all") @Produces("application/zip") public Response zip(@PathParam("id") String id) throws Exception { return Response.ok(service.zip(id)).header("Content-Disposition","attachment; filename=\"impact-metrics-"+id+".zip\"").build(); }
