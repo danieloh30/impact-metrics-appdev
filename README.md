@@ -117,14 +117,12 @@ storage/   # runtimes boundary and atomic state/file persistence
 
 ## Runtime storage
 
-All production raw data and outputs stay under `runtimes`. Seed CSVs remain in place; the app never processes the original project's `ai` or `devops` folders.
+All production raw data and outputs stay under `runtimes`. The SharePoint workflow no longer uses root-level seed CSVs; resetting history removes the two obsolete inputs. The app never processes the original project's `ai` or `devops` folders.
 
 ```text
 runtimes/
   RUN.md
   AGENTS.md
-  AvocadoBot 2.csv
-  trailing_90-day.csv
   runs/<run-id>/
     rawdata/           # original.xlsx + trailing-original.xlsx; older saved CSV uploads
     instructions/     # frozen instruction snapshots
@@ -162,7 +160,7 @@ Posts/feed/pulse use total reactions only. Events follow the admin post-analytic
 
 Saved runs persist across dev-mode restarts in `runtimes/runs/`; this application stores history in files rather than PostgreSQL. Choose **Reset run history** in the sidebar and confirm **Delete all run history** to clear every saved run, its uploaded copies, measurements, approvals, and output versions. The SPA then clears the selected run, previews, counters, and browser's remembered run ID.
 
-Reset keeps `RUN.md`, `AGENTS.md`, and `.sessions/` for SharePoint/LinkedIn authentication. Older files directly under runtimes also remain; the app no longer imports seed CSVs. Download any results you want to retain first. Reset is rejected while a run is actively processing; wait for completion or cancel and wait for cancellation to finish. Filesystem deletion does not follow symlinks. History is not automatically erased on startup. Connected live streams receive a final `RESET` event and close when their run is deleted; the SPA clears the stale selection in other open tabs as well.
+Reset also removes the obsolete `runtimes/AvocadoBot 2.csv` and `runtimes/trailing_90-day.csv`, even when there are no saved runs. It keeps `RUN.md`, `AGENTS.md`, `.sessions/` for SharePoint/LinkedIn authentication, and unrelated files directly under runtimes. The dialog names both obsolete files before confirmation. Only those two root-level filenames are removed; symbolic links are unlinked without deleting their targets, and unexpected directories at those names are rejected before history is erased. Download any results you want to retain first. Reset is rejected while a run is actively processing; wait for completion or cancel and wait for cancellation to finish. Filesystem deletion does not follow symlinks. History is not automatically erased on startup. Connected live streams receive a final `RESET` event and close when their run is deleted; the SPA clears the stale selection in other open tabs as well.
 
 API: `POST /api/runs/reset` with JSON `{"confirm":true}` returns `{"deletedRuns":N}`. Missing confirmation returns 400; active processing returns 409. Imports and run actions are serialized against reset.
 
@@ -214,7 +212,7 @@ Implementation: [review panel](src/main/webui/src/main.tsx), [phase issue rules]
 
 ## Verification
 
-Validation passed: **124 Java tests**, the TypeScript/Vite build, and **46 browser checks**. Automated verification covers the two-workbook SharePoint flow with synthetic transport, month-named sheet selection, date/year cutoffs, source isolation, snapshot reuse/expiry, both source hashes and immutable bytes, removed import endpoints, and the seven-phase workflow. Browser regressions cover one connection control, independent reads/errors, both default URLs, changing the reporting month without rereading, download progress, blog counts, missing-sheet warnings, preserved review/approval behavior, and mobile layout. Real-Chrome tests use synthetic cookies and loopback HTTP responses to check saved authentication and downloads without contacting IBM. A live read of AppDev Advocacy impact metrics 2026 succeeded with the saved session on both IBM hosts; its August and September input sheets were eligible. Live access still depends on IBM permissions and sign-in policy.
+Validation passed: **127 Java tests**, the TypeScript/Vite build, and **46 browser checks**. Automated verification covers the two-workbook SharePoint flow with synthetic transport, month-named sheet selection, date/year cutoffs, source isolation, snapshot reuse/expiry, both source hashes and immutable bytes, removed import endpoints, and the seven-phase workflow. Browser regressions cover one connection control, independent reads/errors, both default URLs, changing the reporting month without rereading, download progress, blog counts, missing-sheet warnings, preserved review/approval behavior, and mobile layout. Real-Chrome tests use synthetic cookies and loopback HTTP responses to check saved authentication and downloads without contacting IBM. A live read of AppDev Advocacy impact metrics 2026 succeeded with the saved session on both IBM hosts; its August and September input sheets were eligible. Live access still depends on IBM permissions and sign-in policy.
 
 Java tests mirror the service package in `src/test/java/com/ibm/advocacy/service`. Use Quarkus Dev UI/MCP testing, or `./mvnw test` in CI. For browser tests, start an isolated server from the project root in a separate terminal:
 

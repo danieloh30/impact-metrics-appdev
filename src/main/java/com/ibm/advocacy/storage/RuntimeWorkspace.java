@@ -46,10 +46,16 @@ public class RuntimeWorkspace {
     }
     public Data data(String id,String name) throws IOException { return mapper.readValue(Files.readAllBytes(runPath(id,"state/"+name+".json")),Data.class); }
     public void data(String id,String name,Data data) throws IOException { bytes(runPath(id,"state/"+name+".json"),mapper.writeValueAsBytes(data)); }
-    /** Clear only run-owned files; never follow links into other runtime data. */
+    /** Clear run history and the two obsolete seed files; never follow link targets. */
     public int resetRuns() throws IOException {
+        Path root=root();
+        List<Path> legacyInputs=List.of(root.resolve("AvocadoBot 2.csv"),root.resolve("trailing_90-day.csv"));
+        // Validate before deleting history. A directory at a seed filename is not input data.
+        for(Path input:legacyInputs)if(Files.exists(input,LinkOption.NOFOLLOW_LINKS)
+                &&!Files.isRegularFile(input,LinkOption.NOFOLLOW_LINKS)&&!Files.isSymbolicLink(input))
+            throw new IllegalArgumentException("Legacy input must be a file: "+input.getFileName());
         Path runs=path("runs");
-        if(!Files.exists(runs,LinkOption.NOFOLLOW_LINKS)) { Files.createDirectories(runs);return 0; }
+        if(!Files.exists(runs,LinkOption.NOFOLLOW_LINKS))Files.createDirectories(runs);
         if(!Files.isDirectory(runs,LinkOption.NOFOLLOW_LINKS))throw new IllegalArgumentException("Runs path must be a directory");
         int[] deleted={0};
         Files.walkFileTree(runs,new SimpleFileVisitor<Path>() {
@@ -66,6 +72,7 @@ public class RuntimeWorkspace {
                 return FileVisitResult.CONTINUE;
             }
         });
+        for(Path input:legacyInputs)Files.deleteIfExists(input);
         return deleted[0];
     }
     public static String hash(byte[] bytes) {

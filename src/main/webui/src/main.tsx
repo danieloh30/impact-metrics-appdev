@@ -42,6 +42,7 @@ function ResetHistoryDialog({busy,error,onClose,onReset}:{busy:boolean;error:str
  return <dialog ref={dialog} className="modal reset-dialog" aria-labelledby="reset-title" onCancel={e=>{e.preventDefault();if(!busy)onClose();}}>
   <div className="eyebrow">WORKSPACE HISTORY</div><h2 id="reset-title">Reset run history?</h2>
   <p>This permanently deletes every saved run, including its uploaded copies, measurements, approvals, and saved phase results.</p>
+  <p>It also removes the obsolete input files <code>AvocadoBot 2.csv</code> and <code>trailing_90-day.csv</code> from the workspace.</p>
   <p className="reset-preserved"><Icon name="shield"/>Your workflow instructions and saved SharePoint/LinkedIn sessions will be kept.</p>
   <p>Download any results you want to keep before continuing.</p>
   {error&&<p role="alert" className="error">{error}</p>}
