@@ -23,7 +23,12 @@ class ImpactTrendsTest {
         var source=new ImpactTrends().read(fixture(),"Advocacy RUN metrics 2026.xlsx",null);
         var current=List.of(new MonthlyReporting.Aggregate("Blog post / slide shares / .io updates","8.25","2","10.25","20.5","Views",2));var tool=List.of(new MonthlyReporting.Aggregate("IBM Bob","8.25","2","10.25","20.5","Views",2));
         var result=ImpactTrends.build("2026-09",current,tool,source,Map.of("filename","source"));assertEquals(13,result.channel().months().size());assertEquals("2025-09",result.channel().months().getFirst());assertEquals("111",result.channel().series().getFirst().values().get(11));assertEquals("10.25",result.channel().series().getFirst().values().get(12));
-        var august=ImpactTrends.build("2026-08",current,tool,source,Map.of());assertEquals("2025-08",august.channel().months().getFirst());assertNull(august.channel().series().getFirst().values().getFirst());assertFalse(august.channel().available().getFirst());assertEquals("10.25",august.channel().series().getFirst().values().getLast());assertFalse(august.channel().months().contains("2026-09"));
+        var august=ImpactTrends.build("2026-08",current,tool,source,Map.of());assertEquals("2025-09",august.channel().months().getFirst());assertEquals(12,august.channel().months().size());assertEquals("100",august.channel().series().getFirst().values().getFirst());assertTrue(august.channel().available().getFirst());assertEquals("10.25",august.channel().series().getFirst().values().getLast());assertFalse(august.channel().months().contains("2026-09"));
+    }
+    @Test void OctoberExtendsFromSeptember2025RatherThanDroppingTheFirstMonth() throws Exception {
+        var source=new ImpactTrends().read(fixture(),"Advocacy RUN metrics 2026.xlsx",null);
+        var current=List.of(new MonthlyReporting.Aggregate("IBM Bob","10","0","10","20","Views",1));
+        var chart=ImpactTrends.build("2026-10",current,current,source,Map.of()).tool();assertEquals(14,chart.months().size());assertEquals("2025-09",chart.months().getFirst());assertEquals("2026-10",chart.months().getLast());assertEquals("999999",chart.series().getFirst().values().get(12));assertEquals("10",chart.series().getFirst().values().getLast());
     }
     @Test void unavailableMonthsStayNullButBlankCellsInAnExistingPublishedMonthAreZero() throws Exception {
         byte[] bytes;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture()));ByteArrayOutputStream out=new ByteArrayOutputStream()){book.getSheet("AppDev Advocacy").getRow(1).removeCell(book.getSheet("AppDev Advocacy").getRow(1).getCell(2));book.write(out);bytes=out.toByteArray();}

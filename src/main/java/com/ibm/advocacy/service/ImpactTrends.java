@@ -17,6 +17,7 @@ public class ImpactTrends {
     public record Snapshot(String endMonth,Chart channel,Chart tool,List<String> warnings) {}
     public record Timeline(Chart channel,Chart tool,Map<String,Object> source,List<String> warnings) {}
     public static final String SHEET="AppDev Advocacy";
+    public static final YearMonth START=YearMonth.of(2025,9);
     public Snapshot read(byte[] bytes,String filename,String endMonth) throws IOException {
         if(bytes==null||bytes.length==0||bytes.length>6_000_000)throw new BadRequestException("Chart history workbook must be smaller than 6 MB");
         try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
@@ -59,17 +60,19 @@ public class ImpactTrends {
         return build(selected,channel,tool,history,source,true);
     }
     public static Timeline build(String selected,List<MonthlyReporting.Aggregate> channel,List<MonthlyReporting.Aggregate> tool,Snapshot history,Map<String,Object> source,boolean currentAvailable) {
-        YearMonth month=YearMonth.parse(selected);List<String> dates=new ArrayList<>();for(int i=12;i>=0;i--)dates.add(month.minusMonths(i).toString());
-        List<String> warnings=new ArrayList<>();if(history==null)warnings.add("Previous 12 months are unavailable until the historical chart workbook is read.");
-        else {history.warnings().stream().filter(warning->dates.subList(0,12).stream().anyMatch(warning::startsWith)).forEach(warnings::add);warnings.add("Published monthly impact is imported as-is. Month-only headings are anchored to "+history.endMonth()+"; the selected month is replaced by this run.");}
+        YearMonth month=YearMonth.parse(selected);List<String> dates=new ArrayList<>();YearMonth first=month.isBefore(START)?month:START;
+        if(java.time.temporal.ChronoUnit.MONTHS.between(first,month)>120)throw new BadRequestException("Chart reporting month must be within ten years of September 2025");
+        for(YearMonth point=first;!point.isAfter(month);point=point.plusMonths(1))dates.add(point.toString());
+        List<String> warnings=new ArrayList<>();if(history==null)warnings.add("Published history since September 2025 is unavailable until the chart workbook is read.");
+        else {history.warnings().stream().filter(warning->dates.subList(0,dates.size()-1).stream().anyMatch(warning::startsWith)).forEach(warnings::add);warnings.add("Published monthly impact is imported as-is. Month-only headings are anchored to "+history.endMonth()+"; the selected month is replaced by this run.");}
         if(!currentAvailable)warnings.add("No eligible selected-month contribution is available; that point is shown as a gap.");
         return new Timeline(merge(dates,channel,history==null?null:history.channel(),currentAvailable),merge(dates,tool,history==null?null:history.tool(),currentAvailable),source,List.copyOf(warnings));
     }
     private static Chart merge(List<String> dates,List<MonthlyReporting.Aggregate> current,Chart history,boolean currentAvailable) {
         Map<String,String> labels=new LinkedHashMap<>();if(history!=null)history.series().forEach(row->labels.putIfAbsent(row.name().toLowerCase(Locale.ROOT),row.name()));current.forEach(row->labels.putIfAbsent(row.name().toLowerCase(Locale.ROOT),row.name()));
-        List<Boolean> available=new ArrayList<>();for(int i=0;i<12;i++)available.add(history!=null&&history.months().contains(dates.get(i)));available.add(currentAvailable);
+        List<Boolean> available=new ArrayList<>();for(int i=0;i<dates.size()-1;i++)available.add(history!=null&&history.months().contains(dates.get(i)));available.add(currentAvailable);
         List<Series> series=new ArrayList<>();for(var label:labels.entrySet()) {
-            List<String> values=new ArrayList<>();for(int i=0;i<12;i++) {
+            List<String> values=new ArrayList<>();for(int i=0;i<dates.size()-1;i++) {
                 int index=history==null?-1:history.months().indexOf(dates.get(i));if(index<0){values.add(null);continue;}
                 var row=history.series().stream().filter(value->value.name().equalsIgnoreCase(label.getValue())).findFirst();values.add(row.isPresent()?row.get().values().get(index):"0");
             }

@@ -106,6 +106,9 @@ public class ReportingWorkbook {
         if(data.series().isEmpty())return;
         var drawing=sheet.createDrawingPatriarch();int start=data.months().size()+3;var chart=drawing.createChart(drawing.createAnchor(0,0,0,0,0,start,6,start+27));chart.setTitleText(title);chart.setTitleOverlay(false);
         var category=chart.createCategoryAxis(AxisPosition.BOTTOM);category.setTitle("Reporting month");var value=chart.createValueAxis(AxisPosition.LEFT);value.setTitle("Impact hours");value.setNumberFormat("#,##0");value.setCrosses(AxisCrosses.AUTO_ZERO);category.crossAxis(value);value.crossAxis(category);
+        double max=1,min=0;for(int m=0;m<data.months().size();m++){double positive=0,negative=0;for(var row:data.series()){String n=row.values().get(m);if(n!=null){double amount=Double.parseDouble(n);if(amount>=0)positive+=amount;else negative+=amount;}}max=Math.max(max,positive);min=Math.min(min,negative);}
+        double raw=Math.max(max,Math.abs(min))/8,unit=Math.pow(10,Math.floor(Math.log10(raw))),step=10*unit;for(double n:new double[]{1,2,5,10})if(n*unit>=raw){step=n*unit;break;}
+        value.setMinimum(Math.floor(min/step)*step);value.setMaximum(Math.ceil(max/step)*step);value.setMajorUnit(step);
         var area=(XDDFAreaChartData)chart.createData(ChartTypes.AREA,category,value);area.setGrouping(Grouping.STACKED);
         var months=XDDFDataSourcesFactory.fromStringCellRange(sheet,new CellRangeAddress(1,data.months().size(),0,0));
         for(int s=0;s<data.series().size();s++){var series=area.addSeries(months,XDDFDataSourcesFactory.fromNumericCellRange(sheet,new CellRangeAddress(1,data.months().size(),s+1,s+1)));series.setTitle(data.series().get(s).name(),null);series.setFillProperties(new org.apache.poi.xddf.usermodel.XDDFSolidFillProperties(org.apache.poi.xddf.usermodel.XDDFColor.from(HexFormat.of().parseHex(TREND_COLORS[s%TREND_COLORS.length]))));}

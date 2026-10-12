@@ -2,8 +2,9 @@ import {test,expect,Page} from '@playwright/test';
 const current={sourceToken:'current-token',filename:'AvocadoBot.xlsx',suggestedCurrentSheet:'Current month inputs',sheets:[{name:'Current month inputs',eligible:true,rows:2,months:['2026-10'],reason:''}]};
 const history={sourceToken:'history-token',filename:'Metrics.xlsx',suggestedCurrentSheet:'September inputs',sheets:[{name:'September inputs',eligible:true,inputMonth:9,inputYear:0,rows:5,months:['2026-07','2026-08','2026-09','2026-10'],reason:''}]};
 const run={id:'combined-run',createdAt:'2026-10-09T12:00:00Z',status:'READY',phase:0,version:0,currentRows:2,trailingRows:5,trailing:true,review:'',error:'',issues:[],artifacts:{},events:[],approvals:[],workbook:{month:'2026-10',currentSheet:'Current month inputs',historySheets:['September inputs'],windowStart:'2026-08-01',windowEnd:'2026-10-31',missingBaselines:0,filename:current.filename,historyFilename:history.filename}};
-async function setup(page:Page,options:{fail?:'current'|'history'|'prepare';ambiguous?:boolean;hold?:boolean}={}){
- let status='CONNECTED',reads:string[]=[],prepares=0,signInUrl='',body='',release:()=>void=()=>{},held=false;
+async function setup(page:Page,options:{fail?:'current'|'history'|'prepare';ambiguous?:boolean;hold?:boolean;chartFail?:boolean;chartCached?:boolean}={}){
+ let status='CONNECTED',reads:string[]=[],prepares=0,signInUrl='',body='',release:()=>void=()=>{},held=false,chartReads=0;const chartCache={source:{cacheId:'chart-cache',filename:'Advocacy RUN metrics 2026.xlsx',importedAt:'2026-10-11T12:00:00Z',endMonth:'2026-09'},snapshot:{channel:{months:['2025-09','2026-09']},tool:{months:['2025-09','2026-09']}}};
+ await page.route('**/api/chart-history*',route=>{if(route.request().method()==='GET')return route.fulfill({json:options.chartCached===false?{source:{}}:chartCache});chartReads++;return options.chartFail&&chartReads===1?route.fulfill({status:502,json:{error:'Chart workbook unavailable'}}):route.fulfill({json:chartCache});});
  await page.route('**/api/runs',route=>route.fulfill({json:[]}));
  await page.route('**/api/sharepoint/session',route=>{if(route.request().method()==='POST'){status='CONNECTED';signInUrl=route.request().postDataJSON().url;}return route.fulfill({json:{busy:false,status,message:status==='CONNECTED'?'Signed in.':'Reconnect SharePoint.',downloadStage:'DOWNLOADING'}});});
  await page.route('**/api/workbooks/from-sharepoint',async route=>{
@@ -16,11 +17,11 @@ async function setup(page:Page,options:{fail?:'current'|'history'|'prepare';ambi
  await page.route('**/api/runs/from-sharepoint',route=>{prepares++;body=route.request().postData()||'';return options.fail==='prepare'&&prepares===1?route.fulfill({status:409,json:{error:'Preparation temporarily unavailable.'}}):route.fulfill({json:run});});
  await page.route('**/api/runs/combined-run',route=>route.fulfill({json:{run,approvalDigest:''}}));await page.route('**/api/runs/combined-run/events*',route=>route.fulfill({contentType:'text/event-stream',body:''}));
  await page.goto('/');await page.getByLabel('Reporting month',{exact:true}).fill('2026-10');await expect(page.locator('#prepare-workbooks')).toBeEnabled();
- return {counts:()=>({reads:[...reads],prepares,signInUrl,body}),release:()=>release()};
+ return {counts:()=>({reads:[...reads],prepares,signInUrl,body,chartReads}),release:()=>release()};
 }
 test('One action reads both workbooks and prepares the selected month without starting agents',async({page})=>{
  const state=await setup(page);await expect(page.locator('#read-current')).toBeHidden();await expect(page.locator('#read-history')).toBeHidden();await expect(page.getByLabel('Metrics SharePoint link')).toBeVisible();
- await page.locator('#prepare-workbooks').click();await expect(page.getByRole('heading',{name:'Prepared workbook inputs',exact:true})).toBeVisible();expect(state.counts().reads).toEqual(['current','history']);expect(state.counts().prepares).toBe(1);expect(state.counts().body).toContain('current-token');expect(state.counts().body).toContain('history-token');expect(state.counts().body).toContain('2026-10');await expect(page.locator('#accept-contract')).not.toBeChecked();await expect(page.locator('#start-processing')).toBeDisabled();
+ await page.locator('#prepare-workbooks').click();await expect(page.getByRole('heading',{name:'Prepared workbook inputs',exact:true})).toBeVisible();expect(state.counts().reads).toEqual(['current','history']);expect(state.counts().prepares).toBe(1);expect(state.counts().body).toContain('chart-cache');expect(state.counts().chartReads).toBe(0);expect(state.counts().body).toContain('current-token');expect(state.counts().body).toContain('history-token');expect(state.counts().body).toContain('2026-10');await expect(page.locator('#accept-contract')).not.toBeChecked();await expect(page.locator('#start-processing')).toBeDisabled();
 });
 test('Failed history read keeps current snapshot and resumes after second-site sign-in',async({page})=>{
  const state=await setup(page,{fail:'history'});await page.locator('#prepare-workbooks').click();await expect(page.getByRole('alert')).toContainText('Metrics site needs sign-in');await expect(page.locator('.import-steps')).toContainText('Snapshot ready · AvocadoBot.xlsx');expect(state.counts().prepares).toBe(0);await expect(page.locator('#prepare-workbooks')).toBeDisabled();
@@ -46,4 +47,13 @@ test('Editing a source invalidates only its snapshot before preparation retry',a
 });
 test('Source details keep independent re-reads available without preparing a run',async({page})=>{
  const state=await setup(page);await page.locator('.source-details summary').nth(1).click();await page.locator('#read-history').click();await expect(page.getByRole('region',{name:'Historical metrics workbook'})).toContainText('Snapshot ready');expect(state.counts().prepares).toBe(0);await page.locator('.workbook-panel').screenshot({path:'../../../target/e2e-combined-import-desktop.png'});
+});
+test('Third chart source has the default link and loads only once across preparations',async({page})=>{
+ const state=await setup(page,{chartCached:false,fail:'prepare'});await expect(page.getByLabel('Initial chart history SharePoint link')).toHaveValue(/e=EMMxU0$/);await page.locator('#prepare-workbooks').click();await expect(page.locator('.combined-import .error')).toBeVisible();expect(state.counts().chartReads).toBe(1);await expect(page.getByRole('region',{name:'Published chart history workbook'})).toContainText('Saved history ready');await page.locator('#prepare-workbooks').click();await expect(page.locator('#accept-contract')).toBeVisible();expect(state.counts().chartReads).toBe(1);expect(state.counts().body).toContain('chart-cache');
+});
+test('Failed chart read retries without downloading the successful activity workbooks again',async({page})=>{
+ const state=await setup(page,{chartCached:false,chartFail:true});await page.locator('#prepare-workbooks').click();await expect(page.getByRole('alert')).toContainText('Chart workbook unavailable');expect(state.counts().prepares).toBe(0);expect(state.counts().reads).toEqual(['current','history']);await page.locator('#prepare-workbooks').click();await expect(page.locator('#accept-contract')).toBeVisible();expect(state.counts().reads).toEqual(['current','history']);expect(state.counts().chartReads).toBe(2);expect(state.counts().prepares).toBe(1);
+});
+test('Reload restores saved published history without starting a SharePoint download',async({page})=>{
+ const state=await setup(page);await expect(page.getByRole('region',{name:'Published chart history workbook'})).toContainText('Saved history ready');await page.reload();await expect(page.getByRole('region',{name:'Published chart history workbook'})).toContainText('Saved history ready');expect(state.counts().chartReads).toBe(0);
 });

@@ -35,6 +35,8 @@ public class RunService {
     @Inject MonthlyReporting reporting;
     @Inject ReportingWorkbook reportingWorkbook;
     @Inject ImpactTrends impactTrends;
+    @Inject com.ibm.advocacy.storage.ChartHistoryStore chartHistoryStore;
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name="metrics.reporting.chart-history-url") String chartHistoryUrl;
     @Inject com.ibm.advocacy.collector.SharePointCollector chartCollector;
     @Inject com.ibm.advocacy.storage.ResultStore results;
     @Inject PhaseWorkflow workflow;
@@ -70,11 +72,16 @@ catch(RuntimeException failure) {
         workspace.save(run);return run;
     }
 public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String currentFilename,byte[] historyBytes,String historyFilename,String month,String currentSheet,List<String> historySheets,String currentUrl,String historyUrl) throws Exception {
+    return createSharePointWorkbooks(currentBytes,currentFilename,historyBytes,historyFilename,month,currentSheet,historySheets,currentUrl,historyUrl,null);
+}
+public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String currentFilename,byte[] historyBytes,String historyFilename,String month,String currentSheet,List<String> historySheets,String currentUrl,String historyUrl,String chartHistoryId) throws Exception {
+    if(chartHistoryId!=null&&!chartHistoryId.isBlank())chartHistoryStore.load(chartHistoryId);
     Run run=createWorkbook(new com.ibm.advocacy.model.WorkbookRequest(currentBytes,month,currentSheet,historySheets,historyBytes),currentFilename,historyFilename);
     workspace.bytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"),historyBytes);
     run.workbook.put("source","SharePoint");run.workbook.put("sourceUrl",currentUrl);
     run.workbook.put("historySourceUrl",historyUrl);run.workbook.put("historyFilename",historyFilename);run.workbook.put("historySha256",RuntimeWorkspace.hash(historyBytes));
     run.workbook.put("reportingPolicy","MONTH_END");run.workbook.put("metricModel","DA metric model 2026");
+    if(chartHistoryId!=null&&!chartHistoryId.isBlank())chartHistoryStore.attach(run,chartHistoryId);
     workspace.save(run);return run;
 }
 public synchronized byte[] input(String id,String name) throws Exception {
@@ -262,13 +269,19 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
         return Calculations.reported(data,name.equals("current.csv")&&!"MONTH_END".equals(run.workbook.get("reportingPolicy")));
     }
     public synchronized MonthlyReporting.Report report(String id,String scope) throws Exception {
-        Run run=get(id);return reporting.build(run,rawArtifact(run,"current.csv"),rawArtifact(run,"updated_90-day.csv"),rawArtifact(run,"follow-up.csv"),scope);
+        Run run=get(id);
+        if(!run.workbook.containsKey("chartHistory")) {
+            var saved=chartHistoryStore.cached(chartHistoryUrl);
+            if(saved!=null){chartHistoryStore.attach(run,String.valueOf(saved.source().get("cacheId")));run.reportingRevision++;workspace.save(run);}
+        }
+        return reporting.build(run,rawArtifact(run,"current.csv"),rawArtifact(run,"updated_90-day.csv"),rawArtifact(run,"follow-up.csv"),scope);
     }
     public synchronized Run importChartHistory(String id,int revision,String url,String endMonth) throws Exception {
         Run run=get(id);
         if(!run.status.equals("COMPLETED"))throw new ClientErrorException("Complete the agent phases before reading chart history",409);
         if(run.reportingRevision!=revision)throw new ClientErrorException("Reporting changed; reload before reading chart history",409);
         var workbook=chartCollector.download(url);var snapshot=impactTrends.read(workbook.bytes(),workbook.filename(),endMonth);
+        chartHistoryStore.save(workbook.bytes(),workbook.filename(),workbook.sourceUrl(),url,endMonth);
         Map<String,Object> source=new LinkedHashMap<>();source.put("filename",workbook.filename());source.put("sourceUrl",workbook.sourceUrl());source.put("sha256",RuntimeWorkspace.hash(workbook.bytes()));source.put("sheet",ImpactTrends.SHEET);source.put("endMonth",snapshot.endMonth());source.put("importedAt",Instant.now().toString());
         String snapshotFilename="chart-history-"+(run.reportingRevision+1)+".xlsx";source.put("snapshotFilename",snapshotFilename);
         workspace.bytes(workspace.runPath(id,"rawdata/"+snapshotFilename),workbook.bytes());run.workbook.put("chartHistory",source);run.reportingRevision++;Pipeline.event(run,"Historical chart input","Read "+workbook.filename()+" / "+ImpactTrends.SHEET+" ending "+snapshot.endMonth()+"; snapshot "+snapshotFilename);workspace.save(run);return run;

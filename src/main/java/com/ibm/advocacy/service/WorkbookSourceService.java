@@ -26,12 +26,15 @@ public class WorkbookSourceService {
         return new SourceInspection(inspection.sheets(),inspection.suggestedMonth(),inspection.suggestedCurrentSheet(),inspection.suggestedHistorySheets(),token,workbook.filename());
     }
     public synchronized Run create(String currentToken,String historyToken,String month,String currentSheet) throws Exception {
+        return create(currentToken,historyToken,month,currentSheet,null);
+    }
+    public synchronized Run create(String currentToken,String historyToken,String month,String currentSheet,String chartHistoryId) throws Exception {
         cleanup();Snapshot current=snapshots.get(currentToken),history=snapshots.get(historyToken);
         if(current==null||history==null)throw new ClientErrorException("Workbook snapshot expired. Read both SharePoint workbooks again before preparing inputs.",410);
         if(currentToken.equals(historyToken)||current.workbook().sourceUrl().equals(history.workbook().sourceUrl()))throw new jakarta.ws.rs.BadRequestException("Read two separate workbooks: AvocadoBot for current activities and AppDev impact metrics for history.");
         var source=current.workbook();var past=history.workbook();
         List<String> historySheets=workbooks.historySheets(past.bytes(),month);
-        Run run=runs.createSharePointWorkbooks(source.bytes(),source.filename(),past.bytes(),past.filename(),month,currentSheet,historySheets,source.sourceUrl(),past.sourceUrl());
+        Run run=runs.createSharePointWorkbooks(source.bytes(),source.filename(),past.bytes(),past.filename(),month,currentSheet,historySheets,source.sourceUrl(),past.sourceUrl(),chartHistoryId);
         snapshots.remove(currentToken);snapshots.remove(historyToken);return run;
     }
     private void cleanup(){snapshots.values().removeIf(s->!s.expires().isAfter(Instant.now()));}
