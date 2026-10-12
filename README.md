@@ -415,3 +415,7 @@ Activity and tool totals are reconciled independently for each source month. Dif
 The Excel report includes **Channel history** and **Tool history** typed monthly data with two native stacked-area charts and right-side legends. Missing months stay blank, and the optional Bob chart is controlled by `bob=true` on `GET /api/runs/{id}/reporting/download`. The existing SUM PivotTables and selected-month detail remain available. Source notes and mapping are exported for audit. Charts are bound to exported data cells; regenerate the report after app-side changes.
 
 `POST /api/runs/{id}/reporting/history` reads a separate chart-history snapshot for a completed run, using `revision`, `url`, and optional `endMonth` (`YYYY-MM`). Revision mismatches return 409; invalid workbook structure or period mapping return 400. A failed re-read retains the preceding valid snapshot. A successful re-read writes a new revision-specific snapshot and preserves earlier imported bytes.
+
+### Live progress stream backpressure
+
+The one-second SSE timer skips refresh triggers when a client or worker cannot keep up, rather than failing with `BackPressureFailure` or accumulating an unbounded queue. These triggers are separate from saved run events: the next snapshot still contains events newer than the requested sequence. Run-history reset continues to send a terminal `RESET` event and close the stream. See [SmallRye Mutiny tick backpressure](https://smallrye.io/smallrye-mutiny/latest/guides/delaying-events/).

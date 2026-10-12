@@ -84,7 +84,10 @@ public class RunResource {
     @GET @Path("/runs/{id}/events") @Produces(MediaType.SERVER_SENT_EVENTS) @RestStreamElementType(MediaType.APPLICATION_JSON)
     public Multi<Map<String,Object>> events(@PathParam("id") String id,@QueryParam("after") @DefaultValue("0") long after) throws Exception {
         service.get(id);
-        return Multi.createFrom().ticks().every(Duration.ofSeconds(1)).onItem().transformToUniAndConcatenate(tick->io.smallrye.mutiny.Uni.createFrom().item(()-> {
+        // Ticks are refresh triggers, not stored run events. Skip triggers while a
+        // slow client/worker has no demand; the next snapshot includes persisted events.
+        return Multi.createFrom().ticks().every(Duration.ofSeconds(1)).onOverflow().drop()
+            .onItem().transformToUniAndConcatenate(tick->io.smallrye.mutiny.Uni.createFrom().item(()-> {
             try { Run run=service.get(id);return Map.<String,Object>of("version",run.version,"status",run.status,"phase",run.phase,"events",run.events.stream().filter(e->e.sequence()>after).toList()); }
             catch(NotFoundException deleted) { throw deleted; }
             catch(Exception e) { throw new RuntimeException(e); }
