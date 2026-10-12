@@ -48,3 +48,9 @@ test('Trailing LinkedIn sources get advance guidance before publication starts P
 test('Runs without LinkedIn source activities do not request advance sign-in',async({page})=>{
  const state=await mock(page,0,[],{ready:true});await page.goto('/');await page.locator('#accept-contract').check();await expect(page.getByRole('navigation',{name:'Next required action'})).toContainText('Start the agents');await expect(page.locator('#skip-linkedin-preparation')).toHaveCount(0);expect(state.counts().connects).toBe(0);
 });
+test('Phase 3 requires LinkedIn setup before approval can advance to trailing collection',async({page})=>{
+ const state=await mock(page,3,[],{trailingLinks:2});await page.goto('/');await expect(page.getByRole('navigation',{name:'Next required action'})).toContainText('Connect LinkedIn before Phase 4');await expect(page.locator('#approve-phase')).toBeDisabled();await expect(page.getByRole('list',{name:'Processing phases'})).toContainText('LinkedIn source check');await page.locator('#skip-linkedin-preparation').click();await expect(page.locator('#approve-phase')).toBeEnabled();await expect(page.getByRole('navigation',{name:'Next required action'})).toContainText('approve Phase 3');expect(state.counts()).toEqual({connects:0,retries:0});
+});
+test('The pre-trailing source check explains zero LinkedIn links without an unnecessary sign-in gate',async({page})=>{
+ const state=await mock(page,3,[],{publication:true});await page.goto('/');await expect(page.getByRole('region',{name:'LinkedIn metric collection'})).toContainText('No LinkedIn URLs found in the selected trailing input rows');await expect(page.getByRole('navigation',{name:'Next required action'})).toContainText('Publish current inputs');await expect(page.locator('#skip-linkedin-preparation')).toHaveCount(0);expect(state.counts()).toEqual({connects:0,retries:0});
+});

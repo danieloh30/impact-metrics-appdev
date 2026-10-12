@@ -1,4 +1,11 @@
-# Impact Metrics AppDev
+# Impact Hours AppDev
+
+The web UI identifies the application as **Impact Hours**. When charts are ready it shows **Process done — charts generated**, separately from final workbook publication. Reports with actionable exclusions are clearly marked **Provisional** before the charts, with **Review items needing attention** navigation. Saving a confirmed month-end value recalculates the totals and charts automatically. Charts show eligible contributions; excluded rows remain visible for review and are never silently added.
+
+LinkedIn setup is highlighted before Phase 1 and before Phase 3 approval starts the path to Phase 4. When supported LinkedIn URLs exist, the UI requires a saved connection or an explicit **Continue without LinkedIn** choice before starting/advancing collection. Publication previews remain available; publishing into Phase 4 waits for that choice. A visible **LinkedIn source check** timeline step and a zero-URL explanation avoid implying that sign-in can collect links missing from the inputs.
+
+Published tool comparisons offer **Inspect TOOL contributors**. This opens included activities with an exact tool filter, source sheet/resource links, and their counted impact. Tool totals remain sums of eligible activity contributions and reconcile to the report total. Published summaries can differ because measurements, history windows and included activities differ; source assignments are not guessed from an old aggregate.
+
 
 Monthly RH/IBM Sales User Experiences workshops use their supplied completed monthly totals directly. Duration is not multiplied again; ordinary workshops still use attendees × duration. Authors × tools are allocated once. For example, the September workshop inputs reconcile to 12,020 impact hours (Luxottica 1,500 + RH 7,530 + IBM 2,990), rather than 33,060. `MonthlyWorkshopAttendance.ACTIVITIES` defines the two confirmed rollup identities; this is not a general exception for every workshop. Saved reports, chart pivots, current exports and publication previews correct these two activities from immutable current input data on copies. Historical attributed rows are not reallocated, original phase versions are kept, and no SharePoint changes are made until a new publication is reviewed and confirmed.
 

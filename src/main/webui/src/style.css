@@ -485,3 +485,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .publication-panel .error { display:block; }
 .publication-panel .error strong { display:block; margin-bottom:6px; }
 .publication-duplicate-help p + p { margin-top:10px; }
+
+.chart-completion { margin:24px 0; padding:20px 24px; border:1px solid #bddfc8; border-left:5px solid #198038; border-radius:12px; background:#edf8f0; }
+.chart-completion strong { font-size:20px; color:#166534; }
+.chart-completion.is-provisional { border-color:#ebcd88; border-left-color:#b7791f; background:#fff8e8; }
+.chart-completion.is-provisional strong { color:#854d0e; }
+.chart-completion p { margin:8px 0 0; }
+.report-attention h3 { margin:0 0 10px; }
+#reporting-detail { scroll-margin-top:220px; }
+.timeline a { color:inherit; }

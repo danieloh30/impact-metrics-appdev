@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.io.*;
 import java.util.*;
+import java.math.BigDecimal;
 import static com.ibm.advocacy.model.MetricsSchema.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -116,4 +117,12 @@ class MonthlyReportingTest {
             assertEquals(166.5,book.getSheet("Bob summary").getRow(1).getCell(4).getNumericCellValue());assertEquals(1,book.getSheet("Eligible data").getTables().size());
         }
     }
+    @Test void toolTotalsConserveAttributedImpactAndUseSourceToolsAcrossCurrentAndGrowth(){
+        Row shared=row("shared","2026-09-10","IBM Bob;Independent open source projects","Customer workshop","25");shared.cells.put("Author","Daniel Oh;Kevin Dubois");var shares=Calculations.split(shared,VIEWS);List<Row> current=new ArrayList<>(shares);current.add(shares.getFirst().copy());
+        Row old=row("old-video","2026-07-01","IBM Bob","Recorded video","20");old.cells.put("Metric basis","Trailing delta");old.cells.put("Current total","80");old.cells.put("Previous total","60");
+        var report=MonthlyReporting.build(run(),data(current.toArray(Row[]::new)),data(old),new Data(),"combined",context(new Data()));assertEquals("260",report.impact());assertEquals(5,report.included());assertEquals(1,report.excluded());
+        assertEquals("135",report.tool().stream().filter(tool->tool.name().equals("IBM Bob")).findFirst().orElseThrow().impact());assertEquals("125",report.tool().stream().filter(tool->tool.name().equals("Independent open source projects")).findFirst().orElseThrow().impact());
+        assertEquals(0,Calculations.number(report.impact()).compareTo(report.tool().stream().map(tool->Calculations.number(tool.impact())).reduce(BigDecimal.ZERO,BigDecimal::add)));assertEquals("25",shared.get(VIEWS));assertEquals("IBM Bob;Independent open source projects",shared.get("Tool"));
+    }
+
 }
