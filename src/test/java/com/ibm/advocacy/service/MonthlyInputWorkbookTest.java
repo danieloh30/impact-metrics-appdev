@@ -41,4 +41,13 @@ class MonthlyInputWorkbookTest {
         var repeat=writer.merge(result.bytes(),data(row("1","Existing","188.25")),"2026-09","COMPLETED","run");assertEquals(0,repeat.updated());
     }
 
+    @Test void metadataPastBlankPaddingCannotExpandTheExcelTableHorizontally() throws Exception {
+        byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){book.getSheet("September inputs").getRow(0).createCell(60).setCellValue("Existing distant metadata");book.write(out);original=out.toByteArray();}
+        var result=writer.merge(original,data(row("1","Existing","200"),row("2","New","300")),"2026-09","COMPLETED","run");try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){var table=book.getSheet("September inputs").getTables().getFirst();assertEquals(10,table.getArea().getLastCell().getCol());assertEquals(3,table.getArea().getLastCell().getRow());assertTrue(Arrays.stream(table.getCTTable().getTableColumns().getTableColumnArray()).allMatch(column->!column.getName().isBlank()));}
+    }
+    @Test void malformedBlankTableHeadersStopBeforePublication() throws Exception {
+        byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){var sheet=book.getSheet("September inputs");sheet.getTables().getFirst().setArea(new AreaReference(new CellReference(0,0),new CellReference(2,13),SpreadsheetVersion.EXCEL2007));for(int i=11;i<14;i++)sheet.getTables().getFirst().getCTTable().getTableColumns().getTableColumnArray(i).setName("");book.write(out);original=out.toByteArray();}
+        var error=assertThrows(BadRequestException.class,()->writer.merge(original,data(row("1","Existing","200")),"2026-09","COMPLETED","run"));assertTrue(error.getMessage().contains("blank or duplicate column names"));
+    }
+
 }

@@ -7,7 +7,7 @@ export function AttendanceReview({rows,issues}:{rows:number;issues:number}){
   <ul>
    <li>Check activity types, reporting-month dates, and attendee counts against the workbook. Look for missing or duplicate activities.</li>
    <li>Verify Duration (in hours). Blank durations or durations below one hour use a one-hour minimum.</li>
-   <li>Check Attendance hours = Views / attendance × max(Duration (in hours), 1). For example, 25 attendees × 2 hours = 50 attendance hours. The monthly RH/IBM Sales User Experiences rollups use their supplied completed total directly; duration is not multiplied again.</li>
+   <li>Check Attendance hours = Views / attendance × max(Duration (in hours), 1). For example, 25 attendees × 2 hours = 50 attendance hours. Standard participation uses one participation unit per activity, shared in Phase 3; attendance and duration are not multiplied. The monthly RH/IBM Sales User Experiences rollups use their supplied completed total directly; duration is not multiplied again.</li>
    <li>Confirm authors and tools. These totals are not yet divided across authors/tools; that happens in Phase 3. Booth duty remains in follow-up pending verified leads.</li>
   </ul>
   <p className="attendance-review-note">If source values are wrong, correct the workbook and import a new run before approving. Zero issues means validation passed; it does not confirm the accuracy of the submitted attendance.</p>

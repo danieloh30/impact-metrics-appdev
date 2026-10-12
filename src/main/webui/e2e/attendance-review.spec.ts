@@ -27,6 +27,7 @@ test('Phase 2 opens in-person preview after reload and explains review even with
  await expect(page.getByRole('heading',{name:'in-person.csv preview',exact:true})).toBeVisible();
  await expect(page.locator('.export-row.selected')).toContainText('in-person.csv');await expect(page.locator('table')).toContainText('Meeting 1');
  const checklist=page.getByLabel('In-person attendance review checklist');
+ await expect(checklist).toContainText('Standard participation uses one participation unit per activity, shared in Phase 3; attendance and duration are not multiplied.');
  await expect(page.getByLabel('Changes from the previous phase')).toContainText('What changed from Phase 1');await expect(page.getByLabel('Changes from the previous phase')).toContainText('No manual updates flagged');
 const badge=page.locator('.phase-changes-status.is-clear');await expect(badge).toHaveText('No manual updates flagged');await expect(badge).toHaveAttribute('role','status');await expect(badge.locator('svg')).toHaveAttribute('aria-hidden','true');
 const presentation=await badge.evaluate(element=>{

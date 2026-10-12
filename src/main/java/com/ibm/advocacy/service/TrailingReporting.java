@@ -59,12 +59,19 @@ public final class TrailingReporting {
         }
         return Data.output(source,rows);
     }
+    static String identityText(String value) {
+        return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFKC).replace("\u0092","'").replace("\u2018","'").replace("\u2019","'").replace("\u0097","-").replace("\u2013","-").replace("\u2014","-").strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);
+    }
     static List<String> activityKey(Row row) {
-        // Names, event, type and attribution distinguish legitimate shared-resource activities.
         String url=Calculations.urlKey(row.get(URL)).replaceFirst("^http://","https://").replaceFirst("^(https://)www\\.","$1");
-        List<String> key=new ArrayList<>(List.of(first(row,"Date","Date of activity"),first(row,"Author","Author of activity"),row.get("Tool"),row.get("Name of activity"),first(row,"Event","Name of event"),row.get("Type of activity")).stream().map(s->s.strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT)).toList());
-        key.add(url); // URL paths/query values can be case-sensitive.
-        return key;
+        String date=first(row,"Date","Date of activity");try{date=WorkbookService.parseDate(date,"identity",1).toString();}catch(IllegalArgumentException|jakarta.ws.rs.BadRequestException ignored){}
+        String event=identityText(first(row,"Event","Name of event"));
+        if(row.type().equals("blog post / slide shares / .io updates")&&!url.isBlank())try{if(event.equals(java.net.URI.create(url).getHost()))event="";}catch(IllegalArgumentException ignored){}
+        return List.of(identityText(date),identityText(first(row,"Author","Author of activity")),identityText(row.get("Tool")),identityText(row.get("Name of activity")),event,identityText(row.get("Type of activity")),url,identityText(row.get("Activity stage")));
+    }
+    static List<String> collectionAttribution(Row row) {
+        if(row.get("Name of activity").isBlank()||first(row,"Author","Author of activity").isBlank()||row.get("Tool").isBlank()||first(row,"Date","Date of activity").isBlank())return List.of(row.id);
+        return activityKey(row);
     }
     private static String first(Row row,String a,String b) { return row.get(a).isBlank()?row.get(b):row.get(a); }
     public static Map<String,Object> summary(Data data,Run run) {

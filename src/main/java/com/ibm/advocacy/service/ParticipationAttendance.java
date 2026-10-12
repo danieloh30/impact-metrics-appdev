@@ -10,7 +10,7 @@ public final class ParticipationAttendance {
     static boolean matches(Row row){return row.type().equals("standard participation");}
     static String sourceId(Row row){return row.id.contains("/")?row.id.substring(0,row.id.lastIndexOf('/')):row.id;}
     static void stamp(Row row) {
-        row.cells.put("Participation calculation","Shared attendance");
+        row.cells.put("Participation calculation","Shared participation units");row.cells.put("Participation unit total","1");
         row.cells.put("Participation source attendance",row.get(VIEWS));
         row.cells.put("Participation source duration",row.get("Duration (in hours)").isBlank()?"1":row.get("Duration (in hours)"));
         row.cells.put("Participation authors",String.valueOf(Calculations.components(row.get("Author of activity").isBlank()?row.get("Author"):row.get("Author of activity")).size()));
@@ -22,7 +22,7 @@ public final class ParticipationAttendance {
             Row input=original.copy();Measurement count=run.measurements.get("attendance:"+original.id),duration=run.measurements.get("duration:"+original.id);
             if(count!=null)input.cells.put(VIEWS,count.value());if(duration!=null)input.cells.put("Duration (in hours)",duration.value());
             try {
-                if(!input.get("Duration (in hours)").isBlank()&&Calculations.number(input.get("Duration (in hours)")).signum()<0)throw new IllegalArgumentException("Duration cannot be negative");
+                // One participation unit per activity; attendance and duration are source evidence, not multipliers.
                 input.cells.put("Attendance hours",Calculations.format(Calculations.attendance(input)));stamp(input);
                 for(Row share:Calculations.split(input,"Attendance hours"))shares.put(share.id,share);
             }catch(IllegalArgumentException invalid){errors.put(original.id,invalid.getMessage());}
@@ -30,12 +30,12 @@ public final class ParticipationAttendance {
         List<Row> rows=new ArrayList<>();for(Row original:artifact.rows) {
             Row row=original.copy();rows.add(row);if(!matches(row))continue;
             Row share=shares.get(row.id);
-            if(share==null){row.cells.put("Participation correction",errors.getOrDefault(sourceId(row),"Original shared attendance is unavailable; re-import the source workbook"));continue;}
+            if(share==null){row.cells.put("Participation correction",errors.getOrDefault(sourceId(row),"Original participation activity is unavailable; re-import the source workbook"));continue;}
             row.cells.remove("Participation correction");
             row.cells.put(VIEWS,share.get(VIEWS));row.cells.put("Attendance hours",share.get("Attendance hours"));
             row.cells.put("Pre-report Views / attendance",share.get(VIEWS));row.cells.put("Current total",share.get(VIEWS));row.cells.put("Pre-report Current total",share.get(VIEWS));row.cells.put("Previous total","0");row.cells.put("Pre-report Previous total","0");
             for(var entry:share.cells.entrySet())if(entry.getKey().startsWith("Participation ")||Set.of("Source sheet","Source workbook").contains(entry.getKey()))row.cells.put(entry.getKey(),entry.getValue());
-            String note="Shared participation attendance: "+share.get("Participation source attendance")+" × max(duration, 1) ÷ ("+share.get("Participation authors")+" authors × "+share.get("Participation tools")+" tools); exact attendance hours "+share.get(VIEWS);
+            String note="One participation unit ÷ ("+share.get("Participation authors")+" authors × "+share.get("Participation tools")+" tools); exact allocated units "+share.get(VIEWS)+". Source attendance/duration retained as evidence only.";
             row.cells.put(NOTE,note);row.cells.put("Live collection note",note);
         }
         return Data.output(artifact,rows);

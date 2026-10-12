@@ -108,6 +108,8 @@ public class WorkbookService {
                     if(date.isBefore(start)||date.isAfter(end)||!TrailingEligibility.includes(original))continue;
                     Row row=original.copy();
                     row.cells.put("Source sheet",name);
+                    if(row.get("Reporting disposition").startsWith("Superseded"))continue;
+                    if(row.get("Verified reporting month").equals(request.month())){row.cells.put("Verified workbook current total",row.get("Current total"));row.cells.put("Verified workbook previous total",row.get("Previous total"));}
                     String baseline=row.get("Current total");boolean validBaseline=true;
                     if(row.get("Snapshot reporting month").equals(request.month())&&!row.get("Starting baseline").isBlank()){
                         row.cells.put("Snapshot cumulative total",baseline);baseline=row.get("Starting baseline");row.cells.put("Current total",baseline);
@@ -124,6 +126,7 @@ public class WorkbookService {
                         var views=Calculations.allocate(Calculations.number(row.get(VIEWS)),split.size());
                         for(int i=0;i<split.size();i++)split.get(i).cells.put(VIEWS,Calculations.format(views.get(i)));
                     } catch(IllegalArgumentException ignored) { /* Preserve missing/invalid supplied views for correction. */ }
+                    for(String field:List.of("Verified workbook current total","Verified workbook previous total"))if(split.size()>1&&!row.get(field).isBlank())try{var values=Calculations.allocate(Calculations.number(row.get(field)),split.size());for(int i=0;i<split.size();i++)split.get(i).cells.put(field,Calculations.format(values.get(i)));}catch(IllegalArgumentException ignored){}
                     past.addAll(split);
                 }
             }
@@ -148,6 +151,7 @@ public class WorkbookService {
             for(String name:names) {
                 Data data=selected(book,name).data;headers.addAll(data.headers);
                 for(Row original:data.rows) {
+                    if(original.get("Reporting disposition").startsWith("Superseded"))continue;
                     List<Row> split=Calculations.split(original,null);
                     for(String metric:List.of("Current total","Previous total",VIEWS))try {
                         var values=Calculations.allocate(Calculations.number(original.get(metric)),split.size());
@@ -227,13 +231,13 @@ public class WorkbookService {
                 Cell cell=source.getCell(c);String value=WorkbookCells.value(cell,formatter);
                 if(cell!=null&&((cell.getCellType()==CellType.NUMERIC)||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.NUMERIC))&&DateUtil.isCellDateFormatted(cell))value=cell.getLocalDateTimeCellValue().toLocalDate().toString();
                 if(cell!=null&&(cell.getCellType()==CellType.ERROR||(cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.ERROR)))throw new BadRequestException("Excel error at "+sheet.getSheetName()+" row "+(n+1));
-                row.cells.put(headers.get(c),value);
+                row.cells.put(headers.get(c),value);if(headers.get(c).equals(VIEWS)&&cell!=null&&cell.getCellType()==CellType.FORMULA)row.cells.put("Legacy views formula",cell.getCellFormula());
             }
             if(row.cells.values().stream().allMatch(String::isBlank))continue;
             LocalDate date=parseDate(row.get(dateHeader),sheet.getSheetName(),n+1);
             row.cells.put(dateHeader,date.toString());result.add(row);dates.put(row.id,date);
         }
-        return new SheetData(new Data(headers,result),dates);
+        return new SheetData(LegacyBaselineAllocation.normalize(new Data(headers,result)),dates);
     }
     static LocalDate parseDate(String value,String sheet,int row) {
         String text=value.strip();for(DateTimeFormatter pattern:DATES)try{return LocalDate.parse(text,pattern);}catch(DateTimeParseException ignored){}

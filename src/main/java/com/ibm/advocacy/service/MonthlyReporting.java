@@ -120,11 +120,14 @@ public class MonthlyReporting {
             Row snapshot=context.sameMonth()&&matches.size()==1?matches.getFirst():null;
             MonthEndValue override=run.monthEndValues.get((current?"current:":"trailing:")+row.id);
             if(override!=null&&!override.asOf().equals(cutoff))override=null;
-            boolean shared=current&&ParticipationAttendance.matches(row)&&row.get("Participation calculation").equals("Shared attendance");
-            if(shared&&override!=null){row.cells.put("Previous manual participation total",override.value());row.cells.put("Participation reporting note","Shared source attendance supersedes the earlier per-row confirmation; original confirmation remains saved for audit");override=null;}
+            boolean shared=current&&ParticipationAttendance.matches(row)&&row.get("Participation calculation").equals("Shared participation units");
+            if(shared&&override!=null){row.cells.put("Previous manual participation total",override.value());row.cells.put("Participation reporting note","One-unit participation allocation supersedes the earlier attendance confirmation; original confirmation remains saved for audit");override=null;}
             boolean monthly=current&&MonthlyWorkshopAttendance.matches(row)&&!row.get("Attendance calculation").isBlank()&&row.get("Attendance correction").isBlank();
             boolean once=current&&oneTime(original);
-            if(rule==null)reason="Activity has no rule in DA metric model 2026";
+            if(original.get("Reporting disposition").startsWith("Superseded"))reason="Duplicate activity attribution; source marks this row as superseded";
+            else if(original.get("Duplicate collection attribution").equals("Yes"))reason="Duplicate activity attribution; unique resource share counted once";
+            else if(!original.get("Baseline allocation issue").isBlank())reason="Historical baseline allocation needs correction — "+original.get("Baseline allocation issue");
+            else if(rule==null)reason="Activity has no rule in DA metric model 2026";
             else if(!cutoff.isBlank()&&!LocalDate.parse(cutoff).isBefore(LocalDate.now()))reason="Reporting month has not closed; month-end totals are not available yet";
             else if(current&&!row.get("Participation correction").isBlank())reason="Shared participation input needs correction — "+row.get("Participation correction");
             else if(current&&!row.get("Attendance correction").isBlank())reason="Monthly attendance total needs correction — "+row.get("Attendance correction");
@@ -133,7 +136,7 @@ public class MonthlyReporting {
             else if(!current&&original.get("Metric basis").contains("not a trailing delta")&&override==null)reason="Retained historical input is not new growth";
             else try {
                 if(once||current&&PERSON.contains(row.type())) {
-                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"Shared participation attendance allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":MonthlyWorkshopAttendance.matches(row)?"Supplied monthly total allocated once; duration not reapplied":"One-time attendance for reporting month");
+                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"One participation unit allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":MonthlyWorkshopAttendance.matches(row)?"Supplied monthly total allocated once; duration not reapplied":"One-time attendance for reporting month");
                     row.cells.put("Current total",once?"":Calculations.format(metric));row.cells.put("Previous total",once?"":"0");
                 } else {
                     boolean processed=current?!followup.contains(row.id)&&!row.get("Pre-report Views / attendance").isBlank():row.get("Pre-report Metric basis").equals("Trailing delta")&&!row.get("Pre-report Current total").isBlank()&&(!original.get("Month-end basis").equals("Selected monthly workbook snapshot")||!row.get("Measured at").isBlank());
@@ -143,6 +146,7 @@ public class MonthlyReporting {
                     if(current&&snapshot!=null&&!snapshot.get("Previous total").isBlank())previous=snapshot.get("Previous total");
                     if(current&&!row.get("Pre-report Previous total").isBlank())previous=row.get("Pre-report Previous total");
                     if(!current&&(processed||snapshot==null||override!=null))previous=row.get("Pre-report Previous total");
+                    if(!current&&snapshot!=null&&!snapshot.get("Baseline allocation").isBlank()&&previous.equals(snapshot.get("Baseline source current total"))&&!run.measurements.containsKey("baseline:"+row.id))previous=snapshot.get("Current total");
                     if(current&&matches.size()>1&&row.get("Pre-report Previous total").isBlank())throw new IllegalArgumentException("Ambiguous previous baseline in monthly workbook; correct the source rows");
                     BigDecimal baseline;
                     try {baseline=nonnegative(previous);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Previous baseline is missing or invalid; correct it in phase 4 or the source workbook");}

@@ -32,6 +32,7 @@ public final class Calculations {
         return new Data(source.headers,rows);
     }
     public static BigDecimal attendance(Row row) {
+        if(ParticipationAttendance.matches(row))return BigDecimal.ONE;
         BigDecimal views=number(row.get(VIEWS));if(views.signum()<0)throw new IllegalArgumentException("Attendance cannot be negative");
         if(MonthlyWorkshopAttendance.matches(row))return views;
         BigDecimal duration=row.get("Duration (in hours)").isBlank()?BigDecimal.ONE:number(row.get("Duration (in hours)"));
@@ -54,7 +55,7 @@ public final class Calculations {
         List<Row> result=new ArrayList<>();int index=0;
         for(String a:authors)for(String t:tools) {
             Row row=original.copy();row.id=original.id+"/"+index;row.cells.put(author,a);row.cells.put("Tool",t);
-            if(allocations!=null) { String value=format(allocations.get(index));row.cells.put(VIEWS,value);if(metric.equals("Attendance hours"))row.cells.put(metric,value); }
+            if(allocations!=null) { String value=format(allocations.get(index));row.cells.put(VIEWS,value);if(metric.equals("Attendance hours")){row.cells.put(metric,value);if(ParticipationAttendance.matches(row))row.cells.put("Participation units",value);} }
             result.add(row);index++;
         }
         return result;
@@ -74,10 +75,11 @@ public final class Calculations {
         for(var group:groups.entrySet()) {
             Measurement m=measured.get(group.getKey());
             if(m==null) { group.getValue().forEach(r->r.cells.put(NOTE,"Current measurement unavailable — prior total retained; delta not calculated"));continue; }
-            List<BigDecimal> allocations=allocate(number(m.value()),group.getValue().size());
-            for(int i=0;i<allocations.size();i++) {
-                Row row=group.getValue().get(i);row.cells.put("Metric basis","Trailing delta");row.cells.put("Measured at",m.collectedAt());row.cells.put("Current total",format(allocations.get(i)));
-                try { BigDecimal delta=allocations.get(i).subtract(number(row.get("Previous total")));row.cells.put(VIEWS,format(delta));row.cells.put(NOTE,(delta.signum()<0?"Negative delta — review; ":"")+m.type()+" collected "+m.collectedAt()+(m.evidence()==null||m.evidence().isBlank()?"":"; "+m.evidence())); }
+            Map<List<String>,Integer> positions=new LinkedHashMap<>();for(Row row:group.getValue())positions.computeIfAbsent(TrailingReporting.collectionAttribution(row),k->positions.size());
+            List<BigDecimal> allocations=allocate(number(m.value()),positions.size());Set<List<String>> seen=new HashSet<>();
+            for(int i=0;i<group.getValue().size();i++) {
+                Row row=group.getValue().get(i);int position=positions.get(TrailingReporting.collectionAttribution(row));if(!seen.add(TrailingReporting.collectionAttribution(row)))row.cells.put("Duplicate collection attribution","Yes");row.cells.put("Metric basis","Trailing delta");row.cells.put("Measured at",m.collectedAt());row.cells.put("Current total",format(allocations.get(position)));
+                try { BigDecimal delta=allocations.get(position).subtract(number(row.get("Previous total")));row.cells.put(VIEWS,format(delta));row.cells.put(NOTE,(delta.signum()<0?"Negative delta — review; ":"")+m.type()+" collected "+m.collectedAt()+(m.evidence()==null||m.evidence().isBlank()?"":"; "+m.evidence())); }
                 catch(IllegalArgumentException e) { row.cells.put(NOTE,"Invalid previous baseline — "+e.getMessage()); }
             }
         }
