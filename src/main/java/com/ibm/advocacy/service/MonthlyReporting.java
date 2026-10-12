@@ -79,20 +79,20 @@ public class MonthlyReporting {
     /** Preserve legacy processing exports; new SharePoint runs explicitly select month-end reporting. */
     public Data artifact(Run run,Data data,boolean current) throws Exception {
         if(!"MONTH_END".equals(run.workbook.get("reportingPolicy")))return data;
-        if(current)data=participation(run,data);
+        if(current)data=currentAttendance(run,data);
         Context context=context(run);
         Set<String> followup=new HashSet<>();
         if(current&&Files.exists(workspace.runPath(run.id,"state/phase-5-follow-up.json")))workspace.data(run.id,"phase-5-follow-up").rows.forEach(row->followup.add(row.id));
         return transform(run,data,current,context,followup);
     }
-    private Data participation(Run run,Data data) throws Exception {
-        if(data.rows.stream().noneMatch(ParticipationAttendance::matches))return data;
+    private Data currentAttendance(Run run,Data data) throws Exception {
+        if(data.rows.stream().noneMatch(row->ParticipationAttendance.matches(row)||MonthlyWorkshopAttendance.matches(row)))return data;
         Data source=Files.isRegularFile(workspace.runPath(run.id,"state/source.json"))?workspace.data(run.id,"source"):new Data();
-        return ParticipationAttendance.reconcile(run,data,source);
+        return MonthlyWorkshopAttendance.reconcile(run,ParticipationAttendance.reconcile(run,data,source),source);
     }
     /** Current-only publication after attribution, with unresolved follow-ups still excluded. */
     public Data currentPublication(Run run,Data data,Set<String> unresolved) throws Exception {
-        return transform(run,participation(run,data),true,context(run),unresolved);
+        return transform(run,currentAttendance(run,data),true,context(run),unresolved);
     }
     static Data transform(Run run,Data data,boolean current,Context context,Set<String> followup) {
         String month=String.valueOf(run.workbook.getOrDefault("month",""));
@@ -122,16 +122,18 @@ public class MonthlyReporting {
             if(override!=null&&!override.asOf().equals(cutoff))override=null;
             boolean shared=current&&ParticipationAttendance.matches(row)&&row.get("Participation calculation").equals("Shared attendance");
             if(shared&&override!=null){row.cells.put("Previous manual participation total",override.value());row.cells.put("Participation reporting note","Shared source attendance supersedes the earlier per-row confirmation; original confirmation remains saved for audit");override=null;}
+            boolean monthly=current&&MonthlyWorkshopAttendance.matches(row)&&!row.get("Attendance calculation").isBlank()&&row.get("Attendance correction").isBlank();
             boolean once=current&&oneTime(original);
             if(rule==null)reason="Activity has no rule in DA metric model 2026";
             else if(!cutoff.isBlank()&&!LocalDate.parse(cutoff).isBefore(LocalDate.now()))reason="Reporting month has not closed; month-end totals are not available yet";
             else if(current&&!row.get("Participation correction").isBlank())reason="Shared participation input needs correction — "+row.get("Participation correction");
-            else if(current&&followup.contains(row.id)&&override==null&&!shared)reason="Unresolved follow-up activity";
+            else if(current&&!row.get("Attendance correction").isBlank())reason="Monthly attendance total needs correction — "+row.get("Attendance correction");
+            else if(current&&followup.contains(row.id)&&override==null&&!shared&&!monthly)reason="Unresolved follow-up activity";
             else if(!current&&(oneTime(original)||!key(rule.trailing()).equals("yes")))reason="One-time activity is not trailing-eligible";
             else if(!current&&original.get("Metric basis").contains("not a trailing delta")&&override==null)reason="Retained historical input is not new growth";
             else try {
                 if(once||current&&PERSON.contains(row.type())) {
-                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"Shared participation attendance allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":"One-time attendance for reporting month");
+                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"Shared participation attendance allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":MonthlyWorkshopAttendance.matches(row)?"Supplied monthly total allocated once; duration not reapplied":"One-time attendance for reporting month");
                     row.cells.put("Current total",once?"":Calculations.format(metric));row.cells.put("Previous total",once?"":"0");
                 } else {
                     boolean processed=current?!followup.contains(row.id)&&!row.get("Pre-report Views / attendance").isBlank():row.get("Pre-report Metric basis").equals("Trailing delta")&&!row.get("Pre-report Current total").isBlank()&&(!original.get("Month-end basis").equals("Selected monthly workbook snapshot")||!row.get("Measured at").isBlank());
@@ -170,7 +172,7 @@ public class MonthlyReporting {
     }
     public Report build(Run run,Data current,Data trailing,Data follow,String scope) throws Exception {
         if(!Set.of("current","trailing","combined").contains(scope))throw new BadRequestException("Unknown reporting scope");
-        Report report=build(run,participation(run,current),trailing,follow,scope,context(run));
+        Report report=build(run,currentAttendance(run,current),trailing,follow,scope,context(run));
         if(report.month().isBlank())return report;
         ImpactTrends.Snapshot history=null;Map<String,Object> source=new LinkedHashMap<>();
         Object metadata=run.workbook.get("chartHistory");if(metadata instanceof Map<?,?> map)map.forEach((key,value)->source.put(String.valueOf(key),value));

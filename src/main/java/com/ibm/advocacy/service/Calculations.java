@@ -33,6 +33,7 @@ public final class Calculations {
     }
     public static BigDecimal attendance(Row row) {
         BigDecimal views=number(row.get(VIEWS));if(views.signum()<0)throw new IllegalArgumentException("Attendance cannot be negative");
+        if(MonthlyWorkshopAttendance.matches(row))return views;
         BigDecimal duration=row.get("Duration (in hours)").isBlank()?BigDecimal.ONE:number(row.get("Duration (in hours)"));
         return views.multiply(duration.max(BigDecimal.ONE));
     }

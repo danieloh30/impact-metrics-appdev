@@ -15,7 +15,10 @@ public class ImpactTrends {
     public record Series(String name,List<String> values) {}
     public record Chart(List<String> months,List<Series> series,List<Boolean> available) {}
     public record Snapshot(String endMonth,Chart channel,Chart tool,List<String> warnings) {}
-    public record Timeline(Chart channel,Chart tool,Map<String,Object> source,List<String> warnings) {}
+    public record Difference(String name,String published,String recalculated,String difference) {}
+    public record Comparison(String publishedTotal,String recalculatedTotal,String difference,List<Difference> rows) {}
+    public record PublishedComparison(String month,Comparison channel,Comparison tool) {}
+    public record Timeline(Chart channel,Chart tool,Map<String,Object> source,List<String> warnings,PublishedComparison comparison) {}
     public static final String SHEET="AppDev Advocacy";
     public static final YearMonth START=YearMonth.of(2025,9);
     public Snapshot read(byte[] bytes,String filename,String endMonth) throws IOException {
@@ -66,7 +69,15 @@ public class ImpactTrends {
         List<String> warnings=new ArrayList<>();if(history==null)warnings.add("Published history since September 2025 is unavailable until the chart workbook is read.");
         else {history.warnings().stream().filter(warning->dates.subList(0,dates.size()-1).stream().anyMatch(warning::startsWith)).forEach(warnings::add);warnings.add("Published monthly impact is imported as-is. Month-only headings are anchored to "+history.endMonth()+"; the selected month is replaced by this run.");}
         if(!currentAvailable)warnings.add("No eligible selected-month contribution is available; that point is shown as a gap.");
-        return new Timeline(merge(dates,channel,history==null?null:history.channel(),currentAvailable),merge(dates,tool,history==null?null:history.tool(),currentAvailable),source,List.copyOf(warnings));
+        return new Timeline(merge(dates,channel,history==null?null:history.channel(),currentAvailable),merge(dates,tool,history==null?null:history.tool(),currentAvailable),source,List.copyOf(warnings),history==null||!history.channel().months().contains(selected)||!currentAvailable?null:new PublishedComparison(selected,compare(selected,channel,history.channel()),compare(selected,tool,history.tool())));
+    }
+    private static Comparison compare(String selected,List<MonthlyReporting.Aggregate> current,Chart history){
+        int index=history.months().indexOf(selected);Map<String,String> labels=new TreeMap<>();Map<String,BigDecimal> published=new HashMap<>(),recalculated=new HashMap<>();
+        for(Series row:history.series()){String key=row.name().toLowerCase(Locale.ROOT);labels.put(key,row.name());published.put(key,Calculations.number(row.values().get(index)));}
+        for(var row:current){String key=row.name().toLowerCase(Locale.ROOT);labels.putIfAbsent(key,row.name());recalculated.put(key,Calculations.number(row.impact()));}
+        List<Difference> rows=new ArrayList<>();BigDecimal oldTotal=BigDecimal.ZERO,newTotal=BigDecimal.ZERO;
+        for(var label:labels.entrySet()){BigDecimal old=published.getOrDefault(label.getKey(),BigDecimal.ZERO),now=recalculated.getOrDefault(label.getKey(),BigDecimal.ZERO);oldTotal=oldTotal.add(old);newTotal=newTotal.add(now);rows.add(new Difference(label.getValue(),Calculations.format(old),Calculations.format(now),Calculations.format(now.subtract(old))));}
+        return new Comparison(Calculations.format(oldTotal),Calculations.format(newTotal),Calculations.format(newTotal.subtract(oldTotal)),List.copyOf(rows));
     }
     private static Chart merge(List<String> dates,List<MonthlyReporting.Aggregate> current,Chart history,boolean currentAvailable) {
         Map<String,String> labels=new LinkedHashMap<>();if(history!=null)history.series().forEach(row->labels.putIfAbsent(row.name().toLowerCase(Locale.ROOT),row.name()));current.forEach(row->labels.putIfAbsent(row.name().toLowerCase(Locale.ROOT),row.name()));

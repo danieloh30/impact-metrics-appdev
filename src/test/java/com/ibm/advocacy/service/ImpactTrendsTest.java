@@ -22,7 +22,7 @@ class ImpactTrendsTest {
     @Test void selectedMonthAlwaysReplacesItsPublishedColumnAndFutureSourceColumnsAreIgnored() throws Exception {
         var source=new ImpactTrends().read(fixture(),"Advocacy RUN metrics 2026.xlsx",null);
         var current=List.of(new MonthlyReporting.Aggregate("Blog post / slide shares / .io updates","8.25","2","10.25","20.5","Views",2));var tool=List.of(new MonthlyReporting.Aggregate("IBM Bob","8.25","2","10.25","20.5","Views",2));
-        var result=ImpactTrends.build("2026-09",current,tool,source,Map.of("filename","source"));assertEquals(13,result.channel().months().size());assertEquals("2025-09",result.channel().months().getFirst());assertEquals("111",result.channel().series().getFirst().values().get(11));assertEquals("10.25",result.channel().series().getFirst().values().get(12));
+        var result=ImpactTrends.build("2026-09",current,tool,source,Map.of("filename","source"));assertEquals("999999",result.comparison().channel().publishedTotal());assertEquals("10.25",result.comparison().channel().recalculatedTotal());assertEquals("-999988.75",result.comparison().channel().difference());assertEquals("999999",source.channel().series().getFirst().values().getLast());assertEquals(13,result.channel().months().size());assertEquals("2025-09",result.channel().months().getFirst());assertEquals("111",result.channel().series().getFirst().values().get(11));assertEquals("10.25",result.channel().series().getFirst().values().get(12));
         var august=ImpactTrends.build("2026-08",current,tool,source,Map.of());assertEquals("2025-09",august.channel().months().getFirst());assertEquals(12,august.channel().months().size());assertEquals("100",august.channel().series().getFirst().values().getFirst());assertTrue(august.channel().available().getFirst());assertEquals("10.25",august.channel().series().getFirst().values().getLast());assertFalse(august.channel().months().contains("2026-09"));
     }
     @Test void OctoberExtendsFromSeptember2025RatherThanDroppingTheFirstMonth() throws Exception {
@@ -33,7 +33,7 @@ class ImpactTrendsTest {
     @Test void unavailableMonthsStayNullButBlankCellsInAnExistingPublishedMonthAreZero() throws Exception {
         byte[] bytes;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture()));ByteArrayOutputStream out=new ByteArrayOutputStream()){book.getSheet("AppDev Advocacy").getRow(1).removeCell(book.getSheet("AppDev Advocacy").getRow(1).getCell(2));book.write(out);bytes=out.toByteArray();}
         var source=new ImpactTrends().read(bytes,"Advocacy RUN metrics 2026.xlsx",null);assertEquals("0",source.channel().series().getFirst().values().get(1));
-        var missing=ImpactTrends.build("2026-09",List.of(),List.of(),null,Map.of());assertFalse(missing.channel().available().getFirst());assertEquals(1,missing.warnings().size());
+        var missing=ImpactTrends.build("2026-09",List.of(),List.of(),null,Map.of());assertNull(missing.comparison());assertFalse(missing.channel().available().getFirst());assertEquals(1,missing.warnings().size());
     }
     @Test void invalidYearsMonthsDuplicatesAndErrorsAreRejected() throws Exception {
         assertThrows(jakarta.ws.rs.BadRequestException.class,()->new ImpactTrends().read(fixture(),"Unknown.xlsx",null));assertThrows(jakarta.ws.rs.BadRequestException.class,()->new ImpactTrends().read(fixture(),"2025 2026.xlsx",null));assertThrows(jakarta.ws.rs.BadRequestException.class,()->new ImpactTrends().read(fixture(),"2026.xlsx","2026-08"));
@@ -41,7 +41,7 @@ class ImpactTrendsTest {
     }
     @Test void aFullyExcludedSelectedMonthIsUnavailableNotAFalseZero() throws Exception {
         var history=new ImpactTrends().read(fixture(),"Advocacy RUN metrics 2026.xlsx",null);var result=ImpactTrends.build("2026-09",List.of(),List.of(),history,Map.of(),false);
-        assertFalse(result.channel().available().getLast());assertNull(result.channel().series().getFirst().values().getLast());assertTrue(result.channel().available().getFirst());
+        assertNull(result.comparison());assertFalse(result.channel().available().getLast());assertNull(result.channel().series().getFirst().values().getLast());assertTrue(result.channel().available().getFirst());
     }
     @Test void nativeWorkbookExportsTwoStackedAreaChartsAndBobIsOptional() throws Exception {
         var fixture=new MonthlyReportingTest();var row=fixture.row("video","2026-09-10","IBM Bob","Recorded video","166.5");var report=MonthlyReporting.build(fixture.run(),fixture.data(row),new com.ibm.advocacy.model.Data(),new com.ibm.advocacy.model.Data(),"combined",fixture.context(fixture.data(fixture.snapshot(row,"166.5","0"))));

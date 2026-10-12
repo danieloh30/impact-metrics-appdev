@@ -1,5 +1,10 @@
 # Impact Metrics AppDev
 
+Monthly RH/IBM Sales User Experiences workshops use their supplied completed monthly totals directly. Duration is not multiplied again; ordinary workshops still use attendees × duration. Authors × tools are allocated once. For example, the September workshop inputs reconcile to 12,020 impact hours (Luxottica 1,500 + RH 7,530 + IBM 2,990), rather than 33,060. `MonthlyWorkshopAttendance.ACTIVITIES` defines the two confirmed rollup identities; this is not a general exception for every workshop. Saved reports, chart pivots, current exports and publication previews correct these two activities from immutable current input data on copies. Historical attributed rows are not reallocated, original phase versions are kept, and no SharePoint changes are made until a new publication is reviewed and confirmed.
+
+Expand **Compare YYYY-MM with published totals** beside the charts to inspect published/recalculated impact and differences by activity and tool. The selected month is recomputed; the imported published totals are a comparison, while earlier months retain published values. Later online measurements and changed eligibility can produce valid differences. Publication stores reviewed values in owned numeric metric cells, replacing any old formula in those cells so recalculating Excel cannot restore obsolete counts. Custom formulas, unmatched rows and other sheets are preserved.
+
+
 Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. Read two SharePoint workbooks, select a reporting month, review phase approvals, enter verified measurements, preview results, and download CSVs or a ZIP. Workbook cells feed specialized agents and Java decimal calculations directly. CSV files are generated in memory only when downloaded; no intermediate CSV files are created. No IBM Bob or Python execution is required.
 
 ## See the workflow

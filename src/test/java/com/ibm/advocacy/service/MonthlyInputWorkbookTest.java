@@ -35,4 +35,10 @@ class MonthlyInputWorkbookTest {
         WorkbookService reader=new WorkbookService();reader.blogs=new BlogSheetReader();
         var rerun=reader.prepare(new WorkbookRequest(current,"2026-10","Current month inputs",List.of("October 2026 inputs"),complete));assertEquals("100",rerun.trailing().rows.getFirst().get("Current total"));assertEquals("200",rerun.trailing().rows.getFirst().get("Snapshot cumulative total"));var next=reader.prepare(new WorkbookRequest(current,"2026-11","Current month inputs",List.of("October 2026 inputs"),complete));assertEquals("200",next.trailing().rows.getFirst().get("Current total"));
     }
+    @Test void ownedMetricFormulasBecomeReviewedValuesWhileCustomFormulasRemain() throws Exception {
+        byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){var row=book.getSheet("September inputs").getRow(1);row.getCell(6).setCellFormula("753/4");row.getCell(8).setCellFormula("753/4");book.getCreationHelper().createFormulaEvaluator().evaluateAll();book.write(out);original=out.toByteArray();}
+        var result=writer.merge(original,data(row("1","Existing","188.25")),"2026-09","COMPLETED","run");try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){var row=book.getSheet("September inputs").getRow(1);assertEquals(org.apache.poi.ss.usermodel.CellType.NUMERIC,row.getCell(6).getCellType());assertEquals(org.apache.poi.ss.usermodel.CellType.NUMERIC,row.getCell(8).getCellType());assertEquals(188.25,row.getCell(8).getNumericCellValue());assertEquals("1+2",row.getCell(10).getCellFormula());book.getCreationHelper().createFormulaEvaluator().evaluateAll();assertEquals(188.25,row.getCell(8).getNumericCellValue());}
+        var repeat=writer.merge(result.bytes(),data(row("1","Existing","188.25")),"2026-09","COMPLETED","run");assertEquals(0,repeat.updated());
+    }
+
 }
