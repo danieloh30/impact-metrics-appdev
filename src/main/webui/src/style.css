@@ -476,3 +476,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .linkedin-controls .linkedin-context { margin:0; font-size:13px; }
 .linkedin-controls .import-actions { gap:18px; }
 @media(max-width:700px) { .publication-panel { padding:22px 18px; } .publication-heading { padding-right:0; } .publication-month { position:static; display:inline-block; margin:0 0 12px; } .publication-actions { display:grid; grid-template-columns:1fr; gap:14px; } .publication-actions button { width:100%; } .publication-confirm { padding:16px; } .linkedin-controls { padding:18px; } }
+
+.publication-duplicate-help { margin:20px 0; padding:20px 24px; border:1px solid #ecd391; border-left:4px solid #b7791f; border-radius:10px; background:#fffaf0; color:#594727; }
+.publication-duplicate-help h3 { margin:0 0 12px; font-size:16px; color:#854d0e; }
+.publication-duplicate-help ol { padding-left:22px; margin:0 0 14px; }
+.publication-duplicate-help li { margin:9px 0; line-height:1.7; }
+.publication-duplicate-help p { margin:0; line-height:1.7; }
