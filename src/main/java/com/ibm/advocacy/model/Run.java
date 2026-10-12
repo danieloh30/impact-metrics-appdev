@@ -6,6 +6,7 @@ public class Run {
     public String id,createdAt,status="READY",error="",instructionHash="",inputHash="",review="";
     public Map<String,Object> workbook=new LinkedHashMap<>();
     public CollectionProgress collectionProgress;
+    public WorkbookPublication publication;
     public int phase=0,version=0;
     public boolean trailing=false,contractAccepted=false;
     public int currentRows,trailingRows;

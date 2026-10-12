@@ -81,6 +81,7 @@ public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String cur
     run.workbook.put("source","SharePoint");run.workbook.put("sourceUrl",currentUrl);
     run.workbook.put("historySourceUrl",historyUrl);run.workbook.put("historyFilename",historyFilename);run.workbook.put("historySha256",RuntimeWorkspace.hash(historyBytes));
     run.workbook.put("reportingPolicy","MONTH_END");run.workbook.put("metricModel","DA metric model 2026");
+    run.workbook.put("publicationCheckpoint",true);
     if(chartHistoryId!=null&&!chartHistoryId.isBlank())chartHistoryStore.attach(run,chartHistoryId);
     workspace.save(run);return run;
 }
@@ -120,6 +121,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
         synchronized(lock(id)) {
             Run run=workspace.load(id);
             if(run.status.equals("RUNNING_PHASE")&&!active.contains(id)) { run.status="FAILED_RETRYABLE";run.error="Execution interrupted by restart; retry resumes from immutable phase inputs";workspace.save(run); }
+            if(run.status.equals("PUBLISHING_WORKBOOK")&&!active.contains(id)){run.status=run.phase==3?"AWAITING_PUBLICATION":"COMPLETED";run.error="Publication interrupted by restart. Preview the workbook to verify its latest state before publishing again.";if(run.publication!=null){run.publication.status="FAILED";run.publication.message=run.error;}workspace.save(run);}
             return run;
         }
     }
@@ -144,7 +146,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
             Run run=get(id);if(!run.status.equals("AWAITING_APPROVAL")||run.phase!=phase||run.version!=version||!digest(run).equals(digest))throw new ClientErrorException("Approval is stale or this phase is not awaiting approval",409);
             if(run.issues.stream().anyMatch(Issue::blocking))throw new BadRequestException("Resolve invalid numeric data before approving");
             if(!run.issues.isEmpty()&&!acknowledge)throw new BadRequestException("Acknowledge unresolved collection issues before approving");
-            run.approvals.add(new Approval(phase,version,digest,Instant.now().toString(),acknowledge));Pipeline.event(run,"Approval","Approved phase "+phase+" version "+version);enqueue(run,phase+1);return run;
+            run.approvals.add(new Approval(phase,version,digest,Instant.now().toString(),acknowledge));Pipeline.event(run,"Approval","Approved phase "+phase+" version "+version);if(phase==3&&Boolean.TRUE.equals(run.workbook.get("publicationCheckpoint"))){run.status="AWAITING_PUBLICATION";run.review="Publish approved current inputs to the metrics workbook before trailing collection";workspace.save(run);}else enqueue(run,phase+1);return run;
         }
     }
     void enqueue(Run run,int phase) throws Exception {
@@ -179,6 +181,16 @@ public synchronized byte[] input(String id,String name) throws Exception {
         synchronized(lock(id)) { Run run=get(id);if(Set.of("COMPLETED","CANCELLED").contains(run.status))throw new ClientErrorException("Run is already finished",409);cancelled.add(id);if(!active.contains(id)){run.status="CANCELLED";workspace.save(run);}else run.status="CANCELLING";return run; }
     }
     public boolean cancelled(String id) { return cancelled.contains(id); }
+    void publicationStarted(Run run) throws Exception {
+        if(!active.add(run.id))throw new ClientErrorException("Run is busy",409);
+        run.status="PUBLISHING_WORKBOOK";run.error="";workspace.save(run);
+    }
+    void publicationFinished(String id,boolean beforeTrailing) throws Exception {
+        synchronized(lock(id)){Run run=workspace.load(id);active.remove(id);if(cancelled.contains(id)){run.status="CANCELLED";workspace.save(run);}else if(beforeTrailing)enqueue(run,4);else{run.status="COMPLETED";workspace.save(run);}}
+    }
+    void publicationFailed(String id,boolean beforeTrailing,String message) throws Exception {
+        synchronized(lock(id)){Run run=workspace.load(id);active.remove(id);run.status=cancelled.contains(id)?"CANCELLED":beforeTrailing?"AWAITING_PUBLICATION":"COMPLETED";run.error=message;if(run.publication!=null){run.publication.status="FAILED";run.publication.message=message;}Pipeline.event(run,"Workbook publication",message);workspace.save(run);}
+    }
     public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence) throws Exception {
         return measured(id,version,rowId,value,type,evidence,false);
     }
@@ -309,6 +321,7 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
             Data data=rawArtifact(run,contribution.equals("current")?"current.csv":"updated_90-day.csv");
             if(data.rows.stream().noneMatch(row->row.id.equals(rowId)))throw new BadRequestException("Unknown reporting row");
             run.monthEndValues.put(contribution+":"+rowId,new com.ibm.advocacy.model.MonthEndValue(Calculations.format(Calculations.number(value)),asOf,note.strip(),Instant.now().toString()));
+            if(run.publication!=null&&run.publication.stage.equals("COMPLETED")){run.publication.status="STALE";run.publication.message="Reporting totals changed. Publish the completed snapshot again.";}
             run.reportingRevision++;Pipeline.event(run,"Month-end reporting","Confirmed "+contribution+" total for "+rowId+" as of "+asOf);workspace.save(run);return run;
         }
     }

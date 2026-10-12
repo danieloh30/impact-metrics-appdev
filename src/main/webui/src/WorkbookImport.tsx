@@ -24,14 +24,15 @@ function defaultCurrentSheet(snapshot:Inspection){
  const sheets=snapshot.sheets.filter(sheet=>sheet.eligible&&!sheet.blog);
  return sheets.find(sheet=>sheet.name.trim().toLowerCase()==='current month inputs')?.name||(sheets.length===1?sheets[0].name:'');
 }
-export function WorkbookImport({busy,onImport,onStep,onActivate}:{busy:boolean;onImport:(form:FormData)=>Promise<boolean>;onStep:(step:NextStep)=>void;onActivate:()=>void}){
- const today=new Date();const [month,setMonth]=useState(`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`);
- const [urls,setUrls]=useState(defaults),[inspections,setInspections]=useState<Partial<Record<Role,Inspection>>>({}),[errors,setErrors]=useState<Partial<Record<Role|'prepare',string>>>({});
+export type ImportDefaults={month?:string;urls?:Partial<typeof defaults>;chartUrl?:string};
+export function WorkbookImport({busy,onImport,onStep,onActivate,initial}:{busy:boolean;onImport:(form:FormData)=>Promise<boolean>;onStep:(step:NextStep)=>void;onActivate:()=>void;initial?:ImportDefaults}){
+ const today=new Date();const [month,setMonth]=useState(initial?.month||`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`);
+ const [urls,setUrls]=useState({...defaults,...initial?.urls}),[inspections,setInspections]=useState<Partial<Record<Role,Inspection>>>({}),[errors,setErrors]=useState<Partial<Record<Role|'prepare',string>>>({});
  const [currentSheet,setCurrentSheet]=useState(''),[loading,setLoading]=useState<Role|null>(null),[connectTarget,setConnectTarget]=useState<Role>('current');
  const [session,setSession]=useState<{busy:boolean;status:string;message:string;downloadStage?:string}|null>(null);
  const generation=useRef({current:0,history:0}),flowLock=useRef(false);
  const [flow,setFlow]=useState<Flow>('idle'),[flowBusy,setFlowBusy]=useState(false);
- const [chartUrl,setChartUrl]=useState(defaultChartUrl),[chart,setChart]=useState<ChartSaved|null>(null),[chartError,setChartError]=useState(''),[chartBusy,setChartBusy]=useState(false),[connectUrl,setConnectUrl]=useState('');const chartGeneration=useRef(0);
+ const [chartUrl,setChartUrl]=useState(initial?.chartUrl||defaultChartUrl),[chart,setChart]=useState<ChartSaved|null>(null),[chartError,setChartError]=useState(''),[chartBusy,setChartBusy]=useState(false),[connectUrl,setConnectUrl]=useState('');const chartGeneration=useRef(0);
  const working=busy||flowBusy||!!loading||chartBusy;
  useEffect(()=>{const generation=++chartGeneration.current;setChart(null);void fetch(`/api/chart-history?url=${encodeURIComponent(chartUrl)}`).then(async response=>{if(!response.ok)return;const body=await response.json();if(generation===chartGeneration.current&&body.source?.cacheId)setChart(body);}).catch(()=>{});},[chartUrl]);
  async function readChart(){const generation=++chartGeneration.current;setChartBusy(true);setChartError('');setSession(old=>old?{...old,downloadStage:'OPENING'}:old);try{const response=await fetch('/api/chart-history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:chartUrl})});const body=await response.json();if(!response.ok){if(response.status===401)setConnectUrl(chartUrl);throw new Error(body.error||'Cannot read chart history');}if(generation!==chartGeneration.current)return null;if(!body.source?.cacheId)throw new Error('Chart history did not return a saved snapshot');setChart(body);setConnectUrl('');return body as ChartSaved;}catch(error){setChartError(error instanceof Error?error.message:String(error));return null;}finally{setChartBusy(false);}}

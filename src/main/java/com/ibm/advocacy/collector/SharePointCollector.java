@@ -152,4 +152,22 @@ public class SharePointCollector {
         catch(TimeoutException e){downloadStage="FAILED";future.cancel(true);throw new WebApplicationException("SharePoint download timed out. Check your network and try again.",504);}
         finally{busy.set(false);}
     }
+    /** Update only the already-authorized workbook, with checkout and a preview hash precondition. */
+    public Workbook update(String url,String expectedSha,byte[] candidate) throws Exception {
+        URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint publishing is disabled");
+        if(candidate.length>6_000_000)throw new BadRequestException("Updated workbook must be smaller than 6 MB");
+        if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint is busy. Finish sign-in or wait for the current request.",409);
+        downloadStage="PUBLISHING";
+        Future<Workbook> future=browserWorker.submit(()->{
+            try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=downloadContext(chrome)) {
+                if(!authenticated(browser))throw new ClientErrorException("Connect SharePoint and sign in before publishing.",401);
+                byte[] result=new SharePointFileWriter(browser.request()).replace(file,expectedSha,candidate);saveSession(browser);status="CONNECTED";message="Monthly inputs published and verified.";
+                return new Workbook(result,file.getPath().substring(file.getPath().lastIndexOf('/')+1),file.toASCIIString());
+            }
+        });
+        try{return future.get(180,TimeUnit.SECONDS);}
+        catch(ExecutionException e){downloadStage="FAILED";if(e.getCause() instanceof Exception cause)throw cause;throw e;}
+        catch(TimeoutException e){downloadStage="FAILED";future.cancel(true);throw new WebApplicationException("SharePoint publication timed out. Preview again to verify whether the update was saved.",504);}
+        finally{busy.set(false);}
+    }
 }

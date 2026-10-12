@@ -12,8 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class FakeSharePointCollector extends SharePointCollector {
     public static final AtomicInteger downloads=new AtomicInteger();
     public static volatile byte[] lastBytes;
+    public static final java.util.concurrent.ConcurrentMap<String,byte[]> files=new java.util.concurrent.ConcurrentHashMap<>();
+    public static final AtomicInteger writes=new AtomicInteger();
+    public static volatile boolean denyWrites;
     @Override public Workbook download(String url) throws Exception {
         var uri=fileUri(url);downloads.incrementAndGet();
+        byte[] saved=files.get(uri.toASCIIString());if(saved!=null){lastBytes=saved.clone();return new Workbook(lastBytes,"Synthetic metrics.xlsx",uri.toASCIIString());}
         if(uri.getPath().contains("Advocacy RUN metrics")) {lastBytes=new ImpactTrendsTest().fixture();return new Workbook(lastBytes,"Advocacy RUN metrics 2026.xlsx",uri.toASCIIString());}
         lastBytes=uri.getHost().equals("ibm.sharepoint.com")?history():new WorkbookImportTest().fixture(false);
         return new Workbook(lastBytes,uri.getHost().equals("ibm.sharepoint.com")?"AppDev metrics.xlsx":"SharePoint activities.xlsx",uri.toASCIIString());
@@ -39,4 +43,9 @@ public class FakeSharePointCollector extends SharePointCollector {
     @Override public Map<String,Object> session()
 {return Map.of("enabled",true,"busy",false,"status","CONNECTED","message","Offline authenticated transport fixture");}
     @Override public Map<String,Object> connect(String url){fileUri(url);return session();}
+    @Override public Workbook update(String url,String expectedSha,byte[] candidate) throws Exception {
+        var uri=fileUri(url);if(denyWrites)throw new jakarta.ws.rs.ClientErrorException("SharePoint denied edit access",403);
+        files.compute(uri.toASCIIString(),(key,before)->{if(before==null||!com.ibm.advocacy.storage.RuntimeWorkspace.hash(before).equals(expectedSha))throw new jakarta.ws.rs.ClientErrorException("Workbook changed after preview",409);writes.incrementAndGet();return candidate.clone();});
+        return new Workbook(candidate.clone(),"Synthetic metrics.xlsx",uri.toASCIIString());
+    }
 }

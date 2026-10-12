@@ -109,6 +109,9 @@ public class WorkbookService {
                     Row row=original.copy();
                     row.cells.put("Source sheet",name);
                     String baseline=row.get("Current total");boolean validBaseline=true;
+                    if(row.get("Snapshot reporting month").equals(request.month())&&!row.get("Starting baseline").isBlank()){
+                        row.cells.put("Snapshot cumulative total",baseline);baseline=row.get("Starting baseline");row.cells.put("Current total",baseline);
+                    }
                     try { if(Calculations.number(baseline).signum()<0)throw new IllegalArgumentException(); }
                     catch(IllegalArgumentException e) { validBaseline=false;if(!exclusions.matches(row.get(URL))&&!TrailingEligibility.suppliedWithoutUrl(row))missing++; }
                     // A raw submission can have multiple authors/tools; split its recorded baseline conservatively.
@@ -157,7 +160,7 @@ public class WorkbookService {
         return new Data(new ArrayList<>(headers),rows);
     }
     /** Only explicitly named monthly input sheets supply the separate metrics workbook history. */
-    private static int[] monthlyLabel(String name) {
+    static int[] monthlyLabel(String name) {
         var matcher=java.util.regex.Pattern.compile("(?i)^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(?:(\\d{4})\\s+)?inputs(?:\\s+(\\d{4}))?$").matcher(name.strip());
         if(!matcher.matches())return new int[]{0,0};
         int month=java.time.Month.valueOf(matcher.group(1).toUpperCase(Locale.ROOT)).getValue();
@@ -175,6 +178,9 @@ public class WorkbookService {
             if(matching.size()>1)throw new BadRequestException("Multiple monthly input sheets match "+target+". Keep one authoritative monthly sheet before importing.");
             SheetInfo sheet=matching.getFirst();
             if(!sheet.eligible())throw new BadRequestException("Cannot use historical sheet "+sheet.name()+": "+sheet.reason());
+            if(offset>0)try(XSSFWorkbook book=open(bytes)){
+                Sheet metadata=book.getSheet(MonthlyInputWorkbook.META);if(metadata!=null){DataFormatter formatter=new DataFormatter(Locale.US);for(int i=1;i<=metadata.getLastRowNum();i++){var row=metadata.getRow(i);if(row!=null&&formatter.formatCellValue(row.getCell(0)).equals(target.toString())&&!formatter.formatCellValue(row.getCell(1)).equals("COMPLETED"))throw new BadRequestException("The "+target+" workbook snapshot is provisional. Publish its completed monthly snapshot before using it as a later month's baseline.");}}
+            }
             selected.add(sheet.name());break;
         }
         if(selected.isEmpty())throw new BadRequestException("No monthly input sheets match the reporting window in the metrics workbook. Expected sheets such as August inputs or September inputs.");
@@ -182,7 +188,7 @@ public class WorkbookService {
     }
     private static String sheetKey(String value){return value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}
     /** Map known source labels without substituting private deck/trip-report links for public URLs. */
-    private static String header(String value) {
+    static String header(String value) {
         String text=value.replace('\u00a0',' ').strip().replaceAll("\\s+"," ");
         String key=text.toLowerCase(Locale.ROOT);
         if(key.equals("link / url to public resource"))return URL;
@@ -229,7 +235,7 @@ public class WorkbookService {
         }
         return new SheetData(new Data(headers,result),dates);
     }
-    private LocalDate parseDate(String value,String sheet,int row) {
+    static LocalDate parseDate(String value,String sheet,int row) {
         String text=value.strip();for(DateTimeFormatter pattern:DATES)try{return LocalDate.parse(text,pattern);}catch(DateTimeParseException ignored){}
         throw new BadRequestException("Invalid or missing activity date in "+sheet+" row "+row+": "+value+". Use an Excel date, YYYY-MM-DD or M/D/YYYY.");
     }

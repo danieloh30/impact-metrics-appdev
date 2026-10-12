@@ -365,6 +365,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workbook-snapshot { overflow-wrap:anywhere; margin-top:14px; }
 .workbook-prepare { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:24px; }
 .linkedin-controls { margin:12px 0 24px; }
+.publication-panel { border-left:5px solid #315df5; background:#f8faff; }
+.publication-counts { display:flex; flex-wrap:wrap; gap:24px; margin:24px 0; }
+.publication-counts>span { display:grid; gap:5px; color:#667793; font-size:13px; }
+.publication-counts strong { color:#24344e; font-size:20px; font-weight:600; }
+.publication-panel .checkbox { margin:20px 0; }
+.publication-note { font-size:13px; color:#667793; line-height:1.7; }
+.publication-success { background:#edf8f0; border:1px solid #bddfc8; color:#166534; padding:18px; border-radius:10px; }
+.completion-banner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; padding:22px; margin:22px 0; border:1px solid #cadbf2; border-radius:14px; background:#edf4ff; }
+.completion-banner strong { font-size:22px; font-weight:600; color:#184c89; }
+.completion-banner p { margin:8px 0 0; line-height:1.7; }
+.completion-banner.is-complete { background:#edf8f0; border-color:#bddfc8; }
+.completion-banner.is-complete strong { color:#166534; }
 .report-row-status { display:inline-block; font-weight:600; padding:5px 9px; border:1px solid; border-radius:6px; line-height:1.4; }
 .report-row-status.is-counted { color:#184c89; background:#edf4ff; border-color:#bad0ef; }
 .report-row-status.is-reference { color:#45546c; background:#f1f4f8; border-color:#d3dce8; }

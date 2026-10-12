@@ -35,6 +35,7 @@ class SharePointImportTest {
         var run=sources.create(current.sourceToken(),history.sourceToken(),"2026-10","October inputs");
         assertEquals(before+2,FakeSharePointCollector.downloads.get());assertEquals(1,run.currentRows);assertEquals(3,run.trailingRows);assertEquals(List.of("October inputs"),run.workbook.get("historySheets"));
         assertEquals("AppDev metrics.xlsx",run.workbook.get("historyFilename"));assertEquals(RuntimeWorkspace.hash(historyBytes),run.workbook.get("historySha256"));
+        assertEquals(true,run.workbook.get("publicationCheckpoint"));
         assertArrayEquals(currentBytes,Files.readAllBytes(workspace.runPath(run.id,"rawdata/original.xlsx")));assertArrayEquals(historyBytes,Files.readAllBytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx")));
         var rows=workspace.data(run.id,"trailing-source").rows;assertEquals(List.of("August history","September history","October history"),rows.stream().map(r->r.get("Name of activity")).toList());assertTrue(rows.stream().allMatch(r->r.get("Source workbook").equals("AppDev metrics.xlsx")));
         assertFalse(run.workbook.get("historySourceUrl").toString().contains("?"));assertFalse(run.workbook.get("sourceUrl").toString().contains("?"));
@@ -69,8 +70,11 @@ class SharePointImportTest {
         String id=given().multiPart("sourceToken",current).multiPart("historySourceToken",history).multiPart("month","2026-10").multiPart("currentSheet","October inputs").post("/api/runs/from-sharepoint").then().statusCode(200).extract().path("id");assertEquals(3,runs.get(id).trailingRows);
         for(String path:List.of("/api/runs","/api/runs/from-runtimes","/api/runs/from-workbook","/api/workbooks/inspect"))given().multiPart("current","old.csv","bad".getBytes()).post(path).then().statusCode(org.hamcrest.Matchers.anyOf(org.hamcrest.Matchers.is(404),org.hamcrest.Matchers.is(405)));
     }
-    @Test void twoWorkbookRunCompletesAllPhasesWithHistoricalResultSeparated() throws Exception {
+    @Test void existingTwoWorkbookRunWithoutPublicationFlagKeepsItsOriginalPhaseProgression() throws Exception {
         var current=sources.inspect(url);var past=sources.inspect(historyUrl);var run=sources.create(current.sourceToken(),past.sourceToken(),"2026-10","October inputs");
+        // Saved runs imported before the publication feature have no checkpoint flag.
+        // New-run publication and all seven phases are covered by WorkbookPublicationTest.
+        run.workbook.remove("publicationCheckpoint");workspace.save(run);
         runs.start(run.id,true);
         for(int phase=1;phase<=4;phase++) {
             var ready=waitFor(run.id,"AWAITING_APPROVAL");assertEquals(phase,ready.phase);

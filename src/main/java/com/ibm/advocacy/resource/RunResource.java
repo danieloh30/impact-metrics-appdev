@@ -25,6 +25,11 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class RunResource {
     @Inject RunService service;
     @Inject LinkedInCollector linkedin;
+    @Inject com.ibm.advocacy.service.WorkbookPublicationService publications;
+    public record PublicationPreview(@Min(1) int version,@Min(0) int revision) {}
+    public record PublicationConfirm(@Min(1) int version,@Min(0) int revision,@NotBlank String digest,boolean confirmed) {}
+    @POST @Path("/runs/{id}/publication/preview") public com.ibm.advocacy.service.WorkbookPublicationService.Plan publicationPreview(@PathParam("id") String id,@Valid PublicationPreview body) throws Exception {if(body==null)throw new BadRequestException("Publication preview required");return publications.preview(id,body.version(),body.revision());}
+    @POST @Path("/runs/{id}/publication") public Response publishWorkbook(@PathParam("id") String id,@Valid PublicationConfirm body) throws Exception {if(body==null)throw new BadRequestException("Publication confirmation required");return accepted(publications.publish(id,body.version(),body.revision(),body.digest(),body.confirmed()));}
     public record Start(boolean acceptContract) {}
     public record Reset(boolean confirm) {}
     public record Approve(@Min(1) int version,@NotBlank String digest,boolean acknowledgeIssues) {}

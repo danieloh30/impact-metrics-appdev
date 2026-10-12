@@ -27,7 +27,8 @@ function PivotChart({title,rows,bob=false}:{title:string;rows:Aggregate[];bob?:b
  {!bob&&<div className="report-legend"><span><i className="report-bar-current"/>Current contribution</span><span><i className="report-bar-trailing"/>Historical growth</span></div>}
  </article>;
 }
-export function MonthlyReport({id,version,load,onError,highlight=false,onHistoryStep}:{id:string;version:number;highlight?:boolean;onHistoryStep?:(step:NextStep|null)=>void;load:<T>(path:string,options?:RequestInit)=>Promise<T>;onError:(message:string)=>void}){
+export type ReportCompletion={id:string;ready:boolean;attention:number;chartsReady:boolean};
+export function MonthlyReport({id,version,load,onError,highlight=false,onHistoryStep,onCompletion}:{id:string;version:number;highlight?:boolean;onHistoryStep?:(step:NextStep|null)=>void;onCompletion?:(value:ReportCompletion)=>void;load:<T>(path:string,options?:RequestInit)=>Promise<T>;onError:(message:string)=>void}){
  const [scope,setScope]=useState('combined'),[report,setReport]=useState<Report|null>(null),[loading,setLoading]=useState(true),[search,setSearch]=useState(''),[status,setStatus]=useState('attention');
  const [editing,setEditing]=useState<Detail|null>(null),[value,setValue]=useState(''),[note,setNote]=useState(''),[confirmed,setConfirmed]=useState(false),[saving,setSaving]=useState(false),[revision,setRevision]=useState(0);
  useEffect(()=>{let alive=true;setLoading(true);setReport(null);setEditing(null);void load<Report>(`/runs/${id}/reporting?scope=${scope}`).then(data=>{if(alive){setReport(data);setLoading(false);}}).catch(error=>{if(alive){setLoading(false);onError(String(error.message||error));}});return()=>{alive=false;};},[id,version,scope,revision,load,onError]);
@@ -35,6 +36,7 @@ export function MonthlyReport({id,version,load,onError,highlight=false,onHistory
  const rows=report?.details.rows.filter(row=>(status==='all'||status==='attention'&&handling(row)==='Needs attention'||status==='reference'&&row.cells['Reporting status']==='Excluded'&&handling(row)!=='Needs attention'||row.cells['Reporting status'].toLowerCase()===status)&&(!search||[...Object.values(row.cells),statusText(row),rowReason(row),rowGuidance(row)].some(value=>value?.toLowerCase().includes(search.toLowerCase()))))||[];
  const attention=report?.details.rows.filter(row=>handling(row)==='Needs attention').length||0;
  const reference=report?.details.rows.filter(row=>row.cells['Reporting status']==='Excluded'&&handling(row)!=='Needs attention').length||0;
+ useEffect(()=>{onCompletion?.({id,ready:!!report&&!loading,attention,chartsReady:!!report?.trends});},[id,report,loading,attention,onCompletion]);
  const [historyUrl,setHistoryUrl]=useState(defaultTrendUrl),[historyError,setHistoryError]=useState(''),[historyBusy,setHistoryBusy]=useState(false),[historyStage,setHistoryStage]=useState('OPENING'),[sourceEndMonth,setSourceEndMonth]=useState(''),[bobVisible,setBobVisible]=useState(false);
  const autoRead=useRef<string|null>(null);
  useEffect(()=>{if(report?.trends?.source.sourceUrl)setHistoryUrl(report.trends.source.sourceUrl);},[id,report?.trends?.source.sourceUrl]);

@@ -90,6 +90,10 @@ public class MonthlyReporting {
         Data source=Files.isRegularFile(workspace.runPath(run.id,"state/source.json"))?workspace.data(run.id,"source"):new Data();
         return ParticipationAttendance.reconcile(run,data,source);
     }
+    /** Current-only publication after attribution, with unresolved follow-ups still excluded. */
+    public Data currentPublication(Run run,Data data,Set<String> unresolved) throws Exception {
+        return transform(run,participation(run,data),true,context(run),unresolved);
+    }
     static Data transform(Run run,Data data,boolean current,Context context,Set<String> followup) {
         String month=String.valueOf(run.workbook.getOrDefault("month",""));
         String cutoff=month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString();
