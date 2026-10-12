@@ -365,6 +365,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workbook-snapshot { overflow-wrap:anywhere; margin-top:14px; }
 .workbook-prepare { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:24px; }
 .linkedin-controls { margin:12px 0 24px; }
+.linkedin-attention { padding:24px; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:14px; background:#eef4ff; }
+.linkedin-attention h2 { margin:8px 0 12px; font-size:24px; }
 @media(max-width:900px) { .sharepoint-workbooks { grid-template-columns:1fr; } .sharepoint-connection-bar { align-items:flex-start; flex-direction:column; } }
 @media(max-width:560px) { .sharepoint-workbook { padding:16px; } .workbook-read-row .primary { width:100%; } .reporting-month-picker { align-items:flex-start; flex-direction:column; } }
 .sharepoint-workbook input,.workbook-options select,.reporting-month-picker input { min-height:44px; padding:10px 12px; border:1px solid #cbd8eb; border-radius:7px; background:#fff; color:#26374f; font:inherit; font-size:13px; font-weight:400; line-height:1.4; }

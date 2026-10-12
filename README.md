@@ -4,6 +4,8 @@ Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. 
 
 ## See the workflow
 
+When Phase 1 (digital collection) or Phase 4 (trailing 90 days) has unresolved LinkedIn reactions or Video Views, the next-action guide highlights the LinkedIn connection section. Complete sign-in there; the SPA checks the session automatically and then focuses the collection retry button. Successful measurements stay saved. Required numeric corrections take priority, and manual entry or explicit follow-up acknowledgment remain available. No sign-in or retry is triggered by focusing the button.
+
 The screenshots below use representative sample data to illustrate the interface.
 
 ### 1. Connect your SharePoint workbooks
