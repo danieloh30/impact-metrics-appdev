@@ -12,6 +12,8 @@ import java.net.*;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 import java.util.regex.*;
 
 /** Reads the article's own public counter, never related articles or reaction counts. */
@@ -95,11 +97,26 @@ public class DZoneCollector {
             JsonObject window=control.send("Browser.getWindowForTarget",lookup);
             JsonObject bounds=new JsonObject();bounds.addProperty("windowState","minimized");
             JsonObject update=new JsonObject();update.add("windowId",window.get("windowId"));update.add("bounds",bounds);
-            control.send("Browser.setWindowBounds",update);
-            if(!control.send("Browser.getWindowForTarget",lookup).getAsJsonObject("bounds").get("windowState").getAsString().equals("minimized"))
-                throw new PlaywrightException("DZone collection window could not be kept minimized");
+            awaitMinimized(()->control.send("Browser.setWindowBounds",update),
+                ()->control.send("Browser.getWindowForTarget",lookup).getAsJsonObject("bounds").get("windowState").getAsString().equals("minimized"),
+                ()->page.waitForTimeout(50),System::nanoTime);
             return page;
         } finally {control.detach();}
+    }
+    /** Native window managers apply bounds asynchronously; dispatch Playwright events while waiting. */
+    static void awaitMinimized(Runnable minimize,BooleanSupplier minimized,Runnable poll,LongSupplier nanoTime) {
+        long start=nanoTime.getAsLong(),stableSince=0;boolean stable=false;
+        minimize.run();
+        while(nanoTime.getAsLong()-start<5_000_000_000L) {
+            if(Thread.currentThread().isInterrupted())throw new PlaywrightException("DZone browser minimization interrupted");
+            long now=nanoTime.getAsLong();
+            if(minimized.getAsBoolean()) {
+                if(!stable){stableSince=now;stable=true;}
+                if(now-stableSince>=200_000_000L)return;
+            } else {stable=false;minimize.run();}
+            poll.run();
+        }
+        throw new PlaywrightException("DZone collection window could not be kept minimized within 5 seconds");
     }
     void restrict(BrowserContext context) {
         Set<String> checked=new HashSet<>();
