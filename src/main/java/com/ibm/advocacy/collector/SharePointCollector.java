@@ -164,6 +164,21 @@ byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
         catch(TimeoutException e){downloadStage="FAILED";future.cancel(true);throw new WebApplicationException("SharePoint download timed out. Check your network and try again.",504);}
         finally{busy.set(false);}
     }
+    /** Read-only server metadata; never opens the workbook editor or changes a lock. */
+    public SharePointFileWriter.FileStatus fileStatus(String url) throws Exception {
+        URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint access is disabled");
+        if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint is busy. Finish sign-in or wait for the current request.",409);
+        Future<SharePointFileWriter.FileStatus> future=browserWorker.submit(()->{
+            try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=downloadContext(chrome)) {
+                if(!authenticated(browser))throw new ClientErrorException("Connect SharePoint and sign in before checking workbook status.",401);
+                var result=new SharePointFileWriter(browser.request()).status(file);saveSession(browser);return result;
+            }
+        });
+        try{return future.get(90,TimeUnit.SECONDS);}
+        catch(ExecutionException e){if(e.getCause() instanceof Exception cause)throw cause;throw e;}
+        catch(TimeoutException e){future.cancel(true);throw new WebApplicationException("SharePoint status check timed out. No workbook or lock was changed.",504);}
+        finally{busy.set(false);}
+    }
     /** Update only the already-authorized workbook, with checkout and a preview hash precondition. */
     public Workbook update(String url,String expectedSha,byte[] candidate) throws Exception {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint publishing is disabled");

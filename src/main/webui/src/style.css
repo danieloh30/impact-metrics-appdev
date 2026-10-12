@@ -482,3 +482,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .publication-duplicate-help ol { padding-left:22px; margin:0 0 14px; }
 .publication-duplicate-help li { margin:9px 0; line-height:1.7; }
 .publication-duplicate-help p { margin:0; line-height:1.7; }
+.publication-panel .error { display:block; }
+.publication-panel .error strong { display:block; margin-bottom:6px; }
+.publication-duplicate-help p + p { margin-top:10px; }

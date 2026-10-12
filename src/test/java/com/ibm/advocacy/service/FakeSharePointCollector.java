@@ -15,6 +15,7 @@ public class FakeSharePointCollector extends SharePointCollector {
     public static final java.util.concurrent.ConcurrentMap<String,byte[]> files=new java.util.concurrent.ConcurrentHashMap<>();
     public static final AtomicInteger writes=new AtomicInteger();
     public static volatile boolean denyWrites;
+    @Override public com.ibm.advocacy.collector.SharePointFileWriter.FileStatus fileStatus(String url){fileUri(url);return new com.ibm.advocacy.collector.SharePointFileWriter.FileStatus(2,"","",true,true,"2026-10-12T15:38:01Z","206.0","2026-10-12T17:00:00Z");}
     @Override public Workbook download(String url) throws Exception {
         var uri=fileUri(url);downloads.incrementAndGet();
         byte[] saved=files.get(uri.toASCIIString());if(saved!=null){lastBytes=saved.clone();return new Workbook(lastBytes,"Synthetic metrics.xlsx",uri.toASCIIString());}
