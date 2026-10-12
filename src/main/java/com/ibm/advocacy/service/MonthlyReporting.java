@@ -146,6 +146,7 @@ public class MonthlyReporting {
                     if(current&&matches.size()>1&&row.get("Pre-report Previous total").isBlank())throw new IllegalArgumentException("Ambiguous previous baseline in monthly workbook; correct the source rows");
                     BigDecimal baseline;
                     try {baseline=nonnegative(previous);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Previous baseline is missing or invalid; correct it in phase 4 or the source workbook");}
+                    row.cells.put("Reporting baseline",Calculations.format(baseline));
                     if(total.isBlank())throw new IllegalArgumentException(matches.size()>1?"Ambiguous monthly snapshot match; enter an attributed total":"Reporting total unavailable; collect or confirm a total for the selected month");
                     metric=nonnegative(total).subtract(baseline);
                     row.cells.put("Current total",Calculations.format(nonnegative(total)));row.cells.put("Previous total",Calculations.format(nonnegative(previous)));

@@ -71,6 +71,15 @@ class MonthlyReportingApiTest {
         byte[] excel=runs.reportingDownload(run.id,"combined",true);try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(excel))){assertEquals(925,book.getSheet("Report").getRow(5).getCell(1).getNumericCellValue());}
         assertArrayEquals(original,Files.readAllBytes(workspace.runPath(run.id,"output/1/current.json")));assertTrue(runs.get(run.id).monthEndValues.isEmpty());
     }
+@Test void negativeConfirmationIsRejectedWithoutSavingAndCorrectedTotalResolves() throws Exception {
+    Run run=fixture();Row row=new Row("September inputs:153/0",Map.of("Date","2026-09-10","Author","Markus Eisele","Tool","IBM Bob","Type of activity","Recorded video","Name of activity","Storage article","Current total","1150","Previous total","2100","Metric basis","Trailing delta","Views / attendance","-950"));
+    byte[] original=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(Data.output(new Data(),List.of(row)));
+    workspace.bytes(workspace.runPath(run.id,"output/1/updated_90-day.json"),original);run.artifacts.put("updated_90-day.csv",new Artifact("updated_90-day.csv",1,4,1,"fixture"));
+    run.monthEndValues.put("trailing:"+row.id,new MonthEndValue("1150","2026-09-30","Old invalid confirmation","2026-10-12T12:00:00Z"));workspace.save(run);
+    var invalid=assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"trailing",row.id,"1150","2026-09-30",""));assertTrue(invalid.getMessage().contains("below previous baseline 2100"));assertEquals(0,runs.get(run.id).reportingRevision);assertEquals("1150",runs.get(run.id).monthEndValues.get("trailing:"+row.id).value());assertArrayEquals(original,Files.readAllBytes(workspace.runPath(run.id,"output/1/updated_90-day.json")));
+    runs.confirmMonthEnd(run.id,0,"trailing",row.id,"2300","2026-09-30","Verified attributed share in fixture");assertEquals("100",runs.report(run.id,"trailing").impact());assertEquals(1,runs.report(run.id,"trailing").included());
+    runs.confirmMonthEnd(run.id,1,"trailing",row.id,"2100","2026-09-30","Verified unchanged share in fixture");assertEquals("0",runs.report(run.id,"trailing").impact());assertEquals(1,runs.report(run.id,"trailing").included());
+}
     @Test void chartHistorySnapshotImportsSeparatelyAndDoesNotReplaceAgentSources() throws Exception {
         Run run=fixture();byte[] original=Files.readAllBytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"));
         String url="https://ibm.sharepoint.com/sites/DEPT-DeveloperRelations/Shared%20Documents/Advocacy%20RUN%20metrics%202026.xlsx";

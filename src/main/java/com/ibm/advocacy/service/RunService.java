@@ -335,6 +335,10 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
             note=note==null||note.isBlank()?"User confirmed total as of "+asOf:note.strip();
             Data data=rawArtifact(run,contribution.equals("current")?"current.csv":"updated_90-day.csv");
             if(data.rows.stream().noneMatch(row->row.id.equals(rowId)))throw new BadRequestException("Unknown reporting row");
+            Row reportingRow=reporting.build(run,rawArtifact(run,"current.csv"),rawArtifact(run,"updated_90-day.csv"),rawArtifact(run,"follow-up.csv"),contribution).details().rows.stream().filter(row->row.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown reporting row"));
+            String baseline=reportingRow.get("Reporting baseline");
+            if(!baseline.isBlank()&&Calculations.number(value).compareTo(Calculations.number(baseline))<0)
+                throw new BadRequestException("Attributed total "+Calculations.format(Calculations.number(value))+" is below previous baseline "+baseline+". Checking the confirmation box cannot resolve negative growth. Verify the total and its author/tool share; if the baseline or allocation is wrong, correct the source workbook and start a new run. No reporting changes were saved.");
             run.monthEndValues.put(contribution+":"+rowId,new com.ibm.advocacy.model.MonthEndValue(Calculations.format(Calculations.number(value)),asOf,note.strip(),Instant.now().toString()));
             if(run.publication!=null&&run.publication.stage.equals("COMPLETED")){run.publication.status="STALE";run.publication.message="Reporting totals changed. Publish the completed snapshot again.";}
             run.reportingRevision++;Pipeline.event(run,"Month-end reporting","Confirmed "+contribution+" total for "+rowId+" as of "+asOf);workspace.save(run);return run;
