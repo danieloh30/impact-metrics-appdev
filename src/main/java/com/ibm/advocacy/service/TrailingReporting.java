@@ -38,12 +38,11 @@ public final class TrailingReporting {
         }
         return row;
     }
-    private static String measuredAt(Row row) {
-        if(!category(row).equals("growth"))return "";
+    static String measuredAt(Row row) {
         if(!row.get("Measured at").isBlank())return row.get("Measured at");
         // Legacy snapshots recorded the timestamp in their own collection note.
         // Never replace an older artifact's time with a newer mutable cache value.
-        var match=Pattern.compile("\\bcollected ([0-9T:Z.+-]+)").matcher(row.get(NOTE));
+        var match=Pattern.compile("\\bcollected ([0-9T:Z.+-]+)").matcher(row.get("Live collection note").isBlank()?row.get(NOTE):row.get("Live collection note"));
         if(match.find())try {return Instant.parse(match.group(1)).toString();}
         catch(java.time.format.DateTimeParseException ignored) {}
         return "";
@@ -55,7 +54,7 @@ public final class TrailingReporting {
         for(Row original:source.rows) {
             Row row=normalize(original);
             row.cells.put("Also in current.csv",current==null?"Not available yet":keys.contains(activityKey(row))?"Yes":"No");
-            row.cells.put("Measured at",measuredAt(row));
+            row.cells.put("Measured at",category(row).equals("growth")?measuredAt(row):"");
             rows.add(row);
         }
         return Data.output(source,rows);

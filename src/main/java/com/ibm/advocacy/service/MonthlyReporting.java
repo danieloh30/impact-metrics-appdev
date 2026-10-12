@@ -92,8 +92,16 @@ public class MonthlyReporting {
             Row row=original.copy();rows.add(row);Rule rule=context.rules().get(row.type());
             row.cells.putIfAbsent("Pre-report Views / attendance",original.get(VIEWS));
             row.cells.putIfAbsent("Pre-report Current total",original.get("Current total"));
+            row.cells.putIfAbsent("Pre-report Previous total",original.get("Previous total"));
+            row.cells.putIfAbsent("Pre-report Metric basis",original.get("Metric basis"));
+            row.cells.putIfAbsent("Live collection note",original.get(NOTE));
+            row.cells.putIfAbsent("Source workbook",String.valueOf(run.workbook.getOrDefault(current?"filename":"historyFilename","")));
+            row.cells.putIfAbsent("Source sheet",original.id.contains(":")?original.id.split(":",2)[0]:current?String.valueOf(run.workbook.getOrDefault("currentSheet","")):"");
+            row.cells.put("Source workbook URL",String.valueOf(run.workbook.getOrDefault(current?"sourceUrl":"historySourceUrl","")));
+            row.cells.put("Source row",original.id.split("/",2)[0]);
+            row.cells.put("Measured at",TrailingReporting.measuredAt(original));
             row.cells.put("Reporting month",month);row.cells.put("Activity ID",original.id);row.cells.put("Contribution",current?"Current":"Trailing growth");
-            row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","");row.cells.put("As of",cutoff);
+            row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","");row.cells.put("Reporting action","");row.cells.put("As of",cutoff);
             row.cells.put("Exact reporting metric","");row.cells.put("Impact hours","");row.cells.put("Weight",rule==null?"":rule.weight());row.cells.put("Metric unit",rule==null?"":rule.unit());
             row.cells.put("Trailing 90-day",oneTime(original)?"No":rule==null?"":rule.trailing());
             if(row.get("Geography").isBlank())row.cells.put("Geography",context.geography().getOrDefault(key(row.get("Author").isBlank()?row.get("Author of activity"):row.get("Author")),""));
@@ -101,25 +109,32 @@ public class MonthlyReporting {
             List<Row> matches=lookup.getOrDefault(TrailingReporting.activityKey(row),List.of());
             Row snapshot=context.sameMonth()&&matches.size()==1?matches.getFirst():null;
             MonthEndValue override=run.monthEndValues.get((current?"current:":"trailing:")+row.id);
+            if(override!=null&&!override.asOf().equals(cutoff))override=null;
             boolean once=current&&oneTime(original);
             if(rule==null)reason="Activity has no rule in DA metric model 2026";
             else if(!cutoff.isBlank()&&!LocalDate.parse(cutoff).isBefore(LocalDate.now()))reason="Reporting month has not closed; month-end totals are not available yet";
             else if(current&&followup.contains(row.id)&&override==null)reason="Unresolved follow-up activity";
             else if(!current&&(oneTime(original)||!key(rule.trailing()).equals("yes")))reason="One-time activity is not trailing-eligible";
-            else if(!current&&original.get("Metric basis").contains("not a trailing delta"))reason="Retained historical input is not new growth";
+            else if(!current&&original.get("Metric basis").contains("not a trailing delta")&&override==null)reason="Retained historical input is not new growth";
             else try {
                 if(once||current&&PERSON.contains(row.type())) {
                     metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":"One-time attendance for reporting month");
                     row.cells.put("Current total",once?"":Calculations.format(metric));row.cells.put("Previous total",once?"":"0");
                 } else {
-                    String total=override!=null&&override.asOf().equals(cutoff)?override.value():snapshot==null?"":snapshot.get("Current total");
+                    boolean processed=current?!followup.contains(row.id)&&!row.get("Pre-report Views / attendance").isBlank():row.get("Pre-report Metric basis").equals("Trailing delta")&&!row.get("Pre-report Current total").isBlank()&&(!original.get("Month-end basis").equals("Selected monthly workbook snapshot")||!row.get("Measured at").isBlank());
+                    String agentTotal=processed?row.get(current?"Pre-report Views / attendance":"Pre-report Current total"):"";
+                    String total=override!=null&&override.asOf().equals(cutoff)?override.value():!agentTotal.isBlank()?agentTotal:snapshot==null?"":snapshot.get("Current total");
                     String previous=current?"0":snapshot==null?"":snapshot.get("Previous total");
                     if(current&&snapshot!=null&&!snapshot.get("Previous total").isBlank())previous=snapshot.get("Previous total");
-                    if(!current&&snapshot==null)previous=original.get("Previous total");
-                    if(total.isBlank())throw new IllegalArgumentException(matches.size()>1?"Ambiguous month-end snapshot match":"Month-end total unavailable; later live measurements cannot establish this cutoff");
-                    metric=nonnegative(total).subtract(nonnegative(previous));
+                    if(current&&!row.get("Pre-report Previous total").isBlank())previous=row.get("Pre-report Previous total");
+                    if(!current&&(processed||snapshot==null||override!=null))previous=row.get("Pre-report Previous total");
+                    if(current&&matches.size()>1&&row.get("Pre-report Previous total").isBlank())throw new IllegalArgumentException("Ambiguous previous baseline in monthly workbook; correct the source rows");
+                    BigDecimal baseline;
+                    try {baseline=nonnegative(previous);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Previous baseline is missing or invalid; correct it in phase 4 or the source workbook");}
+                    if(total.isBlank())throw new IllegalArgumentException(matches.size()>1?"Ambiguous monthly snapshot match; enter an attributed total":"Reporting total unavailable; collect or confirm a total for the selected month");
+                    metric=nonnegative(total).subtract(baseline);
                     row.cells.put("Current total",Calculations.format(nonnegative(total)));row.cells.put("Previous total",Calculations.format(nonnegative(previous)));
-                    row.cells.put("Month-end basis",override==null?"Selected monthly workbook snapshot":"User-confirmed month-end total");
+                    row.cells.put("Month-end basis",override!=null?"User-confirmed reporting total":!agentTotal.isBlank()?"Approved agent total assigned to selected reporting month":"Selected monthly workbook snapshot");
                     if(metric.signum()<0)throw new IllegalArgumentException("Negative month-end delta requires correction");
                 }
             }catch(IllegalArgumentException invalid){reason=invalid.getMessage();}
@@ -135,8 +150,7 @@ public class MonthlyReporting {
             }
             if(once) {row.cells.put("Current total","");row.cells.put("Previous total","");}
             if(override!=null&&override.asOf().equals(cutoff)){row.cells.put("Month-end note",override.note());row.cells.put("Recorded at",override.recordedAt());}
-            row.cells.putIfAbsent("Live collection note",original.get(NOTE));
-            if(!current)row.cells.put("Measured at","");
+            if(!reason.isBlank()&&(reason.equals("Unresolved follow-up activity")||reason.startsWith("Reporting total unavailable")||reason.startsWith("Ambiguous monthly snapshot")||reason.startsWith("Negative month-end delta")))row.cells.put("Reporting action","Confirm total");
             row.cells.put(NOTE,"Month-end reporting: "+(reason.isBlank()?row.get("Month-end basis"):reason));
         }
         return Data.output(data,rows);
@@ -158,18 +172,18 @@ public class MonthlyReporting {
         List<Row> selected=new ArrayList<>();if(!scope.equals("trailing"))selected.addAll(now.rows);
         if(!scope.equals("current"))for(Row original:past.rows) {
             Row row=original.copy();
-            if(scope.equals("combined")&&currentKeys.contains(TrailingReporting.activityKey(row))) {row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","Also in current.csv; current contribution takes precedence");}
+            if(scope.equals("combined")&&currentKeys.contains(TrailingReporting.activityKey(row))) {row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","Also in current.csv; current contribution takes precedence");row.cells.put("Reporting action","");}
             selected.add(row);
         }
         Set<List<String>> seen=new HashSet<>();for(Row row:selected)if(row.get("Reporting status").equals("Included")&&!seen.add(TrailingReporting.activityKey(row))) {
-            row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","Duplicate activity attribution; first eligible contribution retained");
+            row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","Duplicate activity attribution; first eligible contribution retained");row.cells.put("Reporting action","");
         }
         Data details=Data.output(new Data(FINAL_HEADERS,List.of()),selected);List<Row> eligible=selected.stream().filter(row->row.get("Reporting status").equals("Included")).toList();
         String month=String.valueOf(run.workbook.getOrDefault("month",""));List<String> warnings=new ArrayList<>();
         if(context.rules().isEmpty())warnings.add("DA metric model 2026 is missing. No weights are guessed.");
-        if(!context.sameMonth())warnings.add("The historical workbook has no selected snapshot for the reporting month. Month-end totals require explicit confirmation.");
+        if(!context.sameMonth())warnings.add("The historical workbook has no snapshot for the selected month. Approved agent totals are used; historical workbook values remain baselines.");
         if(selected.size()>eligible.size())warnings.add((selected.size()-eligible.size())+" rows are excluded. Review the detail reasons before treating this report as complete.");
-        if(run.status.equals("COMPLETED"))warnings.add("Monthly workbook values are treated as month-end assertions. Their sheet labels alone do not prove when they were measured.");
+        warnings.add("Approved agent counts are assigned to "+month+" as its final reporting data, including counts collected later. Measured at preserves the actual collection date; As of is the reporting month-end.");
         BigDecimal total=eligible.stream().map(row->Calculations.number(row.get("Impact hours"))).reduce(BigDecimal.ZERO,BigDecimal::add);
         var activity=aggregate(eligible,"Type of activity");var tool=aggregate(eligible,"Tool");
         return new Report(month,month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString(),scope,run.reportingRevision,run.status.equals("COMPLETED"),eligible.size(),selected.size()-eligible.size(),Calculations.format(total),activity,tool,aggregate(eligible.stream().filter(row->row.get("Tool").equals("IBM Bob")).toList(),"Type of activity"),details,warnings,month.isBlank()?null:ImpactTrends.build(month,activity,tool,null,Map.of(),!eligible.isEmpty()||selected.isEmpty()));

@@ -1,4 +1,4 @@
 package com.ibm.advocacy.model;
 
-/** An explicit month-end attestation, kept separate from the time it was entered. */
+/** A total assigned to the selected reporting month, separate from when it was entered. */
 public record MonthEndValue(String value, String asOf, String note, String recordedAt) {}

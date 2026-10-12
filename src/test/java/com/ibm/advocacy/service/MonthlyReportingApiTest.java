@@ -23,6 +23,7 @@ class MonthlyReportingApiTest {
     byte[] history(boolean duplicate) throws Exception {
         try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
             Sheet model=book.createSheet("DA metric model 2026");row(model,0,"Outbound/Inbound","Trailing 90 days?","Activities","Media type","Unit Measure","Weight");row(model,1,"Outbound","No","Customer workshop","workshop","Attendance hours","10");if(duplicate)row(model,2,"Outbound","No","Customer workshop","workshop","Attendance hours","2");
+            row(model,3,"Outbound","Yes","Recorded video","video","Views","0.5");
             Sheet old=book.createSheet("DA metric model");row(old,0,"Activities","Weight");row(old,1,"Customer workshop","2");
             Sheet snapshot=book.createSheet("September inputs");row(snapshot,0,"Date","Author","Tool","Name of activity","Type of activity","Link / URL to resource","Current total","Previous total","Trailing 90-day","Views / attendance");row(snapshot,1,"2026-09-10","Daniel Oh","IBM Bob","Workshop","Customer workshop","","10","0","No","10");
             Sheet ranges=book.createSheet("Ranges");row(ranges,0,"","","","","","","","Author","Geography");row(ranges,1,"","","","","","","","Daniel Oh","AMER");
@@ -58,6 +59,17 @@ class MonthlyReportingApiTest {
         assertFalse(runs.report(run.id,"current").details().rows.getFirst().get("Recorded at").isBlank());
         assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,0,"current",rowId,"100","2026-09-30",""));
         Run saved=runs.get(run.id);saved.status="READY";workspace.save(saved);assertThrows(jakarta.ws.rs.ClientErrorException.class,()->runs.confirmMonthEnd(run.id,1,"current",rowId,"100","2026-09-30",""));
+    }
+    @Test void existingApprovedAgentCountIsAssignedToSeptemberInApiAndDownloadsWithoutReconfirmation() throws Exception {
+        Run run=fixture();run.workbook.put("filename","AvocadoBot.xlsx");run.workbook.put("currentSheet","Current month inputs");run.workbook.put("sourceUrl","https://ibm.sharepoint.com/current.xlsx");
+        Row row=new Row("Current month inputs:23/0",Map.of("Date","2026-09-10","Author","Daniel Oh","Tool","IBM Runtimes","Type of activity","Recorded video","Name of activity","DZone article","Link / URL to resource","https://dzone.com/articles/goose-agentgateway-security","Views / attendance","","Pre-report Views / attendance","1850","Pre-report Current total","1850","Scrape notes","Month-end reporting: excluded"));
+        row.cells.put("Live collection note","DZONE collected 2026-10-11T12:00:00Z — approximately 3.7K views, split across two tools");
+        byte[] original=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(Data.output(new Data(),List.of(row)));
+        workspace.bytes(workspace.runPath(run.id,"output/1/current.json"),original);workspace.save(run);
+        given().get("/api/runs/"+run.id+"/reporting").then().statusCode(200).body("included",equalTo(1)).body("excluded",equalTo(0)).body("month",equalTo("2026-09")).body("impact",equalTo("925")).body("details.rows[0].cells.'Current total'",equalTo("1850")).body("details.rows[0].cells.'Measured at'",equalTo("2026-10-11T12:00:00Z")).body("details.rows[0].cells.'As of'",equalTo("2026-09-30")).body("details.rows[0].cells.'Reporting action'",equalTo(""));
+        Row exported=runs.artifactData(run.id,"current.csv",null).rows.getFirst();assertEquals("1850",exported.get("Views / attendance"));assertEquals("925",exported.get("Impact hours"));assertEquals("https://ibm.sharepoint.com/current.xlsx",exported.get("Source workbook URL"));assertEquals("Current month inputs",exported.get("Source sheet"));
+        byte[] excel=runs.reportingDownload(run.id,"combined",true);try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(excel))){assertEquals(925,book.getSheet("Report").getRow(5).getCell(1).getNumericCellValue());}
+        assertArrayEquals(original,Files.readAllBytes(workspace.runPath(run.id,"output/1/current.json")));assertTrue(runs.get(run.id).monthEndValues.isEmpty());
     }
     @Test void chartHistorySnapshotImportsSeparatelyAndDoesNotReplaceAgentSources() throws Exception {
         Run run=fixture();byte[] original=Files.readAllBytes(workspace.runPath(run.id,"rawdata/trailing-original.xlsx"));
