@@ -377,6 +377,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .report-reference-note { background:#edf4ff; color:#345276; border:1px solid #cadbf2; padding:14px; border-radius:10px; line-height:1.7; }
 .linkedin-attention { padding:24px; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:14px; background:#eef4ff; }
 .linkedin-attention h2 { margin:8px 0 12px; font-size:24px; }
+.linkedin-progress>div { display:flex; flex-wrap:wrap; align-items:center; gap:12px; color:#184c89; }
+.linkedin-progress strong { font-weight:600; font-size:17px; }
+.linkedin-elapsed { font-variant-numeric:tabular-nums; color:#536b8e; font-size:13px; }
+.linkedin-progress p,.linkedin-progress small { line-height:1.7; }
+.linkedin-help { padding:12px; border:1px solid #cadbf2; border-radius:8px; color:#345276; background:#f7faff; }
+.linkedin-success { font-weight:600; color:#166534; padding:14px; border:1px solid #bddfc8; border-radius:8px; background:#edf8f0; }
 @media(max-width:900px) { .sharepoint-workbooks { grid-template-columns:1fr; } .sharepoint-connection-bar { align-items:flex-start; flex-direction:column; } }
 @media(max-width:560px) { .sharepoint-workbook { padding:16px; } .workbook-read-row .primary { width:100%; } .reporting-month-picker { align-items:flex-start; flex-direction:column; } }
 .sharepoint-workbook input,.workbook-options select,.reporting-month-picker input { min-height:44px; padding:10px 12px; border:1px solid #cbd8eb; border-radius:7px; background:#fff; color:#26374f; font:inherit; font-size:13px; font-weight:400; line-height:1.4; }
