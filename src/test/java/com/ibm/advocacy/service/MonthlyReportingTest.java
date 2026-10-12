@@ -85,6 +85,11 @@ class MonthlyReportingTest {
         Row retained=missing.copy();retained.cells.put("Metric basis","Supplied historical input — not a trailing delta");
         var kept=MonthlyReporting.build(run(),new Data(),data(retained),new Data(),"trailing",context(new Data()));assertEquals("",kept.details().rows.getFirst().get("Reporting action"));
     }
+    @Test void combinedHistoryIsOmittedOnlyWhenTheCurrentContributionIsActuallyIncluded(){
+        Row current=row("video","2026-09-10","IBM Bob","Recorded video","");Row historical=current.copy();historical.id="history";historical.cells.put("Metric basis","Trailing delta");historical.cells.put("Current total","100");historical.cells.put("Previous total","60");historical.cells.put(VIEWS,"40");
+        var report=MonthlyReporting.build(run(),data(current),data(historical),data(current),"combined",context(new Data()));assertEquals(1,report.included());assertEquals("20",report.impact());assertEquals("Included",report.details().rows.getLast().get("Reporting handling"));assertEquals("20",report.details().rows.getLast().get("Counted impact hours"));
+        current.cells.put(VIEWS,"100");report=MonthlyReporting.build(run(),data(current),data(historical),new Data(),"combined",context(new Data()));assertEquals("50",report.impact());assertEquals("Already counted",report.details().rows.getLast().get("Reporting handling"));assertEquals("0",report.details().rows.getLast().get("Counted impact hours"));assertTrue(report.details().rows.getLast().get("Reporting guidance").contains("No action required"));assertFalse(report.warnings().stream().anyMatch(warning->warning.contains("need attention")));
+    }
     @Test void sourceContextAndSnapshotFallbackAreAvailableWhenNoAgentTotalExists(){
         Run r=run();r.workbook.put("filename","AvocadoBot.xlsx");r.workbook.put("sourceUrl","https://ibm.sharepoint.com/current.xlsx");r.workbook.put("currentSheet","Current month inputs");
         Row input=row("Current month inputs:12/0","2026-09-10","IBM Bob","Recorded video","");

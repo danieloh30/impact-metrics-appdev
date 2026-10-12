@@ -16,7 +16,7 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @ApplicationScoped
 public class ReportingWorkbook {
     private static final String[] TREND_COLORS={"19692b","0c5571","299dc1","bf6b31","8d3294","65a645","ea7846","545d8b","9dbb5f","d046b0","328a80","bb9237","606eb1","ad4862","83bede","557745","dbad72","53565a","6f497d","ca8ba1","174b36","97703c","4693a5","948675"};
-    private static final Set<String> NUMBERS=Set.of("Current total","Previous total",VIEWS,"Weight","Impact hours","Exact reporting metric","Exact trailing growth");
+    private static final Set<String> NUMBERS=Set.of("Current total","Previous total",VIEWS,"Weight","Impact hours","Counted impact hours","Exact reporting metric","Exact trailing growth");
     public byte[] write(MonthlyReporting.Report report) throws IOException {return write(report,false);}
     public byte[] write(MonthlyReporting.Report report,boolean includeBob) throws IOException {
         try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()) {

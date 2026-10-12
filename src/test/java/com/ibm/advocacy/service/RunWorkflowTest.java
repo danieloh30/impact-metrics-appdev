@@ -26,7 +26,7 @@ class RunWorkflowTest {
     byte[] input() { return ("Author of activity,Tool,Type of activity,Name of activity,Views / attendance,Duration (in hours),Link / URL to resource\r\n"+
         "A;B,X;Y,Recorded video,Digital,,,https://www.linkedin.com/posts/test\r\n"+
         "A;B,X;Y,Customer meeting,Meeting,25,2,\r\n"+
-        "A;B,X,Standard participation,Other,,,\r\n").getBytes(StandardCharsets.UTF_8); }
+        "A;B,X,Analyst or press briefing,Other,,,\r\n").getBytes(StandardCharsets.UTF_8); }
     Run await(String id,String state) throws Exception {
         for(int attempt=0;attempt<200;attempt++) { Run run=service.get(id);if(run.status.equals(state)) { Thread.sleep(25);return service.get(id); }if(run.status.equals("FAILED_RETRYABLE"))fail(run.error);Thread.sleep(25); }
         fail("Timed out waiting for "+state+": "+service.get(id).status);return null;

@@ -79,10 +79,16 @@ public class MonthlyReporting {
     /** Preserve legacy processing exports; new SharePoint runs explicitly select month-end reporting. */
     public Data artifact(Run run,Data data,boolean current) throws Exception {
         if(!"MONTH_END".equals(run.workbook.get("reportingPolicy")))return data;
+        if(current)data=participation(run,data);
         Context context=context(run);
         Set<String> followup=new HashSet<>();
         if(current&&Files.exists(workspace.runPath(run.id,"state/phase-5-follow-up.json")))workspace.data(run.id,"phase-5-follow-up").rows.forEach(row->followup.add(row.id));
         return transform(run,data,current,context,followup);
+    }
+    private Data participation(Run run,Data data) throws Exception {
+        if(data.rows.stream().noneMatch(ParticipationAttendance::matches))return data;
+        Data source=Files.isRegularFile(workspace.runPath(run.id,"state/source.json"))?workspace.data(run.id,"source"):new Data();
+        return ParticipationAttendance.reconcile(run,data,source);
     }
     static Data transform(Run run,Data data,boolean current,Context context,Set<String> followup) {
         String month=String.valueOf(run.workbook.getOrDefault("month",""));
@@ -110,15 +116,18 @@ public class MonthlyReporting {
             Row snapshot=context.sameMonth()&&matches.size()==1?matches.getFirst():null;
             MonthEndValue override=run.monthEndValues.get((current?"current:":"trailing:")+row.id);
             if(override!=null&&!override.asOf().equals(cutoff))override=null;
+            boolean shared=current&&ParticipationAttendance.matches(row)&&row.get("Participation calculation").equals("Shared attendance");
+            if(shared&&override!=null){row.cells.put("Previous manual participation total",override.value());row.cells.put("Participation reporting note","Shared source attendance supersedes the earlier per-row confirmation; original confirmation remains saved for audit");override=null;}
             boolean once=current&&oneTime(original);
             if(rule==null)reason="Activity has no rule in DA metric model 2026";
             else if(!cutoff.isBlank()&&!LocalDate.parse(cutoff).isBefore(LocalDate.now()))reason="Reporting month has not closed; month-end totals are not available yet";
-            else if(current&&followup.contains(row.id)&&override==null)reason="Unresolved follow-up activity";
+            else if(current&&!row.get("Participation correction").isBlank())reason="Shared participation input needs correction — "+row.get("Participation correction");
+            else if(current&&followup.contains(row.id)&&override==null&&!shared)reason="Unresolved follow-up activity";
             else if(!current&&(oneTime(original)||!key(rule.trailing()).equals("yes")))reason="One-time activity is not trailing-eligible";
             else if(!current&&original.get("Metric basis").contains("not a trailing delta")&&override==null)reason="Retained historical input is not new growth";
             else try {
                 if(once||current&&PERSON.contains(row.type())) {
-                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":"One-time attendance for reporting month");
+                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"Shared participation attendance allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":"One-time attendance for reporting month");
                     row.cells.put("Current total",once?"":Calculations.format(metric));row.cells.put("Previous total",once?"":"0");
                 } else {
                     boolean processed=current?!followup.contains(row.id)&&!row.get("Pre-report Views / attendance").isBlank():row.get("Pre-report Metric basis").equals("Trailing delta")&&!row.get("Pre-report Current total").isBlank()&&(!original.get("Month-end basis").equals("Selected monthly workbook snapshot")||!row.get("Measured at").isBlank());
@@ -157,7 +166,7 @@ public class MonthlyReporting {
     }
     public Report build(Run run,Data current,Data trailing,Data follow,String scope) throws Exception {
         if(!Set.of("current","trailing","combined").contains(scope))throw new BadRequestException("Unknown reporting scope");
-        Report report=build(run,current,trailing,follow,scope,context(run));
+        Report report=build(run,participation(run,current),trailing,follow,scope,context(run));
         if(report.month().isBlank())return report;
         ImpactTrends.Snapshot history=null;Map<String,Object> source=new LinkedHashMap<>();
         Object metadata=run.workbook.get("chartHistory");if(metadata instanceof Map<?,?> map)map.forEach((key,value)->source.put(String.valueOf(key),value));
@@ -168,7 +177,7 @@ public class MonthlyReporting {
     static Report build(Run run,Data current,Data trailing,Data follow,String scope,Context context) {
         Set<String> unresolved=new HashSet<>();follow.rows.forEach(row->unresolved.add(row.id));
         Data now=transform(run,current,true,context,unresolved),past=transform(run,trailing,false,context,Set.of());
-        Set<List<String>> currentKeys=new HashSet<>();now.rows.forEach(row->currentKeys.add(TrailingReporting.activityKey(row)));
+        Set<List<String>> currentKeys=new HashSet<>();now.rows.stream().filter(row->row.get("Reporting status").equals("Included")).forEach(row->currentKeys.add(TrailingReporting.activityKey(row)));
         List<Row> selected=new ArrayList<>();if(!scope.equals("trailing"))selected.addAll(now.rows);
         if(!scope.equals("current"))for(Row original:past.rows) {
             Row row=original.copy();
@@ -178,11 +187,18 @@ public class MonthlyReporting {
         Set<List<String>> seen=new HashSet<>();for(Row row:selected)if(row.get("Reporting status").equals("Included")&&!seen.add(TrailingReporting.activityKey(row))) {
             row.cells.put("Reporting status","Excluded");row.cells.put("Reporting reason","Duplicate activity attribution; first eligible contribution retained");row.cells.put("Reporting action","");
         }
+        for(Row row:selected) {
+            String reason=row.get("Reporting reason");String handling=row.get("Reporting status").equals("Included")?"Included":reason.contains("precedence")||reason.startsWith("Duplicate")?"Already counted":reason.equals("Retained historical input is not new growth")||reason.equals("One-time activity is not trailing-eligible")?"No new contribution":"Needs attention";
+            row.cells.put("Reporting handling",handling);row.cells.put("Counted impact hours",handling.equals("Included")?row.get("Impact hours"):"0");
+            row.cells.put("Reporting guidance",handling.equals("Already counted")?"No action required: the eligible contribution is counted once elsewhere":handling.equals("No new contribution")?"No confirmation required: prior totals or one-time inputs do not establish additional trailing growth":handling.equals("Included")?"This contribution is included in the selected month":row.get("Reporting action").equals("Confirm total")?"Confirm an attributed total to resolve this contribution":"Correct the source data or reporting month, then rerun");
+        }
         Data details=Data.output(new Data(FINAL_HEADERS,List.of()),selected);List<Row> eligible=selected.stream().filter(row->row.get("Reporting status").equals("Included")).toList();
         String month=String.valueOf(run.workbook.getOrDefault("month",""));List<String> warnings=new ArrayList<>();
         if(context.rules().isEmpty())warnings.add("DA metric model 2026 is missing. No weights are guessed.");
         if(!context.sameMonth())warnings.add("The historical workbook has no snapshot for the selected month. Approved agent totals are used; historical workbook values remain baselines.");
-        if(selected.size()>eligible.size())warnings.add((selected.size()-eligible.size())+" rows are excluded. Review the detail reasons before treating this report as complete.");
+        long attention=selected.stream().filter(row->row.get("Reporting handling").equals("Needs attention")).count();
+        if(attention>0)warnings.add(attention+" contributions need attention before they can be counted. Review their specific correction reasons.");
+        long omitted=selected.size()-eligible.size()-attention;if(omitted>0)warnings.add(omitted+" rows are intentionally not added: already counted elsewhere or no additional trailing growth. No confirmation is required.");
         warnings.add("Approved agent counts are assigned to "+month+" as its final reporting data, including counts collected later. Measured at preserves the actual collection date; As of is the reporting month-end.");
         BigDecimal total=eligible.stream().map(row->Calculations.number(row.get("Impact hours"))).reduce(BigDecimal.ZERO,BigDecimal::add);
         var activity=aggregate(eligible,"Type of activity");var tool=aggregate(eligible,"Tool");
