@@ -1,8 +1,8 @@
 import {test,expect,Page} from '@playwright/test';
 const linkedIssue={rowId:'c1',activity:'Terraform Live',url:'https://www.linkedin.com/events/123/',reason:'LinkedIn login required',blocking:false,metricType:'VIDEO_VIEWS'};
-async function mock(page:Page,phase:number,issues:any[],options:{ready?:boolean;connecting?:boolean}={}){
+async function mock(page:Page,phase:number,issues:any[],options:{ready?:boolean;connecting?:boolean;publication?:boolean;currentLinks?:number;trailingLinks?:number}={}){
  let session={message:options.connecting?'Sign in using the LinkedIn browser window':'Not connected',connecting:options.connecting===true},connects=0,retries=0;
- let run={id:'linkedin-run',createdAt:'2026-10-11T12:00:00Z',status:options.ready?'READY':'AWAITING_APPROVAL',phase:options.ready?0:phase,version:1,currentRows:1,trailingRows:1,trailing:true,review:'Review collection',error:'',issues,artifacts:{},events:[],approvals:[]};
+ let run={id:'linkedin-run',createdAt:'2026-10-11T12:00:00Z',status:options.publication?'AWAITING_PUBLICATION':options.ready?'READY':'AWAITING_APPROVAL',phase:options.ready?0:phase,version:1,currentRows:1,trailingRows:1,trailing:true,review:'Review collection',error:'',issues,artifacts:{},events:[],approvals:[],workbook:{linkedInCurrentRows:options.currentLinks||0,linkedInTrailingRows:options.trailingLinks||0}};
  await page.addInitScript(()=>localStorage.setItem('impact-run','linkedin-run'));
  await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;let body:unknown={};
   if(path==='/api/runs')body=[run];else if(path==='/api/runs/linkedin-run')body={run,approvalDigest:'fixture'};
@@ -38,4 +38,13 @@ test('Server sign-in timeout removes waiting indicator and enables reconnect in 
 });
 test('A temporary session-check failure is visible and automatic polling recovers',async({page})=>{
  const state=await mock(page,0,[],{ready:true});let failNext=false;await page.route('**/api/linkedin/session',route=>{if(route.request().method()==='POST'){failNext=true;return route.fallback();}if(failNext){failNext=false;return route.fulfill({status:503,json:{error:'Temporary outage'}});}return route.fallback();});await page.goto('/');await page.locator('#connect-linkedin').click();await expect(page.getByRole('region',{name:'LinkedIn metric collection'})).toContainText('Connection status could not be refreshed');state.connected();await expect(page.locator('.linkedin-success')).toContainText('session saved',{timeout:7000});await expect(page.getByText('Connection status could not be refreshed',{exact:false})).toHaveCount(0);expect(state.counts()).toEqual({connects:1,retries:0});
+});
+test('Current LinkedIn sources are highlighted before Phase 1, after accepting the contract',async({page})=>{
+ const state=await mock(page,0,[],{ready:true,currentLinks:2});await page.goto('/');await page.locator('#accept-contract').check();const guide=page.getByRole('navigation',{name:'Next required action'});await expect(guide).toContainText('Connect LinkedIn before Phase 1');await expect(page.locator('#connect-linkedin')).toHaveClass(/next-action-control/);await expect(page.locator('#linkedin-collection')).toContainText('2 current activities');expect(state.counts()).toEqual({connects:0,retries:0});await page.locator('#connect-linkedin').click();state.connected();await expect(guide).toContainText('Start the agents',{timeout:7000});expect(state.counts()).toEqual({connects:1,retries:0});
+});
+test('Trailing LinkedIn sources get advance guidance before publication starts Phase 4',async({page})=>{
+ const state=await mock(page,3,[],{publication:true,trailingLinks:3});await page.goto('/');const guide=page.getByRole('navigation',{name:'Next required action'});await expect(guide).toContainText('Connect LinkedIn before Phase 4');await expect(page.locator('#linkedin-collection')).toContainText('3 trailing activities');await expect(page.locator('#connect-linkedin')).toHaveClass(/next-action-control/);await page.locator('#skip-linkedin-preparation').click();await expect(guide).toContainText('Publish current inputs');await expect(page.locator('#linkedin-collection')).not.toHaveClass(/linkedin-attention/);expect(state.counts()).toEqual({connects:0,retries:0});
+});
+test('Runs without LinkedIn source activities do not request advance sign-in',async({page})=>{
+ const state=await mock(page,0,[],{ready:true});await page.goto('/');await page.locator('#accept-contract').check();await expect(page.getByRole('navigation',{name:'Next required action'})).toContainText('Start the agents');await expect(page.locator('#skip-linkedin-preparation')).toHaveCount(0);expect(state.counts().connects).toBe(0);
 });

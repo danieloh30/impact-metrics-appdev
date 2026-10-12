@@ -12,7 +12,11 @@ After processing, publish the **Completed monthly snapshot** from the same panel
 
 The SPA shows **All processes are complete** when the required workbook publication, reporting review and historical charts are ready. **Start another run** opens fresh input setup without resetting history, retaining the previous month and URLs while fetching new source snapshots. You can repeat the same reporting month, change it, or change workbook URLs. Partial reporting and unavailable chart history are identified instead of announcing full completion.
 
+Publication uses a padded responsive card with separate Preview, Confirm and Publish steps and spaced primary/secondary controls. Authentication/access-refresh errors highlight reconnect; stale previews highlight a fresh preview. Binary workbook reads use the SharePoint file API before opening an Excel viewer. If opening a direct Excel link starts a download or the viewer navigation times out, access is verified with file requests before reporting failure.
+
 Publication endpoints: `POST /api/runs/{id}/publication/preview` accepts `version` and reporting `revision`; `POST /api/runs/{id}/publication` requires the reviewed `digest`, current version/revision and `confirmed: true`. Successful publication runs asynchronously with persisted progress and a receipt. No workbook is written merely by opening the panel or requesting a preview.
+
+LinkedIn sign-in is highlighted **before Phase 1** when current inputs contain supported LinkedIn links, and **before publishing/Phase 4** when trailing inputs contain them. The saved session is reused. An explicit **Continue without LinkedIn** choice keeps manual review available; no sign-in, acknowledgement, collection retry, or publication is triggered automatically. Saved runs acquire the source counts when loaded. Runs with no supported LinkedIn source links keep normal phase guidance.
 
 LinkedIn sign-in progress is checked automatically even before processing starts or when another phase is active. A waiting indicator shows elapsed time and sign-in instructions; after authentication it changes to a green session-saved message and re-enables connection controls. Reloading the SPA recovers an ongoing connection from the server. Status-check failures are shown with automatic retry; the server's existing five-minute sign-in timeout remains authoritative.
 

@@ -24,7 +24,7 @@ class SharePointDownloadTest {
     HttpServer server;URI base;SharePointCollector collector;byte[] workbook;
     @BeforeEach void setup() throws Exception {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);base=URI.create("http://127.0.0.1:"+server.getAddress().getPort());
-        collector=new SharePointCollector(){@Override public URI downloadUri(URI file){return base.resolve("/layout");}};
+        collector=new SharePointCollector(){@Override public URI downloadUri(URI file){return base.resolve("/layout");}@Override URI workbookApiUri(URI file){return base.resolve("/rest");}};
         collector.workspace=workspace;collector.allowedHost="127.0.0.1";collector.channel="chrome";collector.executable=Optional.empty();
         Files.deleteIfExists(workspace.path(".sessions/sharepoint-auth.json"));
         try(XSSFWorkbook xlsx=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()){xlsx.createSheet("Inputs").createRow(0).createCell(0).setCellValue("Synthetic workbook");xlsx.write(out);workbook=out.toByteArray();}
@@ -65,5 +65,22 @@ class SharePointDownloadTest {
             assertArrayEquals(workbook,collector.downloadWorkbook(browser,base.resolve("/warm?token=synthetic").toString(),base.resolve("/file.xlsx")));
             assertTrue(redeemed.get());
         }
+    }@Test void directRestBinaryPreviewDoesNotOpenTheExcelViewer() throws Exception {
+    endpoint("/rest",200,workbook);endpoint("/layout",403,new byte[0]);server.start();
+    try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {
+        assertArrayEquals(workbook,collector.downloadWorkbook(browser,base.resolve("/viewer-unavailable").toString(),base.resolve("/file.xlsx")));
+        assertTrue(browser.pages().isEmpty(),"A valid binary response must not navigate the Excel viewer");
     }
+}
+@Test void aDownloadStartingDuringAccessRefreshIsRetriedInsteadOfReportedAsNavigationFailure() throws Exception {
+    AtomicBoolean refreshed=new AtomicBoolean();
+    server.createContext("/rest",exchange->{boolean ready=refreshed.get();byte[] body=ready?workbook:new byte[0];exchange.sendResponseHeaders(ready?200:403,body.length);exchange.getResponseBody().write(body);exchange.close();});
+    endpoint("/layout",403,new byte[0]);
+    server.createContext("/warm-download",exchange->{refreshed.set(true);exchange.getResponseHeaders().set("Content-Disposition","attachment; filename=metrics.xlsx");exchange.getResponseHeaders().set("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");exchange.sendResponseHeaders(200,workbook.length);exchange.getResponseBody().write(workbook);exchange.close();});server.start();
+    try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {
+        assertArrayEquals(workbook,collector.downloadWorkbook(browser,base.resolve("/warm-download").toString(),base.resolve("/file.xlsx")));
+        assertTrue(refreshed.get());assertTrue(browser.pages().isEmpty());
+    }
+}
+
 }

@@ -90,5 +90,13 @@ class SharePointImportTest {
         assertThrows(BadRequestException.class,()->sources.create(current.sourceToken(),history.sourceToken(),"2025-01","October inputs"));
         assertThrows(BadRequestException.class,()->sources.create(current.sourceToken(),current.sourceToken(),"2026-10","October inputs"));
         assertEquals(3,sources.create(current.sourceToken(),history.sourceToken(),"2026-10","October inputs").trailingRows);
-    }
+    }@Test void linkedInPreparationCountsOnlySupportedHostsAndPathsAndBackfillsSavedRuns() throws Exception {
+    var data=new com.ibm.advocacy.model.Data();for(String link:List.of("https://www.linkedin.com/posts/test/","https://linkedin.com/events/123/","https://www.linkedin.com/feed/update/urn:li:activity:1/","https://www.linkedin.com/pulse/article/","https://linkedin.com.evil.example/posts/test/","https://linkedin.com/in/member/","not a URL"))data.rows.add(new com.ibm.advocacy.model.Row(link,Map.of("Link / URL to resource",link)));
+    assertEquals(4,RunService.linkedInRows(data));assertEquals(0,RunService.linkedInRows(null));
+    var current=sources.inspect(url);var history=sources.inspect(historyUrl);var run=sources.create(current.sourceToken(),history.sourceToken(),"2026-10","October inputs");
+    assertTrue(run.workbook.containsKey("linkedInCurrentRows"));assertTrue(run.workbook.containsKey("linkedInTrailingRows"));
+    run.workbook.remove("linkedInCurrentRows");run.workbook.remove("linkedInTrailingRows");workspace.save(run);
+    var restored=runs.get(run.id);assertTrue(restored.workbook.containsKey("linkedInCurrentRows"));assertTrue(restored.workbook.containsKey("linkedInTrailingRows"));
+}
+
 }

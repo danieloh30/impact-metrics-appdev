@@ -454,3 +454,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .chart-source-input{margin:24px 0}.chart-source-input .import-actions{margin-top:16px}.chart-source-input .workbook-snapshot{margin-bottom:0}
 
 @media(max-width:600px){.impact-trend-chart svg{min-width:1000px}}
+
+.publication-panel { padding:28px 32px; border:1px solid #cbdaf4; border-left:5px solid #315df5; border-radius:16px; background:linear-gradient(120deg,#f5f8ff,#fff); box-shadow:0 5px 20px #19375908; }
+.publication-heading { position:relative; padding-right:110px; }
+.publication-heading h2 { margin:10px 0 14px; }
+.publication-month { position:absolute; right:0; top:0; padding:8px 12px; border:1px solid #c8d8f5; border-radius:9px; background:#eaf0ff; color:#245ac8; font-weight:600; }
+.publication-source { margin:18px 0; overflow-wrap:anywhere; }
+.publication-steps { display:flex; flex-wrap:wrap; gap:12px 28px; list-style:none; padding:16px 0; margin:18px 0; border-top:1px solid #dce5f4; border-bottom:1px solid #dce5f4; color:#60748e; font-size:13px; }
+.publication-steps li { display:flex; align-items:center; gap:9px; }
+.publication-steps li>span { display:grid; place-items:center; width:26px; height:26px; border:1px solid #ccd8ed; border-radius:50%; flex-shrink:0; background:#fff; }
+.publication-steps .is-active { color:#245ac8; font-weight:600; }
+.publication-steps .is-active>span { color:#fff; background:#315df5; border-color:#315df5; }
+.publication-actions { display:flex; flex-wrap:wrap; align-items:center; gap:18px; margin:24px 0 20px; }
+.publication-actions button { min-height:46px; }
+.publication-confirm { margin:22px 0; padding:18px 20px; border:1px solid #cbdaf4; border-radius:10px; background:#fff; }
+.publication-confirm .checkbox { margin:0 0 18px; }
+.publication-panel .publication-note { margin:24px 0 0; padding-top:18px; border-top:1px solid #dce5f4; }
+.publication-connection { display:flex; align-items:center; gap:10px; padding:14px 16px; background:#edf3ff; border-radius:9px; }
+.publication-recovery { font-size:13px; line-height:1.7; }
+.linkedin-controls { padding:20px 24px; border:1px solid #dde5f2; border-radius:12px; background:#fff; }
+.linkedin-controls .linkedin-context { margin:0; font-size:13px; }
+.linkedin-controls .import-actions { gap:18px; }
+@media(max-width:700px) { .publication-panel { padding:22px 18px; } .publication-heading { padding-right:0; } .publication-month { position:static; display:inline-block; margin:0 0 12px; } .publication-actions { display:grid; grid-template-columns:1fr; gap:14px; } .publication-actions button { width:100%; } .publication-confirm { padding:16px; } .linkedin-controls { padding:18px; } }

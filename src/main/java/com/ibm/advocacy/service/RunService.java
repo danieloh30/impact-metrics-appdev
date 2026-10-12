@@ -67,10 +67,15 @@ catch(RuntimeException failure) {
         Run run=createPrepared(prepared.current(),prepared.trailing(),null,null);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
+        run.workbook.put("linkedInCurrentRows",linkedInRows(prepared.current()));run.workbook.put("linkedInTrailingRows",linkedInRows(prepared.trailing()));
         run.workbook.put("blogRows",prepared.blogRows());run.workbook.put("blogSkippedRows",prepared.blogSkippedRows());
         Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows without intermediate CSV files; "+prepared.missingBaselines()+" historical activities need baseline review");
         workspace.save(run);return run;
     }
+static long linkedInRows(Data data) {
+    if(data==null)return 0;
+    return data.rows.stream().filter(row->{try {var uri=java.net.URI.create(row.get(URL).strip());String host=uri.getHost();return host!=null&&(host.equalsIgnoreCase("linkedin.com")||host.toLowerCase(Locale.ROOT).endsWith(".linkedin.com"))&&uri.getPath().matches("/(events|posts|feed/update|pulse)/.*");}catch(Exception invalid){return false;}}).count();
+}
 public synchronized Run createSharePointWorkbooks(byte[] currentBytes,String currentFilename,byte[] historyBytes,String historyFilename,String month,String currentSheet,List<String> historySheets,String currentUrl,String historyUrl) throws Exception {
     return createSharePointWorkbooks(currentBytes,currentFilename,historyBytes,historyFilename,month,currentSheet,historySheets,currentUrl,historyUrl,null);
 }
@@ -120,6 +125,16 @@ public synchronized byte[] input(String id,String name) throws Exception {
     public synchronized Run get(String id) throws Exception {
         synchronized(lock(id)) {
             Run run=workspace.load(id);
+            if(!run.workbook.isEmpty()) {
+                boolean changed=false;
+                for(String source:List.of("source","trailing-source")) {
+                    String key=source.equals("source")?"linkedInCurrentRows":"linkedInTrailingRows";
+                    if(!run.workbook.containsKey(key)&&Files.exists(workspace.runPath(id,"state/"+source+".json"))) {
+                        run.workbook.put(key,linkedInRows(workspace.data(id,source)));changed=true;
+                    }
+                }
+                if(changed)workspace.save(run);
+            }
             if(run.status.equals("RUNNING_PHASE")&&!active.contains(id)) { run.status="FAILED_RETRYABLE";run.error="Execution interrupted by restart; retry resumes from immutable phase inputs";workspace.save(run); }
             if(run.status.equals("PUBLISHING_WORKBOOK")&&!active.contains(id)){run.status=run.phase==3?"AWAITING_PUBLICATION":"COMPLETED";run.error="Publication interrupted by restart. Preview the workbook to verify its latest state before publishing again.";if(run.publication!=null){run.publication.status="FAILED";run.publication.message=run.error;}workspace.save(run);}
             return run;

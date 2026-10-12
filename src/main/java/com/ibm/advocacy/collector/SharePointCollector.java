@@ -118,21 +118,33 @@ public class SharePointCollector {
         if(!allowed(finalUrl.getHost())||path.contains("authenticate.aspx")||path.contains("login.aspx"))throw new ClientErrorException("SharePoint redirected the file request to sign-in. Reconnect SharePoint before importing.",401);
         throw new ClientErrorException("SharePoint returned a web page instead of an Excel file. Verify that the link opens the original workbook and that download is permitted.",422);
     }
-    byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
-        try{return requestWorkbook(browser,downloadUri(file));}
-        catch(WebApplicationException first) {
-            int code=first.getResponse().getStatus();
-            if(code!=401&&code!=403&&code!=404&&code!=422)throw first;
-            // Redeem the original sharing link and allow the saved IBM SSO session to refresh.
-            downloadStage="REFRESHING";
-            Page page=browser.newPage();
+URI workbookApiUri(URI file) {return URI.create(SharePointFileWriter.endpoint(file).toASCIIString()+"/$value");}
+private boolean canRefresh(WebApplicationException failure){return Set.of(401,403,404,422).contains(failure.getResponse().getStatus());}
+private byte[] readWorkbookPaths(BrowserContext browser,URI file) {
+    // Read the binary file directly; the Excel viewer is not needed for a preview.
+    try{return requestWorkbook(browser,workbookApiUri(file));}
+    catch(WebApplicationException failure){if(!canRefresh(failure))throw failure;}
+    return requestWorkbook(browser,downloadUri(file));
+}
+byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
+    try{return readWorkbookPaths(browser,file);}
+    catch(WebApplicationException first) {
+        if(!canRefresh(first))throw first;
+        downloadStage="REFRESHING";
+        Page page=browser.newPage();
+        try {
             try{page.navigate(URI.create(originalUrl.strip()).toASCIIString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30_000));}
-            catch(PlaywrightException e){throw new WebApplicationException("SharePoint could not open the workbook link to refresh access. Check your network or reconnect SharePoint.",504);}
-            try{return requestWorkbook(browser,downloadUri(file));}catch(WebApplicationException retry){int retryCode=retry.getResponse().getStatus();if(retryCode!=401&&retryCode!=403&&retryCode!=404&&retryCode!=422)throw retry;}
-            URI direct=URI.create(file.toASCIIString()+"?download=1");
-            return requestWorkbook(browser,direct);
-        }
+            catch(PlaywrightException navigation){
+                // A direct .xlsx link can start a download, aborting navigation. Even a
+                // slow viewer may already have refreshed cookies. Verify file access
+                // before turning either case into an access-refresh failure.
+            }
+            try{return readWorkbookPaths(browser,file);}
+            catch(WebApplicationException retry){if(!canRefresh(retry))throw retry;}
+            return requestWorkbook(browser,URI.create(file.toASCIIString()+"?download=1"));
+        } finally {page.close();}
     }
+}
     public Workbook download(String url) throws Exception {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
         if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in first.",409);
