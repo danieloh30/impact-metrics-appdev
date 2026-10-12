@@ -86,3 +86,11 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+      - name: Retain browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-failure-diagnostics
+          path: target/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
