@@ -365,6 +365,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workbook-snapshot { overflow-wrap:anywhere; margin-top:14px; }
 .workbook-prepare { display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-top:24px; }
 .linkedin-controls { margin:12px 0 24px; }
+.report-row-status { display:inline-block; font-weight:600; padding:5px 9px; border:1px solid; border-radius:6px; line-height:1.4; }
+.report-row-status.is-counted { color:#184c89; background:#edf4ff; border-color:#bad0ef; }
+.report-row-status.is-reference { color:#45546c; background:#f1f4f8; border-color:#d3dce8; }
+.report-row-status.is-attention { color:#854d0e; background:#fff7d6; border-color:#ecd391; }
+.report-row-status.is-included { color:#166534; background:#edf8f0; border-color:#bddfc8; }
+.report-clear { background:#edf8f0; color:#166534; border:1px solid #bddfc8; padding:18px; border-radius:10px; margin:16px 0; }
+.report-clear strong { font-size:16px; font-weight:600; }
+.report-clear p { color:#345942; margin:8px 0 12px; }
+.report-detail td .report-reference-action { font-weight:500; }
+.report-reference-note { background:#edf4ff; color:#345276; border:1px solid #cadbf2; padding:14px; border-radius:10px; line-height:1.7; }
 .linkedin-attention { padding:24px; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:14px; background:#eef4ff; }
 .linkedin-attention h2 { margin:8px 0 12px; font-size:24px; }
 @media(max-width:900px) { .sharepoint-workbooks { grid-template-columns:1fr; } .sharepoint-connection-bar { align-items:flex-start; flex-direction:column; } }

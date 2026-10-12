@@ -14,7 +14,7 @@ test('selected-month report exposes source evidence and only confirms resolvable
   await route.fulfill({json:body});
  });
  await page.goto('/');await page.getByRole('button',{name:/Oct 11.*2 activities/}).click();
- const section=page.getByRole('region',{name:'Month-end pivots and charts'});await expect(section).toContainText('91.5');await expect(section).toContainText('2026-09-30');
+ const section=page.getByRole('region',{name:'Month-end pivots and charts'});await expect(section).toContainText('91.5');await expect(section).toContainText('2026-09-30');await expect(section.getByRole('combobox',{name:'Reporting status'})).toHaveValue('attention');await expect(section.locator('.report-detail tbody tr')).toHaveCount(2);await expect(section.locator('.report-row-status.is-attention')).toHaveCount(2);await expect(section.getByRole('button',{name:'Confirm month-end total'})).toHaveCount(1);
  await expect(section.getByRole('link',{name:'Download pivots & charts .xlsx ↓'})).toHaveAttribute('href','/api/runs/month-end/reporting/download?scope=combined&bob=false&format=xlsx');
  await section.getByRole('button',{name:'Show pivot table'}).first().click();await expect(section).toContainText('Historical growth impact hours');await expect(section).toContainText('83.25');
  await section.getByRole('combobox',{name:'Reporting scope'}).selectOption('trailing');await expect.poll(()=>scopes.includes('trailing')).toBe(true);
