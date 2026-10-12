@@ -24,7 +24,7 @@ public final class SharePointFileWriter {
             JsonNode error=mapper.readTree(response.body()).path("error"),message=error.path("message");
             String code=error.path("code").asText("");String value=message.isTextual()?message.asText():message.path("value").asText("");
             // Never expose cookie/token/authentication material from an upstream body.
-            if(value.matches("(?is).*(FedAuth|rtFa|Authorization|access_token|refresh_token|Bearer\\s|Cookie:).*"))value="Protected authentication details omitted";
+            if(value.matches("(?is).*(FedAuth|rtFa|Authorization|X-RequestDigest|FormDigestValue|client_secret|access_token|refresh_token|Bearer\\s|Cookie:).*"))value="Protected authentication details omitted";
             value=value.replaceAll("[\\r\\n\\t]+"," ").strip();if(value.length()>500)value=value.substring(0,500)+"…";
             if(code.matches("[A-Za-z0-9 .,_-]{1,180}"))result+=" SharePoint code: "+code+".";
             if(!value.isBlank())result+=" "+value;

@@ -56,7 +56,7 @@ class SharePointFileWriterTest {
         checkoutFailure=423;errorBody="{\"error\":{\"message\":{\"value\":\"FedAuth=secret-test-token\"}}}";
         var failure=assertThrows(WebApplicationException.class,()->new SharePointFileWriter(requests).replace(file,RuntimeWorkspace.hash(original),candidate));
         assertTrue(failure.getMessage().contains("HTTP 423"));assertFalse(failure.getMessage().contains("secret-test-token"));assertTrue(failure.getMessage().contains("Protected authentication details omitted"));
-        errorBody="<html>private-sign-in-page</html>";failure=assertThrows(WebApplicationException.class,()->new SharePointFileWriter(requests).replace(file,RuntimeWorkspace.hash(original),candidate));assertFalse(failure.getMessage().contains("private-sign-in-page"));assertEquals(0,put+checkin+undo);
+        errorBody="{\"error\":{\"message\":{\"value\":\"X-RequestDigest: secret-form-digest\"}}}";failure=assertThrows(WebApplicationException.class,()->new SharePointFileWriter(requests).replace(file,RuntimeWorkspace.hash(original),candidate));assertFalse(failure.getMessage().contains("secret-form-digest"));errorBody="<html>private-sign-in-page</html>";failure=assertThrows(WebApplicationException.class,()->new SharePointFileWriter(requests).replace(file,RuntimeWorkspace.hash(original),candidate));assertFalse(failure.getMessage().contains("private-sign-in-page"));assertEquals(0,put+checkin+undo);
     }
 
 }
