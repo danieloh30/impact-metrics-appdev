@@ -14,7 +14,7 @@ function focusTarget(sectionId:string,actionId?:string){
 function moveTo(sectionId:string,actionId?:string,immediate=false){
  const section=document.getElementById(sectionId),control=actionId?document.getElementById(actionId):null;
  if(!section)return;
- const guide=document.querySelector('.next-action-guide');
+ const guide=document.querySelector('.workflow-monitor')||document.querySelector('.next-action-guide');
  const gap=(guide?.getBoundingClientRect().height??0)+28;
  const available=window.innerHeight-gap-24;
  const target=control&&(!section.contains(control)||section.getBoundingClientRect().height>available)?control:section;

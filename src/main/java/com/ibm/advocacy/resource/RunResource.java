@@ -31,9 +31,9 @@ public class RunResource {
     @GET @Path("/runs/{id}/publication/status") public com.ibm.advocacy.collector.SharePointFileWriter.FileStatus publicationStatus(@PathParam("id") String id) throws Exception {return publications.status(id);}
     @POST @Path("/runs/{id}/publication/preview") public com.ibm.advocacy.service.WorkbookPublicationService.Plan publicationPreview(@PathParam("id") String id,@Valid PublicationPreview body) throws Exception {if(body==null)throw new BadRequestException("Publication preview required");return publications.preview(id,body.version(),body.revision());}
     @POST @Path("/runs/{id}/publication") public Response publishWorkbook(@PathParam("id") String id,@Valid PublicationConfirm body) throws Exception {if(body==null)throw new BadRequestException("Publication confirmation required");return accepted(publications.publish(id,body.version(),body.revision(),body.digest(),body.confirmed()));}
-    public record Start(boolean acceptContract) {}
+    public record Start(boolean acceptContract,boolean automaticProcessing) {}
     public record Reset(boolean confirm) {}
-    public record Approve(@Min(1) int version,@NotBlank String digest,boolean acknowledgeIssues) {}
+    public record Approve(@Min(1) int version,@NotBlank String digest,boolean acknowledgeIssues,boolean automaticProcessing) {}
     public record InputReview(@Min(1) int version,@NotBlank String rowId,String views,String duration,boolean keepOriginal,@Size(max=1000) String note) {}
     public record Manual(@Min(1) int version,@NotBlank String rowId,@NotBlank String value,@NotBlank String type,@Size(max=1000) String evidence,boolean attributed) {}
     public record MonthEnd(@Min(0) int revision,@NotBlank String contribution,@NotBlank String rowId,@NotBlank String value,@NotBlank String asOf,@Size(max=1000) String note) {}
@@ -62,8 +62,8 @@ public class RunResource {
         return Response.ok(service.input(id,name),"text/csv; charset="+charset).header("Content-Disposition","attachment; filename=\""+name+"\"").header("X-Content-Type-Options","nosniff").build();
     }
     @GET @Path("/runs/{id}") public Map<String,Object> get(@PathParam("id") String id) throws Exception { Run run=service.get(id);return Map.of("run",run,"approvalDigest",RunService.digest(run)); }
-    @POST @Path("/runs/{id}/start") public Response start(@PathParam("id") String id,@Valid Start body) throws Exception { return accepted(service.start(id,body!=null&&body.acceptContract())); }
-    @POST @Path("/runs/{id}/phases/{phase}/approve") public Response approve(@PathParam("id") String id,@PathParam("phase") int phase,@Valid Approve body) throws Exception { if(body==null)throw new BadRequestException("Approval body required");return accepted(service.approve(id,phase,body.version(),body.digest(),body.acknowledgeIssues())); }
+    @POST @Path("/runs/{id}/start") public Response start(@PathParam("id") String id,@Valid Start body) throws Exception { return accepted(service.start(id,body!=null&&body.acceptContract(),body!=null&&body.automaticProcessing())); }
+    @POST @Path("/runs/{id}/phases/{phase}/approve") public Response approve(@PathParam("id") String id,@PathParam("phase") int phase,@Valid Approve body) throws Exception { if(body==null)throw new BadRequestException("Approval body required");return accepted(service.approve(id,phase,body.version(),body.digest(),body.acknowledgeIssues(),body.automaticProcessing())); }
     @GET @Path("/runs/{id}/measurement-input") public RunService.MeasurementInput measurementInput(@PathParam("id") String id,@QueryParam("rowId") String rowId,@QueryParam("type") String type) throws Exception {return service.measurementInput(id,rowId,type);}
     @POST @Path("/runs/{id}/measurements") public Response measurement(@PathParam("id") String id,@Valid Manual body) throws Exception { if(body==null)throw new BadRequestException("Measurement body required");return accepted(service.measured(id,body.version(),body.rowId(),body.value(),body.type(),body.evidence(),body.attributed())); }
 @GET @Path("/runs/{id}/trailing-input") public RunService.TrailingInput trailingInput(@PathParam("id") String id,@QueryParam("rowId") String rowId) throws Exception {return service.trailingInput(id,rowId);}

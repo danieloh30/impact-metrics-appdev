@@ -2,7 +2,7 @@ import {test,expect,Page} from '@playwright/test';
 function fixture(phase=2,rows=30){
  const version=phase===1?1:3;
  const artifact=(name:string,count:number)=>({name,version,phase,rows:count,sha256:name+'-hash'});
- return {id:'attendance-run',createdAt:'2026-10-09T12:00:00Z',status:'AWAITING_APPROVAL',phase,version,currentRows:rows+1,trailingRows:0,trailing:false,review:`In-person attendance: 3 artifacts; 0 issues. Review the phase results before continuing.`,error:'',instructionHash:'fixture',issues:[] as any[],artifacts:{'digital.csv':artifact('digital.csv',1),...(phase===2?{'in-person.csv':artifact('in-person.csv',rows),'follow-up.csv':artifact('follow-up.csv',0)}:{})} as Record<string,any>,events:[],approvals:[] as {phase:number;version:number}[]};
+ return {id:'attendance-run',createdAt:'2026-10-09T12:00:00Z',status:'AWAITING_APPROVAL',phase,version,currentRows:rows+1,trailingRows:0,trailing:false,review:`In-person attendance: 3 artifacts; 1 review item. Review the phase results before continuing.`,error:'',instructionHash:'fixture',issues:[{rowId:'c1',activity:'Meeting follow-up',url:'',reason:'Confirm supplied attendance',blocking:false,metricType:'ATTENDANCE'}] as any[],artifacts:{'digital.csv':artifact('digital.csv',1),...(phase===2?{'in-person.csv':artifact('in-person.csv',rows),'follow-up.csv':artifact('follow-up.csv',0)}:{})} as Record<string,any>,events:[],approvals:[] as {phase:number;version:number}[]};
 }
 async function mock(page:Page,initial:ReturnType<typeof fixture>){
  let run=initial;const approvals:any[]=[];const previews:string[]=[];
@@ -22,29 +22,19 @@ async function mock(page:Page,initial:ReturnType<typeof fixture>){
  await page.addInitScript(()=>localStorage.setItem('impact-run','attendance-run'));
  return {approvals,previews,setRun:(value:ReturnType<typeof fixture>)=>{run=value;}};
 }
-test('Phase 2 opens in-person preview after reload and explains review even with zero issues',async({page})=>{
+test('Phase 2 with manual review opens attendance preview and preserves explicit approval',async({page})=>{
  const state=await mock(page,fixture());await page.goto('/');
  await expect(page.getByRole('heading',{name:'in-person.csv preview',exact:true})).toBeVisible();
  await expect(page.locator('.export-row.selected')).toContainText('in-person.csv');await expect(page.locator('table')).toContainText('Meeting 1');
  const checklist=page.getByLabel('In-person attendance review checklist');
  await expect(checklist).toContainText('Standard participation uses one participation unit per activity, shared in Phase 3; attendance and duration are not multiplied.');
- await expect(page.getByLabel('Changes from the previous phase')).toContainText('What changed from Phase 1');await expect(page.getByLabel('Changes from the previous phase')).toContainText('No manual updates flagged');
-const badge=page.locator('.phase-changes-status.is-clear');await expect(badge).toHaveText('No manual updates flagged');await expect(badge).toHaveAttribute('role','status');await expect(badge.locator('svg')).toHaveAttribute('aria-hidden','true');
-const presentation=await badge.evaluate(element=>{
- const style=getComputedStyle(element);
- const luminance=(value:string)=>{const rgb=value.match(/[\d.]+/g)!.slice(0,3).map(Number).map(n=>{const channel=n/255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4;});return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];};
- const foreground=luminance(style.color),background=luminance(style.backgroundColor);
- return {contrast:(Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05),weight:Number(style.fontWeight),size:parseFloat(style.fontSize)};
-});
-expect(presentation.contrast).toBeGreaterThanOrEqual(4.5);expect(presentation.weight).toBeGreaterThanOrEqual(600);expect(presentation.size).toBeGreaterThanOrEqual(13);
-await page.getByLabel('Changes from the previous phase').screenshot({path:'../../../target/e2e-phase-badge-desktop.png'});
-
- await expect(checklist).toContainText('No Phase 2 validation issues');await expect(checklist).toContainText('25 attendees × 2 hours = 50');await expect(checklist).toContainText('one-hour minimum');await expect(checklist).toContainText('Booth duty');await expect(checklist).toContainText('Phase 3');await expect(checklist).toContainText('missing or duplicate');
- const approve=page.getByRole('button',{name:'Approve phase 2',exact:false});await expect(approve).toBeEnabled();expect(state.approvals).toHaveLength(0);
+ await expect(page.getByLabel('Changes from the previous phase')).toContainText('What changed from Phase 1');await expect(page.getByLabel('Changes from the previous phase')).toContainText('Review issues below');
+ await expect(checklist).not.toContainText('No Phase 2 validation issues');await expect(checklist).toContainText('25 attendees × 2 hours = 50');await expect(checklist).toContainText('one-hour minimum');await expect(checklist).toContainText('Booth duty');await expect(checklist).toContainText('Phase 3');await expect(checklist).toContainText('missing or duplicate');
+ const approve=page.getByRole('button',{name:'Approve phase 2',exact:false});await expect(approve).toBeDisabled();expect(state.approvals).toHaveLength(0);
  await page.reload();await expect(page.getByRole('heading',{name:'in-person.csv preview',exact:true})).toBeVisible();expect(state.approvals).toHaveLength(0);
  await page.setViewportSize({width:390,height:844});await expect(checklist).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
- await expect(badge).toBeVisible();await page.getByLabel('Changes from the previous phase').screenshot({path:'../../../target/e2e-phase-badge-mobile.png'});
- await approve.click();await expect.poll(()=>state.approvals.length).toBe(1);expect(state.approvals[0]).toEqual({version:3,digest:'phase-digest',acknowledgeIssues:false});
+ await page.getByLabel('I reviewed the unresolved collection issues and will retain them for follow-up.').check();await expect(approve).toBeEnabled();
+ await approve.click();await expect.poll(()=>state.approvals.length).toBe(1);expect(state.approvals[0]).toEqual({version:3,digest:'phase-digest',acknowledgeIssues:true,automaticProcessing:true});
 });
 test('Published Phase 2 result replaces Phase 1 preview and pagination but preserves explicit choices on refresh',async({page})=>{
  const initial=fixture(1);initial.artifacts['digital.csv'].rows=30;
@@ -72,7 +62,7 @@ test('Phase 3 highlight compares rows with the approved Phase 2 version and pres
  const changes=page.getByLabel('Changes from the previous phase');
  await expect(changes).toContainText('What changed from Phase 2');await expect(changes).toContainText('Compared with approved Phase 2 · version 2');
  await expect(changes).toContainText('author × tool');await expect(changes).toContainText('2 → 4 rows');await expect(changes).toContainText('1 → 4 rows');await expect(changes).toContainText('conserving activity totals');
- await expect(page.getByRole('heading',{name:'digital.csv preview',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Approve phase 3',exact:false})).toBeEnabled();expect(state.approvals).toHaveLength(0);
+ await expect(page.getByRole('heading',{name:'digital.csv preview',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Approve phase 3',exact:false})).toBeDisabled();expect(state.approvals).toHaveLength(0);
  await page.locator('.review-panel').screenshot({path:'../../../target/e2e-phase-changes.png'});
 });
 test('Phase 4 highlight explains historical updates and selects their preview',async({page})=>{

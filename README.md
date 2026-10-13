@@ -2,7 +2,7 @@
 
 The web UI identifies the application as **Impact Hours**. When charts are ready it shows **Process done — charts generated**, separately from final workbook publication. Reports with actionable exclusions are clearly marked **Provisional** before the charts, with **Review items needing attention** navigation. Saving a confirmed month-end value recalculates the totals and charts automatically. Charts show eligible contributions; excluded rows remain visible for review and are never silently added.
 
-LinkedIn setup is highlighted before Phase 1 and before Phase 3 approval starts the path to Phase 4. When supported LinkedIn URLs exist, the UI requires a saved connection or an explicit **Continue without LinkedIn** choice before starting/advancing collection. Publication previews remain available; publishing into Phase 4 waits for that choice. A visible **LinkedIn source check** timeline step and a zero-URL explanation avoid implying that sign-in can collect links missing from the inputs.
+LinkedIn setup is highlighted before Phase 1 and before Phase 3 completion starts the path to Phase 4. When supported LinkedIn URLs exist, the UI requires a saved connection or an explicit **Continue without LinkedIn** choice before starting/advancing collection. Publication previews remain available; publishing into Phase 4 waits for that choice. A visible **LinkedIn source check** timeline step and a zero-URL explanation avoid implying that sign-in can collect links missing from the inputs.
 
 Published tool comparisons offer **Inspect TOOL contributors**. This opens included activities with an exact tool filter, source sheet/resource links, and their counted impact. Tool totals remain sums of eligible activity contributions and reconcile to the report total. Published summaries can differ because measurements, history windows and included activities differ; source assignments are not guessed from an old aggregate.
 
@@ -12,7 +12,7 @@ Monthly RH/IBM Sales User Experiences workshops use their supplied completed mon
 Expand **Compare YYYY-MM with published totals** beside the charts to inspect published/recalculated impact and differences by activity and tool. The selected month is recomputed; the imported published totals are a comparison, while earlier months retain published values. Later online measurements and changed eligibility can produce valid differences. Publication stores reviewed values in owned numeric metric cells, replacing any old formula in those cells so recalculating Excel cannot restore obsolete counts. Custom formulas, unmatched rows and other sheets are preserved.
 
 
-Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. Read two SharePoint workbooks, select a reporting month, review phase approvals, enter verified measurements, preview results, and download CSVs or a ZIP. Workbook cells feed specialized agents and Java decimal calculations directly. CSV files are generated in memory only when downloaded; no intermediate CSV files are created. No IBM Bob or Python execution is required.
+Quarkus LangChain4j application and React SPA for all seven RUN metrics phases. Read two SharePoint workbooks, select a reporting month, review unresolved items, enter verified measurements, preview results, and download CSVs or a ZIP. Workbook cells feed specialized agents and Java decimal calculations directly. CSV files are generated in memory only when downloaded; no intermediate CSV files are created. No IBM Bob or Python execution is required.
 
 ## See the workflow
 
@@ -20,7 +20,7 @@ New SharePoint runs pause after Phase 3 at **Publish current inputs before trail
 
 Before/after workbook copies, reviewed digests and receipts live under ignored `runtimes/runs/<id>/publication/`. A live-content hash and SharePoint checkout protect concurrent edits; a successful upload must be read back and checked in before Phase 4 starts. Changed files, active editing locks, denied permissions and unavailable authentication keep the checkpoint retryable. This uses [Microsoft's file update and checkout/check-in APIs](https://learn.microsoft.com/en-us/sharepoint/dev/sp-add-ins/working-with-folders-and-files-with-rest) and [ResourcePath addressing](https://learn.microsoft.com/en-us/sharepoint/dev/solution-guidance/supporting-and-in-file-and-folder-with-the-resourcepath-api). The application requires your account to have edit access and does not change SharePoint permissions.
 
-After processing, publish the **Completed monthly snapshot** from the same panel. Exact cumulative totals remain separate from monthly deltas and rounded CSV views. `Starting baseline` protects reruns of the same month; later months use the completed snapshot's latest `Current total`. Pre-trailing snapshots are marked `CURRENT_INPUTS` and cannot serve as a completed later-month baseline. Original imported baseline rows and workbook bytes remain immutable. Existing saved runs keep their original phase progression, but completed SharePoint runs can use direct publication. Reporting corrections invalidate an earlier completed publication; chart-history refresh alone does not.
+After processing, publish the **Completed monthly snapshot** from the same panel. Exact cumulative totals remain separate from monthly deltas and rounded CSV views. `Starting baseline` protects reruns of the same month; later months use the completed snapshot's latest `Current total`. Pre-trailing snapshots are marked `CURRENT_INPUTS` and cannot serve as a completed later-month baseline. Original imported baseline rows and workbook bytes remain immutable. Existing saved runs retain their audit history; clean checkpoints resumed in the UI can opt into automatic progression. Completed SharePoint runs can use direct publication. Reporting corrections invalidate an earlier completed publication; chart-history refresh alone does not.
 
 The SPA shows **All processes are complete** when the required workbook publication, reporting review and historical charts are ready. **Start another run** opens fresh input setup without resetting history, retaining the previous month and URLs while fetching new source snapshots. You can repeat the same reporting month, change it, or change workbook URLs. Partial reporting and unavailable chart history are identified instead of announcing full completion.
 
@@ -54,7 +54,7 @@ Choose a reporting month, connect once, and read the activity workbooks and load
 
 ### 2. Review what the agents changed
 
-Each checkpoint highlights changes from the previous phase, any manual updates needed, and the next approval action.
+Clean phases advance automatically. Checkpoints highlight only unresolved collection or data review and required workbook publication; all automatic transitions and human reviews are recorded.
 
 ![Phase review showing attendance calculations, changes from the previous phase, and the no-manual-updates status](docs/screenshots/phase-review.png)
 
@@ -198,6 +198,12 @@ For LinkedIn, run `npx playwright install chromium` from `src/main/webui`, then 
 
 Posts/feed/pulse use total reactions only. Events follow the admin post-analytics link and require **Video Views** from Video performance. Lifetime unique viewers and peak concurrent viewers are not accepted substitutes. Missing login/admin access or changed markup falls back to manual entry. Authenticated LinkedIn collection and live LLM responses have not been verified in this session.
 
+## Automatic processing and live status
+
+Workbook preparation starts the agents automatically; the calculation rules remain available for reference. LinkedIn URLs require a saved connection or an explicit choice to continue without it. Clean phases advance on the backend, even if UI polling is delayed. A correction that resolves all issues resumes the automatic path; remaining optional issues still need acknowledgment. Automatic phase transitions have `automatic: true` in the approval audit. The existing `/api/runs/{id}/start` and `/phases/{phase}/approve` endpoints accept an optional `automaticProcessing` boolean; old API callers retain their manual workflow when omitted. The persisted run flag survives restarts, and interrupted work still requires an explicit retry.
+
+The sticky process monitor shows completed agent phases, real resource-check counts, review pauses, publication, chart generation, and **Process done**. The phase bar measures agent work; it does not claim the entire workflow is done while reporting attention or publication remains. SharePoint preview, confirmation and final publication remain explicit actions. No new dependency or endpoint is introduced.
+
 ## Reset run history
 
 Saved runs persist across dev-mode restarts in `runtimes/runs/`; this application stores history in files rather than PostgreSQL. Choose **Reset run history** in the sidebar and confirm **Delete all run history** to clear every saved run, its uploaded copies, measurements, approvals, and output versions. The SPA then clears the selected run, previews, counters, and browser's remembered run ID.
@@ -224,7 +230,7 @@ Historical rows without a URL and with valid nonnegative supplied views now pass
 - **Save edited inputs & refresh review** saves nonnegative numeric attendance and duration; a review note is optional. Original source data remains unchanged.
 - **Enter a fresh total instead** switches to the existing verified-measurement form. Its total starts with the recorded previous total, or the latest saved measurement, in attributed row units.
 
-After keeping/editing, collection and baseline issues for that row clear; approve phase 4 to complete the run. Baselines are required for actual trailing deltas, not for this explicit decision to retain input data without computing a delta. Missing input values cannot be kept until valid numbers are entered. Saved decisions survive refresh/restart, require the current review version, and are limited to no-URL rows in phase 4.
+After keeping/editing, collection and baseline issues for that row clear. Processing continues automatically when no review items remain; otherwise review the remaining issues. Baselines are required for actual trailing deltas, not for this explicit decision to retain input data without computing a delta. Missing input values cannot be kept until valid numbers are entered. Saved decisions survive refresh/restart, require the current review version, and are limited to no-URL rows in phase 4.
 
 `updated_90-day.csv` preserves `Original Views / attendance` and `Original Duration (in hours)` for all rows. Reviewed no-URL rows write the retained/edited values and duration, preserve the recorded total, and carry `Metric basis = Retained input — not a trailing delta` or `Reviewed input — not a trailing delta`. Unresolved rows keep their originals in the extra columns without inventing a delta. This makes completing review without updating values explicit and auditable.
 
@@ -246,7 +252,7 @@ A row appears in **Collection & data review** when the backend adds an entry to 
 | Duration is supplied but nonnumeric | Correction required | Must correct before approval |
 | Trailing baseline is blank, nonnumeric, or negative for a row calculating a delta (automatically supplied or explicitly retained/reviewed no-URL inputs are exempt) | Correction required | Must correct before approval |
 
-Missing in-person duration defaults to one hour. Manual entries require a nonnegative numeric value and the expected metric type. Source / collection notes are optional (maximum 1,000 characters); omitted notes are recorded as not provided. Entering a measurement regenerates the phase artifacts and creates a new version for approval. Collection issues are scoped to the current phase; trailing collection reports one collection issue per shared URL group.
+Missing in-person duration defaults to one hour. Manual entries require a nonnegative numeric value and the expected metric type. Source / collection notes are optional (maximum 1,000 characters); omitted notes are recorded as not provided. Entering a measurement regenerates the phase artifacts and creates a new version; automatic runs continue when all review items are resolved. Collection issues are scoped to the current phase; trailing collection reports one collection issue per shared URL group.
 
 Currently, booth duty and other/unknown activity types go into `follow-up.csv` without appearing in this review section. Negative trailing deltas receive a CSV review note but do not create a review-panel issue.
 
@@ -311,7 +317,7 @@ Every approval checkpoint now highlights **What changed from the previous phase*
 
 The **No manual updates flagged** status is emphasized with a bold, high-contrast green badge and a check-circle icon. It remains distinct from the amber issue-review status, is announced as a polite status update, and wraps within mobile layouts. This status does not replace the required approval or certify source-data accuracy.
 
-The SPA includes a sticky **Your next step** guide for SharePoint connection, both workbook reads, preparation, calculation-contract acceptance, phase corrections/approval, retry, and final downloads. The active section and control receive a visible outline. **Go to section** scrolls to and focuses the relevant control; transitions automatically bring new checkpoints into view, while routine polling and same-phase versions preserve the user's position. Reduced-motion users get immediate scrolling. Text editing and open dialogs pause automatic navigation. Unresolved optional collection items offer a shortcut to the acknowledgment control without checking it automatically. Source inputs collapse after preparation and can be reopened for a new reporting run. Approvals and downloads remain explicit user actions.
+The SPA includes a sticky **Your next step** guide for SharePoint connection, both workbook reads, preparation, calculation-contract acceptance, phase corrections/approval, retry, and final downloads. The active section and control receive a visible outline. **Go to section** scrolls to and focuses the relevant control; transitions automatically bring new checkpoints into view, while routine polling and same-phase versions preserve the user's position. Reduced-motion users get immediate scrolling. Text editing and open dialogs pause automatic navigation. Unresolved optional collection items offer a shortcut to the acknowledgment control without checking it automatically. Source inputs collapse after preparation and can be reopened for a new reporting run. Only unresolved issues and workbook publication require explicit review. Downloads remain explicit user actions.
 
 ### Blog and digital manual-check exclusions
 
@@ -338,7 +344,7 @@ Matching digital content uses the supplied workbook Views / attendance without U
 
 ## One-action SharePoint preparation
 
-After sign-in and reporting-month selection, **Read workbooks & prepare inputs** sequentially reads AvocadoBot, reads the separate historical metrics workbook, loads persistent chart history (or reads its workbook once), validates sheet selection, and prepares a new run. Four progress cards identify the active step, successful snapshots, and failures. The calculation contract and phase approvals remain explicit user actions.
+After sign-in and reporting-month selection, **Read workbooks & prepare inputs** sequentially reads AvocadoBot, reads the separate historical metrics workbook, loads persistent chart history (or reads its workbook once), validates sheet selection, and prepares a new run. Four progress cards identify the active step, successful snapshots, and failures. Processing starts automatically after preparation and LinkedIn setup when needed. Clean phases advance in the backend without a separate approval button.
 
 **Retry failed step** retains successful downloads and resumes at the missing read or preparation; it does not download both sources again. A second-site sign-in error directs Connect SharePoint to that workbook. Source URLs remain visible; each card's expandable **Source details** provides an independent re-read for changed or expired snapshots. Editing a URL invalidates only that source. Controls are locked during the sequence to keep month, sheet, and snapshot choices consistent and prevent duplicate submissions.
 
@@ -354,7 +360,7 @@ Baseline cells preserve their actual values; missing values are not replaced wit
 
 Retry the relevant phase to refresh existing saved review issues and eligible result rows. A new run also refreshes preparation counts and immutable source snapshots. Earlier approved outputs and original workbook bytes are preserved.
 
-When only blocking review cards remain in Phase 1 or 4, **Refresh data review** re-runs the phase under the current collection rules. When unresolved collection is also present, the same action is labeled **Retry unresolved collection**. This refresh publishes a new version without changing original source snapshots or automatically approving a phase.
+When only blocking review cards remain in Phase 1 or 4, **Refresh data review** re-runs the phase under the current collection rules. When unresolved collection is also present, the same action is labeled **Retry unresolved collection**. This refresh publishes a new version without changing original source snapshots. When no review items remain, automatic runs continue to the next step.
 
 Historical verified measurement fields default to the previous Current total (shown as Previous total), or the latest saved measurement. They edit the attributed author/tool share; the server converts that share to a shared resource total once, preserving the existing trailing allocation and avoiding a second division. Baseline edits still edit only the previous baseline. Current-month inputs retain their own defaults. When the historical sheet has no Duration (in hours) column, review omits duration and keeping/editing supplied views requires no duration. HTTP and HTTPS resource links can be opened in the browser; automatic collection remains restricted to approved HTTPS resources.
 
@@ -386,7 +392,7 @@ History is stored outside the Dev Services database in **`runtimes/.chart-histor
 
 ## Automatic DZone views
 
-DZone article URLs (`dzone.com/articles/...` and `www.dzone.com/articles/...`) now use the approved Quarkus Playwright extension. DigitalMetricsAgent and Trailing90Agent collect the article counter automatically; historical totals are collected once per shared URL, allocated across its existing author/tool rows, then compared with their previous baselines. No manual popup is needed when collection succeeds. For an existing pending run, select **Retry unresolved collection**. It attempts failed requests again, reuses successful and manually entered measurements, publishes a new result version, and shows a retry-started/completed notice. If a publisher still blocks access, the latest error stays visible; retry cannot guarantee access. Phase approval remains required.
+DZone article URLs (`dzone.com/articles/...` and `www.dzone.com/articles/...`) now use the approved Quarkus Playwright extension. DigitalMetricsAgent and Trailing90Agent collect the article counter automatically; historical totals are collected once per shared URL, allocated across its existing author/tool rows, then compared with their previous baselines. No manual popup is needed when collection succeeds. For an existing pending run, select **Retry unresolved collection**. It attempts failed requests again, reuses successful and manually entered measurements, publishes a new result version, and shows a retry-started/completed notice. If a publisher still blocks access, the latest error stays visible; retry cannot guarantee access. Unresolved collection items require review; clean phases advance automatically.
 
 DZone collection runs in **regular Chrome kept minimized by default**. Live headless collection returned HTTP 403, while the same restricted regular-Chrome context read the public counter successfully. One isolated window is created already minimized after Chrome startup settles. Collection waits up to five seconds for the window manager to confirm a stable minimized state before loading an article, retrying minimization if startup restores the window. The window is reused for all articles in the phase, and closed when processing finishes or stops. Chrome may appear in your Dock/taskbar during collection, but article windows are kept out of the work area. The main page shows resource progress. `METRICS_DZONE_HEADLESS=true` opts into headless mode; `METRICS_DZONE_HEADLESS=false` with `METRICS_DZONE_MINIMIZED=false` explicitly enables visible mode. No automatic visible fallback opens. Chrome is required by default; configure `METRICS_DZONE_BROWSER_CHANNEL` or `METRICS_DZONE_BROWSER_EXECUTABLE` as needed. Sessions remain isolated from SharePoint/LinkedIn and requests are restricted to public HTTPS DZone assets and Cloudflare. No sign-in, CAPTCHA solving, or browser security bypass is performed.
 
@@ -464,7 +470,7 @@ The one-second SSE timer skips refresh triggers when a client or worker cannot k
 
 ## Standard participation units
 
-Standard participation uses one unit per activity, allocated once across authors × tools. Attendance and duration are retained as evidence and do not multiply that unit. With model weight 100, two authors and one tool receive 0.5 units and 50 impact hours each. Existing reports/exports reconcile legacy attendance-based calculations on copies; frozen inputs and earlier confirmations remain unchanged. Phase approvals remain required.
+Standard participation uses one unit per activity, allocated once across authors × tools. Attendance and duration are retained as evidence and do not multiply that unit. With model weight 100, two authors and one tool receive 0.5 units and 50 impact hours each. Existing reports/exports reconcile legacy attendance-based calculations on copies; frozen inputs and earlier confirmations remain unchanged. Clean phases advance automatically; unresolved items require review.
 
 ## Verified historical totals and safe workbook publication
 

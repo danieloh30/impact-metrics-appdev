@@ -145,7 +145,10 @@ public synchronized byte[] input(String id,String name) throws Exception {
         try(var dirs=Files.list(runs)) { List<Run> result=new ArrayList<>();for(Path dir:dirs.filter(p->!Files.isSymbolicLink(p)&&Files.isDirectory(p)).toList())try { result.add(get(dir.getFileName().toString())); }catch(Exception ignored) {}return result.stream().sorted(Comparator.comparing((Run r)->r.createdAt).reversed()).limit(30).toList(); }
     }
     public synchronized Run start(String id,boolean accepted) throws Exception {
-        synchronized(lock(id)) { Run run=get(id);if(!run.status.equals("READY"))throw new ClientErrorException("Run is already started",409);if(!accepted)throw new BadRequestException("Accept the displayed calculation contract before starting");run.contractAccepted=true;enqueue(run,1);return run; }
+        return start(id,accepted,false);
+    }
+    public synchronized Run start(String id,boolean accepted,boolean automaticProcessing) throws Exception {
+        synchronized(lock(id)) { Run run=get(id);if(!run.status.equals("READY"))throw new ClientErrorException("Run is already started",409);if(!accepted)throw new BadRequestException("The implemented calculation contract must be enabled before starting");run.contractAccepted=true;run.automaticProcessing=automaticProcessing;Pipeline.event(run,"Processing","Started "+(automaticProcessing?"automatic processing; clean phases advance, unresolved items require review":"with phase review checkpoints"));enqueue(run,1);return run; }
     }
     /** Serialize reset against imports/actions and reject active background work. */
     public synchronized int resetHistory(boolean confirmed) throws Exception {
@@ -157,11 +160,15 @@ public synchronized byte[] input(String id,String name) throws Exception {
     }
     public static String digest(Run run) { return RuntimeWorkspace.hash((run.phase+":"+run.version+":"+run.artifacts.values().stream().map(a->a.name()+":"+a.sha256()).sorted().toList()).getBytes(StandardCharsets.UTF_8)); }
     public synchronized Run approve(String id,int phase,int version,String digest,boolean acknowledge) throws Exception {
+        return approve(id,phase,version,digest,acknowledge,false);
+    }
+    public synchronized Run approve(String id,int phase,int version,String digest,boolean acknowledge,boolean automaticProcessing) throws Exception {
         synchronized(lock(id)) {
             Run run=get(id);if(!run.status.equals("AWAITING_APPROVAL")||run.phase!=phase||run.version!=version||!digest(run).equals(digest))throw new ClientErrorException("Approval is stale or this phase is not awaiting approval",409);
             if(run.issues.stream().anyMatch(Issue::blocking))throw new BadRequestException("Resolve invalid numeric data before approving");
             if(!run.issues.isEmpty()&&!acknowledge)throw new BadRequestException("Acknowledge unresolved collection issues before approving");
-            run.approvals.add(new Approval(phase,version,digest,Instant.now().toString(),acknowledge));Pipeline.event(run,"Approval","Approved phase "+phase+" version "+version);if(phase==3&&Boolean.TRUE.equals(run.workbook.get("publicationCheckpoint"))){run.status="AWAITING_PUBLICATION";run.review="Publish approved current inputs to the metrics workbook before trailing collection";workspace.save(run);}else enqueue(run,phase+1);return run;
+            run.automaticProcessing|=automaticProcessing;
+            boolean automatic=automaticProcessing&&run.issues.isEmpty();run.approvals.add(new Approval(phase,version,digest,Instant.now().toString(),acknowledge,automatic));Pipeline.event(run,automatic?"Automatic progression":"Approval",(automatic?"Automatically advanced clean phase ":"Approved phase ")+phase+" version "+version);if(phase==3&&Boolean.TRUE.equals(run.workbook.get("publicationCheckpoint"))){run.status="AWAITING_PUBLICATION";run.review="Publish approved current inputs to the metrics workbook before trailing collection";workspace.save(run);}else enqueue(run,phase+1);return run;
         }
     }
     void enqueue(Run run,int phase) throws Exception {
@@ -179,6 +186,14 @@ public synchronized byte[] input(String id,String name) throws Exception {
                 synchronized(lock(id)) {
                     Run run=workspace.load(id);
                     if(cancelled.contains(id)) { run.status="CANCELLED";workspace.save(run);active.remove(id);ownsWork=false;return; }
+                    if(current<=4&&(current!=4||run.trailing)&&run.automaticProcessing&&run.issues.isEmpty()) {
+                        run.approvals.add(new Approval(current,run.version,digest(run),Instant.now().toString(),false,true));
+                        Pipeline.event(run,"Automatic progression","Phase "+current+" completed with no review items; advanced automatically");
+                        if(current==3&&Boolean.TRUE.equals(run.workbook.get("publicationCheckpoint"))) {
+                            run.status="AWAITING_PUBLICATION";run.review="Review and publish current inputs before trailing collection";workspace.save(run);active.remove(id);ownsWork=false;return;
+                        }
+                        current++;run.phase=current;workspace.save(run);continue;
+                    }
                     // Publish readiness and release ownership under the same lock used by approval.
                     // The old worker must not remove a newly approved worker's active entry in finally.
                     if(current<=4&&(current!=4||run.trailing)) { run.status="AWAITING_APPROVAL";workspace.save(run);active.remove(id);ownsWork=false;return; }

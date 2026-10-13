@@ -399,7 +399,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media(max-width:560px) { .sharepoint-workbook { padding:16px; } .workbook-read-row .primary { width:100%; } .reporting-month-picker { align-items:flex-start; flex-direction:column; } }
 .sharepoint-workbook input,.workbook-options select,.reporting-month-picker input { min-height:44px; padding:10px 12px; border:1px solid #cbd8eb; border-radius:7px; background:#fff; color:#26374f; font:inherit; font-size:13px; font-weight:400; line-height:1.4; }
 
-.next-action-guide { position:sticky; top:12px; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px 20px; margin:0 0 22px; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:12px; background:#fff; box-shadow:0 6px 22px #18365d1c; }
+.workflow-monitor { position:sticky; top:12px; z-index:6; margin-bottom:22px; background:#fff; border-radius:12px; box-shadow:0 6px 22px #18365d1c; }
+.process-status { padding:12px 20px; border:1px solid #b8cce8; border-radius:12px 12px 0 0; background:#f0f5fd; color:#24466e; }
+.process-status-heading,.process-status-detail { display:flex; justify-content:space-between; gap:12px; overflow-wrap:anywhere; }
+.process-status-heading strong { font-size:15px; }.process-status-heading>span { font-size:13px; white-space:nowrap; }
+.process-status progress { display:block; width:100%; height:7px; margin:9px 0 6px; accent-color:#0f62fe; }
+.process-status-detail { font-size:12px; line-height:1.4; }.process-status-detail>span { min-width:0; }
+.process-status.needs-action { background:#fff8e8; }.process-status.is-complete { background:#eaf8ef; color:#176036; }
+.next-action-guide { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:16px 20px; margin:0; border:1px solid #91b4ff; border-left:5px solid #0f62fe; border-radius:0 0 12px 12px; background:#fff; }
 .next-action-guide>div { min-width:0; }
 .next-action-label { display:block; color:#245ac8; font-size:10px; font-weight:600; letter-spacing:1.4px; margin-bottom:5px; }
 .next-action-guide strong { display:block; font-size:16px; color:#192b45; }
@@ -410,6 +417,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .next-action-control { outline:3px solid #0f62fe !important; outline-offset:4px; box-shadow:0 0 0 7px #dce8ff !important; }
 .source-switch { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:12px 0 20px; padding:10px 14px; background:#f0f4fa; border-radius:8px; font-size:12px; }
 @media(max-width:700px) { .next-action-guide { top:8px; padding:12px 14px; align-items:flex-start; flex-direction:column; gap:10px; } .next-action-guide strong { font-size:14px; } .next-action-links { flex-shrink:1; width:100%; } .next-action-links>button:first-child { flex:1; } }
+@media(max-width:700px) { .workflow-monitor { top:8px; }.process-status { padding:10px 14px; }.process-status-heading strong { font-size:13px; }.process-status-detail { font-size:11px; }.process-status-detail>span:last-child { text-align:right; } }
 .combined-import{margin-top:28px;padding:24px;border:1px solid #cddaf2;border-radius:16px;background:#f7faff}.combined-import .workbook-prepare{margin:0 0 20px}.source-details summary{cursor:pointer;color:#355b91;font-weight:600}.source-details p{max-width:360px;margin:12px 0;font-size:13px}.source-details button{margin-top:4px}.import-steps{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0;padding:0}.import-steps li{display:flex;align-items:flex-start;gap:10px;padding:16px;border:1px solid #dce4f2;border-radius:12px;background:white;min-width:0}.import-step-number{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:#edf2fc;color:#496897;font-weight:600}.import-steps strong,.import-steps span:not(.import-step-number){display:block}.import-steps strong{font-size:14px;color:#21334d}.import-steps span:not(.import-step-number){margin-top:5px;font-size:12px;color:#627493;overflow-wrap:anywhere}.import-steps .active{border-color:#3163ff;background:#eef3ff}.import-steps .complete{border-color:#9ed5bc}.import-steps .complete .import-step-number{background:#e1f5eb;color:#13774a}.import-steps .failed{border-color:#e1a392;background:#fff5f2}.import-steps .failed .import-step-number{background:#ffe0d8;color:#a73a22}@media(max-width:760px){.import-steps{grid-template-columns:1fr}.combined-import{padding:16px}.combined-import .workbook-prepare{align-items:stretch}.combined-import #prepare-workbooks{width:100%}}
 
 .preview-search { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }

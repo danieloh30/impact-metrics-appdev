@@ -7,6 +7,7 @@ async function mock(page:any,initial:any){
  await page.route('**/api/runs',(route:any)=>route.fulfill({json:[run]}));
  await page.route('**/api/runs/progress-run',(route:any)=>route.fulfill({json:{run,approvalDigest:'fixture'}}));
  await page.route('**/api/runs/progress-run/events*',(route:any)=>route.fulfill({contentType:'text/event-stream',body:''}));
+ await page.route('**/api/runs/progress-run/phases/*/approve',(route:any)=>{run={...run,status:'RUNNING_PHASE',phase:run.phase+1};return route.fulfill({status:202,json:run});});
  await page.addInitScript(()=>localStorage.setItem('impact-run','progress-run'));
  return {setRun:(next:any)=>{run=next;}};
 }
@@ -41,7 +42,7 @@ test('retry button publishes processing and success feedback, then removes the r
  await expect(page.getByRole('status').filter({hasText:'Retry started.'})).toBeVisible();
  const panel=page.getByRole('region',{name:'Resource collection progress'});await expect(panel.getByRole('heading',{name:'Collecting resource metrics'})).toBeVisible();await expect(page.getByRole('button',{name:'Retry unresolved collection'})).toHaveCount(0);
  state.setRun({...run,status:'AWAITING_APPROVAL',version:2,issues:[],collectionProgress:{...progress(),state:'COMPLETE',completed:3,collected:1,cached:2,finishedAt:new Date().toISOString()}});
- await expect(page.getByRole('status').filter({hasText:'Retry finished. No collection issues remain'})).toBeVisible();await expect(page.getByText('Blocked DZone article',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Approve phase 1'})).toBeEnabled();expect(retries).toBe(1);
+ await expect(page.getByRole('status').filter({hasText:'Retry finished. No collection issues remain'})).toBeVisible();await expect(page.getByText('Blocked DZone article',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Approve phase 1'})).toHaveCount(0);await expect(page.getByRole('region',{name:'Process status'})).toContainText('Phase 2 of 7');expect(retries).toBe(1);
 });
 test('still-blocked retry reports the actual failure and leaves another retry available',async({page})=>{
  const run:any=fixture();run.status='AWAITING_APPROVAL';run.version=1;

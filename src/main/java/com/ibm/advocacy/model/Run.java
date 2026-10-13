@@ -8,7 +8,7 @@ public class Run {
     public CollectionProgress collectionProgress;
     public WorkbookPublication publication;
     public int phase=0,version=0;
-    public boolean trailing=false,contractAccepted=false;
+    public boolean trailing=false,contractAccepted=false,automaticProcessing=false;
     public int currentRows,trailingRows;
     public List<Issue> issues=new ArrayList<>();
     public List<Event> events=new ArrayList<>();
