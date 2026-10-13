@@ -15,24 +15,42 @@ Prepared inputs start processing automatically. The backend advances clean phase
 | 7 · Current totals | Build final current results and validate them | A processing error |
 
 ```mermaid
+%%{init: {'look':'handDrawn','theme':'neutral','themeVariables': {'lineColor':'#4A4035'}}}%%
 flowchart TD
-  A[Read workbooks] --> B{LinkedIn setup needed?}
-  B -->|No or session saved| C[Start processing]
-  B -->|Yes| L[Connect or explicitly continue without it]
+  A([Read workbooks]) --> B{LinkedIn setup needed?}
+  B -->|No or session saved| C([Start processing])
+  B -->|Yes| L([Connect or explicitly continue without it])
   L --> C
-  C --> D[Run the current phase]
+  C --> D([Run the current phase])
   D --> E{Review items remain?}
-  E -->|Yes| R[Correct values or acknowledge follow-up]
+  E -->|Yes| R([Correct values or acknowledge follow-up])
   R --> D
   E -->|No| F{Phase 3 finished?}
-  F -->|Yes| P[Preview, confirm and publish current inputs]
-  P --> N[Continue with trailing collection]
+  F -->|Yes| P([Preview, confirm and publish current inputs])
+  P --> N([Continue with trailing collection])
   F -->|No| N
-  N --> G[Continue remaining phases]
-  G --> H[Generate monthly pivots and charts]
-  H --> I[Resolve reporting attention if present]
-  I --> J[Publish completed monthly snapshot]
-  J --> K[Download results or start another run]
+  N --> G([Continue remaining phases])
+  G --> H([Generate monthly pivots and charts])
+  H --> I([Resolve reporting attention if present])
+  I --> J([Publish completed monthly snapshot])
+  J --> K([Download results or start another run])
+
+  style A fill:#D4E6F1,stroke:#2E6B8A
+  style B fill:#E8DCC4,stroke:#6B5B45
+  style C fill:#E8E0F0,stroke:#6B5B8A
+  style L fill:#D4E6F1,stroke:#2E6B8A
+  style D fill:#E8E0F0,stroke:#6B5B8A
+  style E fill:#E8DCC4,stroke:#6B5B45
+  style R fill:#E8DCC4,stroke:#6B5B45
+  style F fill:#E8DCC4,stroke:#6B5B45
+  style P fill:#E8DCC4,stroke:#6B5B45
+  style N fill:#E8E0F0,stroke:#6B5B8A
+  style G fill:#E8E0F0,stroke:#6B5B8A
+  style H fill:#D8F0D8,stroke:#3D7A3D
+  style I fill:#E8DCC4,stroke:#6B5B45
+  style J fill:#E8DCC4,stroke:#6B5B45
+  style K fill:#D8F0D8,stroke:#3D7A3D
+  linkStyle default stroke:#4A4035
 ```
 
 ## Monitor without scrolling back

@@ -49,14 +49,25 @@ Turn workbook activities into traceable monthly impact hours. Prepare the source
 ## One pipeline, visible decisions
 
 ```mermaid
+%%{init: {'look':'handDrawn','theme':'neutral','themeVariables': {'lineColor':'#4A4035'}}}%%
 flowchart LR
-  A[Source workbooks] --> B[Prepare inputs]
-  B --> C[Collect and attribute]
-  C --> D[Review and publish inputs]
-  D --> E[Collect trailing growth]
-  E --> F[Generate pivots and charts]
-  F --> G[Publish completed snapshot]
-  G --> H[Download or start another run]
+  A([Source workbooks]) --> B([Prepare inputs])
+  B --> C([Collect and attribute])
+  C --> D([Review and publish inputs])
+  D --> E([Collect trailing growth])
+  E --> F([Generate pivots and charts])
+  F --> G([Publish completed snapshot])
+  G --> H([Download or start another run])
+
+  style A fill:#D4E6F1,stroke:#2E6B8A
+  style B fill:#D4E6F1,stroke:#2E6B8A
+  style C fill:#E8E0F0,stroke:#6B5B8A
+  style D fill:#E8DCC4,stroke:#6B5B45
+  style E fill:#E8E0F0,stroke:#6B5B8A
+  style F fill:#D8F0D8,stroke:#3D7A3D
+  style G fill:#E8DCC4,stroke:#6B5B45
+  style H fill:#D8F0D8,stroke:#3D7A3D
+  linkStyle default stroke:#4A4035
 ```
 
 Clean phases advance on the backend. Missing measurements, invalid data, and publication confirmations pause processing. The sticky monitor shows the active phase, real resource-check counts, and the next required action.

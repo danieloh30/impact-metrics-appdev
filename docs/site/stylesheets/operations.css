@@ -47,19 +47,20 @@
 .md-typeset table:not([class]) th { background: #007d7010; }
 .md-typeset pre { border: 1px solid var(--ops-border); border-radius: 7px; }
 .md-typeset .admonition, .md-typeset details { border-radius: 7px; }
-.ops-diagram { margin: 1.3rem 0; border: 1px solid var(--ops-border); border-radius: 8px; padding: .7rem; background: #00897b04; overflow: auto; }
+.ops-diagram { margin: 1.3rem 0; border: 1px solid var(--ops-border); border-radius: 8px; padding: .7rem; background: #fbf9f5; overflow: auto; color: #4a4035; }
 .ops-diagram .ops-mermaid { text-align: center; background: transparent; border: 0; }
 .ops-diagram svg { max-width: 100%; height: auto; }
 .ops-diagram-toolbar { display: flex; justify-content: flex-end; margin-bottom: .5rem; }
 .ops-diagram-toolbar button { cursor: pointer; font: 500 .6rem "IBM Plex Sans", sans-serif; color: var(--md-accent-fg-color); border: 1px solid var(--ops-border); border-radius: 4px; padding: .25rem .5rem; }
-.ops-diagram:fullscreen { background: var(--md-default-bg-color); display: flex; flex-direction: column; padding: 2rem; }
+.ops-diagram:fullscreen { background: #fbf9f5; display: flex; flex-direction: column; padding: 2rem; }
 .ops-diagram:fullscreen .ops-mermaid { flex: 1; display: grid; place-items: center; }
 .ops-diagram:fullscreen svg { width: 100%; max-height: 85vh; }
 .ops-diagram-error { color: #b34235; }
+.ops-diagram-toolbar button { color: #4a4035; border-color: #d4cbbd; background: #fbf9f5; }
 @media (max-width: 600px) {
   .ops-hero { padding: 1.3rem 1rem; }
   .md-typeset .ops-hero .md-button { display: block; text-align: center; margin: .65rem 0; }
   .ops-stack { font-size: .47rem; }
   .ops-diagram[data-direction="horizontal"] .ops-mermaid svg { min-width: 1100px; max-width: none !important; }
-  .ops-diagram[data-direction="horizontal"]:after { content: "Swipe horizontally to inspect the diagram"; display: block; font-size: .57rem; color: var(--ops-muted); margin-top: .5rem; }
+  .ops-diagram[data-direction="horizontal"]:after { content: "Swipe horizontally to inspect the diagram"; display: block; font-size: .57rem; color: #4a4035; margin-top: .5rem; }
 }

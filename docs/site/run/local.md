@@ -18,10 +18,27 @@ cd src/main/webui
 npm ci
 npx playwright install chromium chrome
 cd ../../..
-./mvnw quarkus:dev
 ```
 
+## Start with dev.sh
+
+The clone includes [dev.sh](https://github.com/danieloh30/impact-metrics-appdev/blob/main/dev.sh) in the **project root**, beside `pom.xml` and `mvnw`. From that directory, run:
+
+```bash
+./dev.sh
+```
+
+The script starts Quarkus dev mode through the Maven wrapper and forwards any arguments you supply. It uses your existing `JAVA_HOME`; when that is unset, it checks SDKMAN's current Java and the supported Homebrew JDK locations on macOS. Make sure the selected JDK is Java 25 or newer.
+
 Open **[http://127.0.0.1:8097](http://127.0.0.1:8097)**. Keep the terminal running. Local development remains bound to loopback.
+
+If the default port is occupied, choose another one:
+
+```bash
+./dev.sh -Dquarkus.http.port=8098
+```
+
+Open `http://127.0.0.1:8098` in that case. Stop dev mode with **Ctrl+C**; saved run history is retained. With Java already configured, `./mvnw quarkus:dev` is the equivalent direct command.
 
 !!! note "Private repository"
     Authenticate Git with an account that has repository access. The documentation site and the running application are separate: GitHub Pages hosts this guide; Quarkus hosts the metrics UI.
@@ -44,7 +61,7 @@ export METRICS_AI_ENABLED=true
 export METRICS_MODEL_BASE_URL=https://api.openai.com/v1
 export METRICS_MODEL_NAME=gpt-4o-mini
 # Set METRICS_MODEL_API_KEY using your approved secret-management method.
-./mvnw quarkus:dev
+./dev.sh
 ```
 
 Keep keys out of Git. Model request and response logging is disabled. Leave `METRICS_AI_ENABLED=false` for the default deterministic workflow.

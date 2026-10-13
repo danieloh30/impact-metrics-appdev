@@ -3,20 +3,33 @@
 The application separates workbook preparation, collection, calculation and reporting. Persistent state is filesystem-based; it does not require PostgreSQL or a Dev Services database.
 
 ```mermaid
+%%{init: {'look':'handDrawn','theme':'neutral','themeVariables': {'lineColor':'#4A4035'}}}%%
 flowchart TD
-  UI[React web UI / Quinoa] --> API[Quarkus REST / RunService]
-  API --> PREP[WorkbookWorkflow / Apache POI]
-  API --> AGENTS[PhaseWorkflow / seven Java agents]
-  AGENTS --> COLLECT[Playwright and public APIs]
-  AGENTS --> MATH[Exact decimal calculation rules]
-  API --> REPORT[Monthly reporting / pivots and charts]
-  API --> PUBLISH[Reviewed SharePoint publication]
+  UI([React web UI<br/>Quinoa]) --> API([Quarkus REST<br/>RunService])
+  API --> PREP([WorkbookWorkflow<br/>Apache POI])
+  API --> AGENTS([PhaseWorkflow<br/>Seven Java agents])
+  AGENTS --> COLLECT([Playwright and public APIs])
+  AGENTS --> MATH([Exact decimal calculation rules])
+  API --> REPORT([Monthly reporting<br/>Pivots and charts])
+  API --> PUBLISH([Reviewed SharePoint publication])
   PREP --> STATE[(Persistent runtime workspace)]
   AGENTS --> STATE
   REPORT --> STATE
   PUBLISH --> STATE
-  REVIEW[Optional model commentary] -.-> PREP
+  REVIEW([Optional model commentary]) -.-> PREP
   REVIEW -.-> AGENTS
+
+  style UI fill:#D4E6F1,stroke:#2E6B8A
+  style API fill:#D8F0D8,stroke:#3D7A3D
+  style PREP fill:#E8E0F0,stroke:#6B5B8A
+  style AGENTS fill:#E8E0F0,stroke:#6B5B8A
+  style COLLECT fill:#D4E6F1,stroke:#2E6B8A
+  style MATH fill:#D8F0D8,stroke:#3D7A3D
+  style REPORT fill:#D8F0D8,stroke:#3D7A3D
+  style PUBLISH fill:#E8DCC4,stroke:#6B5B45
+  style STATE fill:#E8DCC4,stroke:#6B5B45
+  style REVIEW fill:#E8E0F0,stroke:#6B5B8A
+  linkStyle default stroke:#4A4035
 ```
 
 ## Execution ownership

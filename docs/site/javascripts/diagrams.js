@@ -1,11 +1,8 @@
 (() => {
   let sequence = 0;
   async function renderDiagrams() {
-    const dark = document.body.dataset.mdColorScheme === 'slate';
-    mermaid.initialize({startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'base',
-      themeVariables: {fontFamily: 'IBM Plex Sans, sans-serif', primaryColor: dark ? '#224252' : '#e3f2ef',
-        primaryTextColor: dark ? '#e3edf1' : '#163744', primaryBorderColor: '#438d87',
-        lineColor: dark ? '#9ac2c6' : '#557b87', secondaryColor: dark ? '#263849' : '#eaf0f6'},
+    mermaid.initialize({startOnLoad: false, securityLevel: 'strict', look: 'handDrawn', theme: 'neutral',
+      themeVariables: {fontFamily: 'IBM Plex Sans, sans-serif', lineColor: '#4A4035'},
       flowchart: {htmlLabels: false, curve: 'basis'}});
     for (const element of document.querySelectorAll('.ops-mermaid')) {
       const source = element.dataset.source || element.textContent;

@@ -19,22 +19,36 @@ The approved **Quarkus OpenShift extension** generates the cluster resources and
 Use one instance per reporting workspace. Runs, sessions and worker ownership are local to that instance. Independent workspaces need separate namespaces/PVCs rather than additional replicas.
 
 ```mermaid
+%%{init: {'look':'handDrawn','theme':'neutral','themeVariables': {'lineColor':'#4A4035'}}}%%
 flowchart LR
   subgraph Workstation
-    U[Operator browser]
-    T[Authenticated oc tunnel]
+    U([Operator browser])
+    T([Authenticated oc tunnel])
     U --> T
   end
   subgraph OpenShift
-    B[Binary Docker build] --> I[ImageStream]
-    I --> A[Impact Hours StatefulSet]
+    B([Binary Docker build]) --> I([ImageStream])
+    I --> A([Impact Hours StatefulSet])
     A --> V[(Persistent workspace)]
     T -->|8097| A
-    T -->|6080| D[Private browser desktop]
+    T -->|6080| D([Private browser desktop])
     D --- A
   end
-  A --> S[SharePoint and LinkedIn]
-  A --> P[Public metric sources]
+  A --> S([SharePoint and LinkedIn])
+  A --> P([Public metric sources])
+
+  style U fill:#D4E6F1,stroke:#2E6B8A
+  style T fill:#D4E6F1,stroke:#2E6B8A
+  style B fill:#E8E0F0,stroke:#6B5B8A
+  style I fill:#E8E0F0,stroke:#6B5B8A
+  style A fill:#D8F0D8,stroke:#3D7A3D
+  style V fill:#E8DCC4,stroke:#6B5B45
+  style D fill:#D4E6F1,stroke:#2E6B8A
+  style S fill:#D4E6F1,stroke:#2E6B8A
+  style P fill:#D4E6F1,stroke:#2E6B8A
+  style Workstation fill:#F5F1E9,stroke:#B7A991
+  style OpenShift fill:#F5F1E9,stroke:#B7A991
+  linkStyle default stroke:#4A4035
 ```
 
 ## Prerequisites

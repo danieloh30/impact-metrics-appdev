@@ -4,6 +4,8 @@
 
 The guide includes screenshots with fictional data, workflow and architecture diagrams, editable chart exports, and recovery instructions. It uses a separate slate/teal design for platform teams. Only `docs/site` is published; internal analysis, live workbook links and authentication files are excluded.
 
+Mermaid diagrams use a hand-drawn neutral style with rounded nodes, pastel blue/purple/green/tan fills and brown connectors. A light paper surface keeps those colors readable in either site theme; wide diagrams support horizontal panning on mobile.
+
 Once reporting and required publication finish, the sticky monitor offers **Download pivots & charts** and **Start another run**. A new run retains history. If the seven agent phases have finished but publication or reporting review remains, the monitor labels that specific action instead of announcing full completion.
 
 The web UI identifies the application as **Impact Hours**. When charts are ready it shows **Process done — charts generated**, separately from final workbook publication. Reports with actionable exclusions are clearly marked **Provisional** before the charts, with **Review items needing attention** navigation. Saving a confirmed month-end value recalculates the totals and charts automatically. Charts show eligible contributions; excluded rows remain visible for review and are never silently added.
