@@ -65,7 +65,7 @@ The sticky bar shows:
 - Review, publication and chart-generation states.
 - **Process done** once reporting and required publication are complete.
 
-Seven finished agent phases do not mean the completed monthly snapshot has been saved yet. At that point the action says **Review publication**. Once the whole run is complete, the bar offers **Download pivots & charts** and **Start another run**.
+Seven finished agent phases do not mean the completed monthly snapshot has been saved yet. Follow the monitor's publication action until the panel shows **Completed snapshot published and verified**. Once the whole run is complete, the bar offers **Download pivots & charts** and **Start another run**. See the [completed-run screenshot and next actions](reports.md#recognize-a-completed-run).
 
 ## Review only the items that need a decision
 

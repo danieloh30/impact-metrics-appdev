@@ -11,7 +11,7 @@
 > **AppDev Impact Hours tutorial**
 > [**ibm.biz/appdev-da-ih ↗**](https://ibm.biz/appdev-da-ih) — screenshots, agent workflow, chart exports, and deployment walkthroughs.
 
-The guide includes screenshots with fictional data, workflow and architecture diagrams, editable chart exports, and recovery instructions. It uses a separate slate/teal design for platform teams. Only `docs/site` is published; internal analysis, live workbook links and authentication files are excluded.
+The guide includes fictional reporting examples, workflow screenshots and architecture diagrams, editable chart exports, and recovery instructions. It uses a separate slate/teal design for platform teams. Only `docs/site` is published; internal analysis, live workbook links and authentication files are excluded.
 
 Mermaid diagrams use a hand-drawn neutral style with rounded nodes, pastel blue/purple/green/tan fills and brown connectors. A light paper surface keeps those colors readable in either site theme; wide diagrams support horizontal panning on mobile.
 
@@ -65,7 +65,7 @@ Reporting detail opens with **Needs attention**, keeping informational rows out 
 
 When Phase 1 (digital collection) or Phase 4 (trailing 90 days) has unresolved LinkedIn reactions or Video Views, the next-action guide highlights the LinkedIn connection section. Complete sign-in there; the SPA checks the session automatically and then focuses the collection retry button. Successful measurements stay saved. Required numeric corrections take priority, and manual entry or explicit follow-up acknowledgment remain available. No sign-in or retry is triggered by focusing the button.
 
-The screenshots below use representative sample data to illustrate the interface.
+The reporting examples below use representative sample data. The completion screenshot shows workflow status and a verified publication receipt.
 
 ### 1. Connect your SharePoint workbooks
 
@@ -88,6 +88,19 @@ Clean phases advance automatically. Checkpoints highlight only unresolved collec
 Filter preview rows by author, tool, activity, or other cell text across every page. Download individual CSV files or the complete ZIP when the run is ready.
 
 ![Completed results with pivot charts and direct download or new-run actions using fictional data](docs/site/assets/screenshots/completed-report.png)
+
+### 4. Finish, download, or start another run
+
+![Process done with all seven agent phases finished, a verified completed monthly snapshot, and download or new-run actions](docs/site/assets/screenshots/process-done.png)
+
+> [!TIP]
+> **Your completion checklist**
+> Check **Process done** and **Completed snapshot published and verified**. Seven finished agent phases alone do not confirm that the final workbook update was published.
+>
+> - **Download pivots & charts** saves `monthly-report-combined.xlsx` with editable Excel charts, pivots and reporting detail. Use it to share charts in Excel or Word.
+> - **Start another run** reads fresh inputs for the same or a different month while keeping previous runs, saved sign-in sessions and chart history.
+
+If reporting items need attention or publication is still pending, follow the monitor's required action first. See [Finish and share a completed run](https://danieloh30.github.io/impact-metrics-appdev/run/reports/#recognize-a-completed-run) for the full walkthrough.
 
 ## Deploy a persistent workspace
 

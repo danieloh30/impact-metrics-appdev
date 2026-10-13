@@ -79,4 +79,4 @@ The agents read structured Excel cells and preserve the original source bytes. E
 Results remain structured until you request a CSV or XLSX download. Run history, sign-in sessions, and published chart history live on persistent storage. A new run can reuse the same reporting month without deleting prior results.
 
 !!! info "Guide scope"
-    This guide is based on the project README and the implemented workflow. Screenshots use fictional activities and counts. Workbook links are entered in the app; the guide does not publish team workbook data or authentication state.
+    This guide is based on the project README and the implemented workflow. Reporting examples use fictional activities and counts; the completion screenshot shows workflow status and a publication receipt. Workbook links are entered in the app; the guide does not publish source workbook contents or authentication state.

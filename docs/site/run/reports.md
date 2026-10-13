@@ -2,6 +2,19 @@
 
 The monthly report combines eligible current contributions and fresh trailing growth. It applies the selected metric model and counts an overlapping activity attribution once.
 
+## Recognize a completed run
+
+![Process done with seven phases finished, a verified completed monthly snapshot and download or new-run actions](../assets/screenshots/process-done.png)
+<p class="ops-caption">Completion state for a September run. The publication receipt records the updated sheet, row counts and verification time; these are workflow details, not impact-hour totals.</p>
+
+Look for the green **Process done** status and **Results and charts are ready**. For a SharePoint run, also check **Completed snapshot published and verified** in the monthly publication panel. Seven finished agent phases alone do not confirm that this final snapshot has been published.
+
+!!! success "Choose your next action"
+    - **Download pivots & charts** saves the combined Excel report with editable charts, pivot tables and reporting detail.
+    - **Start another run** reads fresh workbook snapshots. You can keep the same month or choose the next one; previous runs, saved sign-in sessions and chart history remain available.
+
+If the monitor still asks for a review or publication, finish that action first. Saving a reporting correction recalculates the charts and invalidates an earlier completed publication; preview and publish the revised snapshot, then download a fresh report.
+
 ## Inspect before sharing
 
 ![Completed monthly pivots and charts with demo data](../assets/screenshots/completed-report.png)
