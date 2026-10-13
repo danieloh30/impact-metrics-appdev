@@ -92,7 +92,7 @@
             <!-- Keep browser profiles and run data out of Quarkus dev-mode resource scanning. -->
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>3.5.0</version>
                 <executions>
                     <execution>
                         <id>package-metrics-instructions</id>
