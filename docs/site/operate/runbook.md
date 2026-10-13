@@ -28,7 +28,11 @@ If a source workbook exceeds the file-size limit, reduce unused images, sheets o
 
 ### Columns outside the activity table
 
-Blank cells retained by Excel formatting do not count toward the 100-column input range. If there is real content beyond that range, the error names its sheet, row and column. Check that location for unintended content or select the correct activity input sheet; preserve valid data rather than deleting columns indiscriminately. The reader never trims or rewrites the source workbook.
+The limit counts 100 populated input fields, not the physical position of the last cell. Blank gaps and formatting do not count; a valid field far to the right retains its value and original source position. More than 100 populated fields or data outside the header extent triggers an error naming the source location. Preserve valid data rather than deleting columns indiscriminately. The reader never trims or rewrites the source workbook.
+
+This check also applies to **Markus blog data** and **Elder blog data**. These supplements are validated before selecting their reporting-month rows, so a malformed blog sheet can block preparation even when it contributes no rows that month. The preparation panel shows the exact validation error next to the failed step. Correct and re-read the affected source under **Source details**, then retry; an expired snapshot requires re-reading both activity workbooks. Saved runs and chart history do not need to be reset.
+
+If a blog table has been copied horizontally, the adapter verifies repeated columns across all rows. Identical populated values, cell types, formulas, cached results and date interpretation are counted once; `Source duplicate columns` records how many copies were collapsed in the derived data. Differing copies remain a blocking error naming the field, row and columns. The app does not choose a measurement or remove source columns. Correct conflicting copies in Excel and re-read AvocadoBot before retrying.
 
 A missing selected-month tab in the historical metrics workbook is separate from this error. A first October run can use the completed September snapshot as its baseline. Current-input publication creates the October tab after Phase 3; no empty tab needs to be created manually.
 

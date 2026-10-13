@@ -187,6 +187,9 @@ td:nth-child(5), td:nth-child(16), td:nth-child(17), td:nth-child(20) { min-widt
 .activity-log code { overflow-wrap: anywhere; }
 .error { background: #fff1ed; border: 1px solid #eec9bd; border-radius: 9px; padding: 13px 17px; margin: 0 0 20px; color: #9b4230; font-size: 13px; display: flex; justify-content: space-between; gap: 16px; overflow-wrap: anywhere; }
 .error button { padding: 1px 6px; background: transparent; border: 0; color: #9b4230; }
+.preparation-error { display:block; }
+.preparation-error p { margin:0; }
+.preparation-error p + p { margin-top:8px; }
 .processing { font-size: 13px; display: flex; align-items: center; gap: 12px; background: #edf4ff; border: 1px solid #cfdef4; padding: 20px; border-radius: 11px; color: #385c87; }
 .spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid #b8d1f5; border-top-color: var(--blue); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

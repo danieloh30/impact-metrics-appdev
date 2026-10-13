@@ -65,8 +65,8 @@ export function WorkbookImport({busy,onImport,onStep,onActivate,initial}:{busy:b
    let chartSnapshot=chart;if(!chartSnapshot){setFlow('chart');chartSnapshot=await readChart();if(!chartSnapshot){setFlow('failed-chart');return;}}
    setFlow('prepare');const form=new FormData();form.append('chartHistoryId',chartSnapshot.source.cacheId);form.append('sourceToken',currentSnapshot.sourceToken);form.append('historySourceToken',historySnapshot.sourceToken);form.append('month',month);form.append('currentSheet',chosen);
    if(await onImport(form)){setInspections({});setFlow('idle');setErrors({});}
-   else{setFlow('failed-prepare');setErrors(old=>({...old,prepare:'Preparation failed. Review the request error above. Both workbook snapshots are retained; retry preparation or re-read a source if its snapshot expired.'}));}
-  }catch(e){setFlow('failed-prepare');setErrors(old=>({...old,prepare:(e as Error).message}));}
+   else{setFlow('failed-prepare');setErrors(old=>({...old,prepare:'Preparation did not finish. Retry the failed step.'}));}
+  }catch(e){setFlow('failed-prepare');setErrors(old=>({...old,prepare:e instanceof Error?e.message:String(e)}));}
   finally{flowLock.current=false;setFlowBusy(false);}
  }
  const stateKey=working?'working':!session||session.busy||session.status==='CONNECTING'?'connecting':session.status!=='CONNECTED'?'connect':flow==='choice'&&!currentSheet?'sheet':current&&history&&(!matching.length||blocked)?'invalid-history':!month?'month':'prepare';
@@ -120,7 +120,7 @@ export function WorkbookImport({busy,onImport,onStep,onActivate,initial}:{busy:b
     <li className={flow==='failed-prepare'?'failed':flow==='prepare'?'active':''}><span className="import-step-number">4</span><div><strong>Validate sheets & prepare inputs</strong><span>{prepareStatus}</span></div></li>
    </ol>
    {flow==='choice'&&<p className="baseline-notice" role="status">Preparation paused. Choose a valid current-month sheet and reporting month above, then continue. Both downloads are retained.</p>}
-   {errors.prepare&&<p className="error" role="alert">{errors.prepare}</p>}
+   {errors.prepare&&<div className="error preparation-error" role="alert"><p><strong>Preparation could not finish</strong></p><p>{errors.prepare}</p><p>Both workbook selections are kept. Correct the source if needed, re-read it in <strong>Source details</strong>, then retry. If the snapshot expired, re-read both activity workbooks. Saved runs and chart history are kept.</p></div>}
   </section>
 
  </section>;
