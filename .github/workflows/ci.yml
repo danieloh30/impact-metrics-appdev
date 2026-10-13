@@ -55,6 +55,10 @@ jobs:
           fi
           ./mvnw -B verify -DskipITs
           VIRTUAL_DESKTOP
+      - name: Deployment script regression tests
+        run: node scripts/test-deployment.mjs
+      - name: Generate and validate deployment resources without deploying
+        run: ./deploy-openshift.sh --generate --image-tag ci-validation
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15

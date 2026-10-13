@@ -1,0 +1,2 @@
+# Keep the upstream licensed browser bundle byte-for-byte; review authored scripts separately.
+docs/site/assets/vendor/*.js -diff linguist-vendored whitespace=-trailing-space

@@ -1,0 +1,85 @@
+site_name: Impact Hours
+site_description: The AppDev operations guide for automatic advocacy metrics, monthly reporting and OpenShift deployment.
+site_url: https://danieloh30.github.io/impact-metrics-appdev/
+repo_url: https://github.com/danieloh30/impact-metrics-appdev
+repo_name: impact-metrics-appdev
+edit_uri: edit/main/docs/site/
+docs_dir: docs/site
+site_dir: site
+strict: true
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/chart-timeline-variant-shimmer
+  font:
+    text: IBM Plex Sans
+    code: JetBrains Mono
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.footer
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+nav:
+  - Overview: index.md
+  - Run the agents:
+      - Local setup: run/local.md
+      - Source workbooks: run/sources.md
+      - Automatic workflow: run/workflow.md
+      - Pivots and charts: run/reports.md
+  - Deploy:
+      - Red Hat OpenShift: deploy/openshift.md
+      - Kubernetes: deploy/kubernetes.md
+  - Operate:
+      - Architecture: operate/architecture.md
+      - Recovery and maintenance: operate/runbook.md
+      - Calculation rules: operate/calculations.md
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: ops-mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+extra_css:
+  - stylesheets/operations.css
+extra_javascript:
+  - assets/vendor/mermaid-12.1.0.min.js
+  - javascripts/diagrams.js
+extra:
+  generator: false
+copyright: AppDev Developer Advocacy · Operations guide · Screenshots use demo data

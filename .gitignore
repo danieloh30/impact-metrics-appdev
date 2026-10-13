@@ -51,6 +51,8 @@ runtimes/runs/
 runtimes/.sessions/
 runtimes/.uploads/
 .venv/
+.venv-docs/
+/site/
 *.log
 
 # Runtime data remains local, including future rawdata/output layouts.

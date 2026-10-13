@@ -1,6 +1,6 @@
 import {useLayoutEffect,useRef} from 'react';
 
-export type NextStep={key:string;title:string;description:string;sectionId:string;actionId?:string;auto?:boolean;alternate?:{label:string;sectionId:string;actionId:string}};
+export type NextStep={key:string;title:string;description:string;sectionId:string;actionId?:string;actionLabel?:string;auto?:boolean;alternate?:{label:string;sectionId:string;actionId:string}};
 export const importStart:NextStep={key:'import:connect',title:'Connect SharePoint',description:'Sign in with your IBM account to read both source workbooks.',sectionId:'sharepoint-connection',actionId:'connect-sharepoint'};
 
 function focusTarget(sectionId:string,actionId?:string){
@@ -23,7 +23,7 @@ function moveTo(sectionId:string,actionId?:string,immediate=false){
  focusTarget(sectionId,actionId);
 }
 
-export function NextAction({step,paused=false}:{step:NextStep;paused?:boolean}){
+export function NextAction({step,paused=false,finished}:{step:NextStep;paused?:boolean;finished?:{downloadHref:string;downloadLabel:string;onNewRun:()=>void}}){
  const previous=useRef<string|null>(null),automaticTimer=useRef<number|undefined>(undefined),focusFrame=useRef<number|undefined>(undefined);
  function cancelQueuedMove(){if(automaticTimer.current!==undefined){clearTimeout(automaticTimer.current);automaticTimer.current=undefined;}if(focusFrame.current!==undefined){cancelAnimationFrame(focusFrame.current);focusFrame.current=undefined;}}
  function beginExplicitNavigation(){cancelQueuedMove();window.scrollTo({top:window.scrollY,behavior:'instant'});}
@@ -35,7 +35,7 @@ export function NextAction({step,paused=false}:{step:NextStep;paused?:boolean}){
  }
 
  useLayoutEffect(()=>{
-  if(paused){cancelQueuedMove();return;}
+  if(paused||finished){cancelQueuedMove();return;}
   const section=document.getElementById(step.sectionId),control=step.actionId?document.getElementById(step.actionId):null;
   section?.classList.add('next-action-section');control?.classList.add('next-action-control');
   const changed=previous.current!==null&&previous.current!==step.key;
@@ -46,9 +46,9 @@ export function NextAction({step,paused=false}:{step:NextStep;paused?:boolean}){
    if(changed&&step.auto!==false&&!typing)moveTo(step.sectionId,step.actionId);
   },0);
   return()=>{clearTimeout(timer);cancelQueuedMove();section?.classList.remove('next-action-section');control?.classList.remove('next-action-control');};
- },[step.key,step.sectionId,step.actionId,step.auto,paused]);
- return <nav className="next-action-guide" aria-label="Next required action" onPointerDownCapture={beginExplicitNavigation} onKeyDownCapture={beginExplicitNavigation}>
-  <div role="status" aria-live="polite"><span className="next-action-label">YOUR NEXT STEP</span><strong>{step.title}</strong><p>{step.description}</p></div>
-  <div className="next-action-links"><button type="button" disabled={paused} onClick={()=>goTo(step.sectionId,step.actionId)}>Go to section ↓</button>{step.alternate&&<button type="button" className="text-button" disabled={paused} onClick={()=>goTo(step.alternate!.sectionId,step.alternate!.actionId)}>{step.alternate.label}</button>}</div>
+ },[step.key,step.sectionId,step.actionId,step.auto,paused,!!finished]);
+ return <nav className={`next-action-guide${finished?' is-finished':''}`} aria-label={finished?'Completed run actions':'Next required action'} onPointerDownCapture={beginExplicitNavigation} onKeyDownCapture={beginExplicitNavigation}>
+  <div role="status" aria-live="polite"><span className="next-action-label">{finished?'RESULTS READY':'YOUR NEXT STEP'}</span><strong>{step.title}</strong><p>{step.description}</p></div>
+  <div className="next-action-links">{finished?<><a className="button primary" href={finished.downloadHref}>{finished.downloadLabel} ↓</a><button id="start-another-run-shortcut" type="button" disabled={paused} onClick={finished.onNewRun}>Start another run</button></>:<><button type="button" disabled={paused} onClick={()=>goTo(step.sectionId,step.actionId)}>{step.actionLabel||'Go to section ↓'}</button>{step.alternate&&<button type="button" className="text-button" disabled={paused} onClick={()=>goTo(step.alternate!.sectionId,step.alternate!.actionId)}>{step.alternate.label}</button>}</>}</div>
  </nav>;
 }

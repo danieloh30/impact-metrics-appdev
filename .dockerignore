@@ -1,5 +1,8 @@
-*
-!target/*-runner
-!target/*-runner.jar
-!target/lib/*
-!target/quarkus-app/*
+**
+!src/
+!src/main/
+!src/main/docker/
+!src/main/docker/Dockerfile.openshift
+!target/
+!target/quarkus-app/
+!target/quarkus-app/**

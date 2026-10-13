@@ -1,0 +1,65 @@
+:root {
+  --md-primary-fg-color: #142d39;
+  --md-primary-fg-color--light: #244757;
+  --md-primary-fg-color--dark: #0d202a;
+  --md-accent-fg-color: #00897b;
+  --ops-border: #dbe5e9;
+  --ops-muted: #536976;
+}
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #101d26;
+  --md-default-fg-color: #dce7ec;
+  --md-default-fg-color--light: #abc0cb;
+  --md-code-bg-color: #172a36;
+  --md-accent-fg-color: #55dac1;
+  --ops-border: #304653;
+  --ops-muted: #abc0cb;
+}
+.md-header { box-shadow: none; border-bottom: 1px solid #ffffff18; }
+.md-header__title { font-weight: 650; letter-spacing: -.025em; }
+.md-tabs { border-bottom: 1px solid #ffffff14; }
+.md-typeset { font-size: .81rem; line-height: 1.75; }
+.md-typeset h1, .md-typeset h2, .md-typeset h3 { font-weight: 650; letter-spacing: -.025em; }
+.md-typeset h1 { color: var(--md-default-fg-color); line-height: 1.15; }
+.md-typeset h2 { margin-top: 2.1em; padding-bottom: .35em; border-bottom: 1px solid var(--ops-border); }
+.md-typeset a:not(.md-button) { text-underline-offset: .18em; }
+.md-typeset .md-button { border-radius: 6px; padding: .7em 1.25em; font-weight: 600; margin: .2em .5em .2em 0; }
+.md-typeset .md-button--primary { background: #007d70; border-color: #007d70; color: white; }
+.md-typeset .md-button:hover { background: #086c64; border-color: #086c64; color: white; }
+.ops-hero {
+  padding: 2.3rem 2.1rem 1.8rem;
+  margin: .25rem 0 1.4rem;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 100% 0, #00a88f1c, transparent 60%);
+  position: relative;
+  overflow: hidden;
+}
+.ops-hero:before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #007d70, #38bfa7, #93cbd6); }
+.ops-eyebrow { font: 600 .57rem/1.5 "JetBrains Mono", monospace; letter-spacing: .14em; color: var(--md-accent-fg-color); }
+.md-typeset .ops-hero h1 { font-size: clamp(1.8rem, 4.6vw, 2.7rem); margin: .75rem 0 .95rem; letter-spacing: -.055em; }
+.ops-hero p { max-width: 34rem; color: var(--ops-muted); }
+.ops-stack { margin-top: 1.3rem; padding-top: .85rem; border-top: 1px solid var(--ops-border); font: 500 .52rem/1.8 "JetBrains Mono", monospace; letter-spacing: .06em; color: var(--ops-muted); }
+.md-typeset .grid.cards>ul>li { border-radius: 8px; border-color: var(--ops-border); padding: 1.1rem; box-shadow: none; }
+.md-typeset .grid.cards>ul>li:hover { border-color: var(--md-accent-fg-color); box-shadow: 0 4px 16px #102b3810; }
+.md-typeset img { border: 1px solid var(--ops-border); border-radius: 8px; box-shadow: 0 6px 24px #102b3810; }
+.md-typeset table:not([class]) { font-size: .68rem; border-color: var(--ops-border); border-radius: 6px; }
+.md-typeset table:not([class]) th { background: #007d7010; }
+.md-typeset pre { border: 1px solid var(--ops-border); border-radius: 7px; }
+.md-typeset .admonition, .md-typeset details { border-radius: 7px; }
+.ops-diagram { margin: 1.3rem 0; border: 1px solid var(--ops-border); border-radius: 8px; padding: .7rem; background: #00897b04; overflow: auto; }
+.ops-diagram .ops-mermaid { text-align: center; background: transparent; border: 0; }
+.ops-diagram svg { max-width: 100%; height: auto; }
+.ops-diagram-toolbar { display: flex; justify-content: flex-end; margin-bottom: .5rem; }
+.ops-diagram-toolbar button { cursor: pointer; font: 500 .6rem "IBM Plex Sans", sans-serif; color: var(--md-accent-fg-color); border: 1px solid var(--ops-border); border-radius: 4px; padding: .25rem .5rem; }
+.ops-diagram:fullscreen { background: var(--md-default-bg-color); display: flex; flex-direction: column; padding: 2rem; }
+.ops-diagram:fullscreen .ops-mermaid { flex: 1; display: grid; place-items: center; }
+.ops-diagram:fullscreen svg { width: 100%; max-height: 85vh; }
+.ops-diagram-error { color: #b34235; }
+@media (max-width: 600px) {
+  .ops-hero { padding: 1.3rem 1rem; }
+  .md-typeset .ops-hero .md-button { display: block; text-align: center; margin: .65rem 0; }
+  .ops-stack { font-size: .47rem; }
+  .ops-diagram[data-direction="horizontal"] .ops-mermaid svg { min-width: 1100px; max-width: none !important; }
+  .ops-diagram[data-direction="horizontal"]:after { content: "Swipe horizontally to inspect the diagram"; display: block; font-size: .57rem; color: var(--ops-muted); margin-top: .5rem; }
+}

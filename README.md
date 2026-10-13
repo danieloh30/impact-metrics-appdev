@@ -1,5 +1,11 @@
 # Impact Hours AppDev
 
+[**Operations guide →**](https://danieloh30.github.io/impact-metrics-appdev/) · [Local setup](docs/site/run/local.md) · [OpenShift deployment](docs/site/deploy/openshift.md) · [Kubernetes deployment](docs/site/deploy/kubernetes.md)
+
+The guide includes screenshots with fictional data, workflow and architecture diagrams, editable chart exports, and recovery instructions. It uses a separate slate/teal design for platform teams. Only `docs/site` is published; internal analysis, live workbook links and authentication files are excluded.
+
+Once reporting and required publication finish, the sticky monitor offers **Download pivots & charts** and **Start another run**. A new run retains history. If the seven agent phases have finished but publication or reporting review remains, the monitor labels that specific action instead of announcing full completion.
+
 The web UI identifies the application as **Impact Hours**. When charts are ready it shows **Process done — charts generated**, separately from final workbook publication. Reports with actionable exclusions are clearly marked **Provisional** before the charts, with **Review items needing attention** navigation. Saving a confirmed month-end value recalculates the totals and charts automatically. Charts show eligible contributions; excluded rows remain visible for review and are never silently added.
 
 LinkedIn setup is highlighted before Phase 1 and before Phase 3 completion starts the path to Phase 4. When supported LinkedIn URLs exist, the UI requires a saved connection or an explicit **Continue without LinkedIn** choice before starting/advancing collection. Publication previews remain available; publishing into Phase 4 waits for that choice. A visible **LinkedIn source check** timeline step and a zero-URL explanation avoid implying that sign-in can collect links missing from the inputs.
@@ -50,19 +56,47 @@ The screenshots below use representative sample data to illustrate the interface
 
 Choose a reporting month, connect once, and read the activity workbooks and load saved chart history with one action. Source details and progress make each step easy to follow.
 
-![SharePoint import with reporting-month selection, two workbook sources, and guided preparation](docs/screenshots/sharepoint-import.png)
+![SharePoint import with reporting-month selection, workbook sources, and guided preparation using fictional data](docs/site/assets/screenshots/source-preparation.png)
 
 ### 2. Review what the agents changed
 
 Clean phases advance automatically. Checkpoints highlight only unresolved collection or data review and required workbook publication; all automatic transitions and human reviews are recorded.
 
-![Phase review showing attendance calculations, changes from the previous phase, and the no-manual-updates status](docs/screenshots/phase-review.png)
+![Live phase and resource collection progress using fictional data](docs/site/assets/screenshots/workflow-progress.png)
 
 ### 3. Search your results and export
 
 Filter preview rows by author, tool, activity, or other cell text across every page. Download individual CSV files or the complete ZIP when the run is ready.
 
-![Completed results with CSV downloads and a searchable current.csv preview](docs/screenshots/searchable-results.png)
+![Completed results with pivot charts and direct download or new-run actions using fictional data](docs/site/assets/screenshots/completed-report.png)
+
+## Deploy a persistent workspace
+
+The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates OpenShift and Kubernetes resources. The `openshift` profile uses an in-cluster Docker build with Java 25, Chromium and a private sign-in desktop. One StatefulSet replica mounts the `impact-hours-data` PVC so run history, sign-in sessions and chart history survive replacement. The image supports arbitrary non-root OpenShift UIDs and a read-only root filesystem. No public Route is created.
+
+```bash
+# Build and validate manifests locally; no cluster changes.
+./deploy-openshift.sh --generate
+
+# After oc login, create storage, build the image and deploy.
+./deploy-openshift.sh --deploy --namespace impact-metrics
+
+# Private UI and sign-in desktop on localhost, using oc authentication.
+./deploy-openshift.sh --connect --namespace impact-metrics
+```
+
+Open `http://127.0.0.1:8097` for the app and `http://127.0.0.1:6080/vnc.html` for interactive SharePoint/LinkedIn sign-in. The desktop service binds pod loopback and is not exposed by a Service. The supplied ingress NetworkPolicy blocks network access to the workspace; the approved `oc port-forward` tunnel remains available. Each instance represents one reporting workspace, not a multi-user service. See the [OpenShift guide](docs/site/deploy/openshift.md) for prerequisites, storage and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for external image builds and cluster-specific volume permissions.
+
+Deployment verification includes generated-manifest checks, mocked CLI regression tests, and a local container smoke test covering arbitrary UID, read-only root, HTTP serving and headed/headless Chromium. A live cluster deployment is a separate operation.
+
+To build the documentation locally:
+
+```bash
+python3 -m venv .venv-docs
+.venv-docs/bin/python -m pip install -r requirements-docs.txt
+.venv-docs/bin/python -m mkdocs build --strict
+node scripts/check-docs.mjs
+```
 
 ## Start locally
 
@@ -75,7 +109,7 @@ cd /Users/danieloh/developer-advocacy/tools/impact-metrics-appdev
 
 Open **http://127.0.0.1:8097**. Quinoa builds and serves the SPA through Quarkus; no separate frontend server is needed. First startup requires dependency downloads. Override the port with `./dev.sh -Dquarkus.http.port=8098` if necessary.
 
-Connect SharePoint once with your IBM account and choose the reporting month, then select **Read workbooks & prepare inputs**. Both editable URL fields start with the supplied defaults. The app reads both sources and prepares their selected sheets sequentially. Ambiguous selections pause for review. If a step fails, **Retry failed step** reuses successful snapshots; independent re-read controls are available under each workbook’s **Source details**. Accept the calculation contract and start the agents. Approve phases 1–4 as applicable; phases 5–7 finish automatically. CSV/local Excel import controls and runtime seed import endpoints are removed. Download results individually or as ZIP.
+Connect SharePoint once with your IBM account and choose the reporting month, then select **Read workbooks & prepare inputs**. Both editable URL fields start with the supplied defaults. The app reads both sources and prepares their selected sheets sequentially. Ambiguous selections pause for review. If a step fails, **Retry failed step** reuses successful snapshots; independent re-read controls are available under each workbook’s **Source details**. Prepared inputs start processing automatically; clean phases advance without an approval checkbox or button. Required data reviews, LinkedIn setup choices and workbook publication remain explicit checkpoints. CSV/local Excel import controls and runtime seed import endpoints are removed. Download results individually or as ZIP.
 
 Restarted/interrupted runs become retryable and resume from immutable phase inputs. Successful measurements are cached per run. Approvals reference exact artifact versions; edits generate fresh versions.
 
@@ -93,7 +127,7 @@ The preparation agent uses the existing [Quarkus Apache POI extension](https://d
 
 | Source | Default link and use |
 |---|---|
-| Current activities | [AvocadoBot 2.0 – Runtimes DA impact inputs](https://ibm-my.sharepoint.com/:x:/r/personal/alexandra_freeman_ibm_com/Documents/Developer%20Relations/Really%20useful%20numbers%20(RUN)/Inputs/AvocadoBot%202.0%20-%20Runtimes%20DA%20impact%20inputs.xlsx?d=wc4b8fb9134a44856ac3980cc9b39c53f&csf=1&web=1&e=7Ja7w9): selected current sheet plus reporting-month Markus/Elder blog rows |
+| Current activities | [AvocadoBot 2.0 – AppDev DA impact inputs](https://ibm.sharepoint.com/:x:/r/sites/DEPT-DeveloperRelations/Shared%20Documents/Really%20Useful%20Numbers%20(RUN)/Advocacy/2026/Input%20files/AvocadoBot%202.0%20-%C2%A0AppDev%20DA%20impact%20inputs.xlsx?d=w25cb891e867b4fb39d1b486b41c9ce5b&csf=1&web=1&e=pge2wn): selected current sheet plus reporting-month Markus/Elder blog rows |
 | Trailing history | [AppDev Advocacy impact metrics 2026](https://ibm.sharepoint.com/:x:/r/sites/DEPT-DeveloperRelations/Shared%20Documents/Really%20Useful%20Numbers%20(RUN)/Advocacy/2026/Working%20data/AppDev%20Advocacy%20impact%20metrics%202026.xlsx?d=w17d51aa602214ef29e2d761379e0b65f&csf=1&web=1&e=BdC23f): month-named sheets such as August inputs and September inputs |
 
 Monthly input sheets already contain rolling history. Choose **one latest monthly input sheet** at or before the selected reporting month, within its three-month window, then filter activity dates. For October 2026, use October inputs when present, or September inputs when October is absent, and include only August 1–October 31 dates. For September, use September inputs and July 1–September 30 dates. Do not combine August/September snapshots: their activities overlap and their baselines reflect different reporting periods. The selected baseline sheet and fallback are visible in the SPA. Missing dated months are highlighted; unavailable data is never invented. Matching hidden, invalid, or ambiguous latest sheets block preparation. The server derives the same choice from the month. Explicit years in sheet names are respected; date filtering always constrains the year. Other workbook sheets and AvocadoBot's previous-month sheets never supply history.
