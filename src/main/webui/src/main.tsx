@@ -25,7 +25,7 @@ async function api<T>(path:string,options?:RequestInit):Promise<T>{const respons
 const post=(body:unknown={}):RequestInit=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const statusLabel=(status:string)=>({READY:'Ready to start',RUNNING_PHASE:'Processing',AWAITING_APPROVAL:'Review required',COMPLETED:'Complete',AWAITING_PUBLICATION:'Workbook update required',PUBLISHING_WORKBOOK:'Publishing workbook',FAILED_RETRYABLE:'Retry available',CANCELLED:'Cancelled',CANCELLING:'Cancelling'}[status]||status);
 
-type IconName='chart'|'upload'|'file'|'layers'|'check'|'arrow'|'shield';
+type IconName='chart'|'upload'|'file'|'layers'|'check'|'arrow'|'shield'|'trash';
 function Icon({name,className=''}:{name:IconName;className?:string}){
  const paths:Record<IconName,React.ReactNode>={
   chart:<><path d="M4 19h16M7 15v-4m5 4V5m5 10V8"/></>,
@@ -34,7 +34,8 @@ function Icon({name,className=''}:{name:IconName;className?:string}){
   layers:<><path d="m12 3 10 5-10 5L2 8l10-5Zm-9 9 9 5 9-5m-18 5 9 5 9-5"/></>,
   check:<><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="10"/></>,
   arrow:<><path d="M4 12h16m-6-6 6 6-6 6"/></>,
-  shield:<><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z M8 12l3 3 5-6"/></>
+  shield:<><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z M8 12l3 3 5-6"/></>,
+  trash:<><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></>
  };
  return <svg className={`icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -53,6 +54,23 @@ function ResetHistoryDialog({busy,error,onClose,onReset}:{busy:boolean;error:str
  </dialog>;
 }
 
+const runLabel=(run:Run)=>`${new Date(run.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})} · ${run.workbook?.month?run.workbook.month+' · ':''}${run.id.slice(0,8)}`;
+const deletionBlocked=(run:Run)=>['RUNNING_PHASE','PUBLISHING_WORKBOOK','CANCELLING'].includes(run.status);
+function DeleteRunDialog({run,busy,error,onClose,onDelete}:{run:Run;busy:boolean;error:string;onClose:()=>void;onDelete:()=>void}){
+ const dialog=useRef<HTMLDialogElement>(null);
+ const keepButton=useRef<HTMLButtonElement>(null);
+ useEffect(()=>{const element=dialog.current!;element.showModal();keepButton.current?.focus();return()=>element.close();},[]);
+ return <dialog ref={dialog} className="modal reset-dialog" aria-labelledby="delete-run-title" onCancel={e=>{e.preventDefault();if(!busy)onClose();}}>
+  <div className="eyebrow">ONE SAVED RUN</div><h2 id="delete-run-title">Delete this run?</h2>
+  <p><strong>{runLabel(run)}</strong><br/>{run.currentRows} activities · {statusLabel(run.status)}<br/><small>Run ID: {run.id}</small></p>
+  <p>This permanently deletes this run’s input copies, measurements, approvals, and saved results. Download any results you want to keep first.</p>
+  <p className="reset-preserved"><Icon name="shield"/>Other runs, published chart history, and saved SharePoint/LinkedIn sessions are kept. Published SharePoint workbooks are not deleted.</p>
+  {Object.keys(run.artifacts||{}).length>0&&<a href={`/api/runs/${run.id}/download-all`}>Download this run’s CSV bundle ↓</a>}
+  {error&&<p role="alert" className="error">{error}</p>}
+  <div className="modal-actions"><button ref={keepButton} autoFocus disabled={busy} onClick={onClose}>Keep this run</button><button className="danger" disabled={busy} onClick={onDelete}>{busy?'Deleting…':'Delete this run'}</button></div>
+ </dialog>;
+}
+
 function App(){
  const [run,setRun]=useState<Run|null>(null),[digest,setDigest]=useState(''),[history,setHistory]=useState<Run[]>([]);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -64,7 +82,7 @@ function App(){
  const [connection,setConnection]=useState(''),[linkedInConnecting,setLinkedInConnecting]=useState(false);
  const [linkedInStartedAt,setLinkedInStartedAt]=useState(0),[linkedInElapsed,setLinkedInElapsed]=useState(0),[linkedInCheckError,setLinkedInCheckError]=useState('');
  const linkedInRequests=useRef(0);
- const [resetOpen,setResetOpen]=useState(false),[notice,setNotice]=useState('');
+ const [resetOpen,setResetOpen]=useState(false),[deleteTarget,setDeleteTarget]=useState<Run|null>(null),[deleteError,setDeleteError]=useState(''),[notice,setNotice]=useState('');
  const [importKey,setImportKey]=useState(0),[importDefaults,setImportDefaults]=useState<ImportDefaults|undefined>(),[publicationStep,setPublicationStep]=useState<NextStep|null>(null),[reportCompletion,setReportCompletion]=useState<ReportCompletion|null>(null);
  const [importing,setImporting]=useState(false),[importStep,setImportStep]=useState<NextStep>(importStart),[reportStep,setReportStep]=useState<NextStep|null>(null);
  const selectedRun=useRef<string|null>(null),historyGeneration=useRef(0),phasePreviewContext=useRef<string|null>(null);
@@ -72,13 +90,19 @@ async function openManual(issue:Issue){setManual(issue);setSourceInput(null);set
 function resourceHref(value:string){try{const url=new URL(value.trim());return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:undefined;}catch{return undefined;}}
 async function toggleHistoricalMode(){if(!run||!manual)return;await perform(async()=>{const next=!inputMode;const path=next?`/runs/${run.id}/trailing-input?rowId=${encodeURIComponent(manual.rowId)}`:`/runs/${run.id}/measurement-input?rowId=${encodeURIComponent(manual.rowId)}&type=${encodeURIComponent(manual.metricType)}`;const input=await api<TrailingInput>(path);setSourceInput(input);setInputMode(next);setValue(next?input.views:input.value||'');setDuration(input.duration);setEvidence('');});}
 async function saveInput(keepOriginal=false){if(!run||!manual)return;await perform(async()=>{await api(`/runs/${run.id}/trailing-inputs`,post({version:run.version,rowId:manual.rowId,views:value,duration,keepOriginal,note:evidence}));setManual(null);await refresh(run.id);});}
-function clearRunHistory(message:string){setImportKey(value=>value+1);setPublicationStep(null);setReportCompletion(null);setReportStep(null);retryAttempt.current=null;phasePreviewContext.current=null;historyGeneration.current++;selectedRun.current=null;localStorage.removeItem('impact-run');setRun(null);setHistory([]);setDigest('');setSelected('');setManual(null);setAcknowledge(false);setResetOpen(false);setError('');setNotice(message);}
+function clearRunHistory(message:string,remaining:Run[]=[]){setImportKey(value=>value+1);setImporting(false);setImportStep(importStart);setPublicationStep(null);setReportCompletion(null);setReportStep(null);retryAttempt.current=null;phasePreviewContext.current=null;historyGeneration.current++;selectedRun.current=null;localStorage.removeItem('impact-run');setRun(null);setHistory(remaining);setDigest('');setSelected('');setManual(null);setAcknowledge(false);setResetOpen(false);setDeleteTarget(null);setError('');setNotice(message);}
+async function reconcileDeletedRun(id:string){
+ if(selectedRun.current!==id)return;
+ clearRunHistory('This saved run was deleted. Choose another run or read the workbooks to start a new one.',history.filter(item=>item.id!==id));
+ const generation=historyGeneration.current;
+ try{const remaining=await api<Run[]>('/runs');if(generation===historyGeneration.current)setHistory(remaining);}catch{/* The next history refresh can recover without restoring the deleted selection. */}
+}
 function startAnotherRun(){if(!run||run.status!=='COMPLETED'||busy)return;const urls:Partial<{current:string;history:string}>={};if(run.workbook?.sourceUrl)urls.current=run.workbook.sourceUrl;if(run.workbook?.historySourceUrl)urls.history=run.workbook.historySourceUrl;setImportDefaults({month:run.workbook?.month,urls,chartUrl:run.workbook?.chartHistory?.sourceUrl});setImportKey(value=>value+1);setPublicationStep(null);setReportCompletion(null);setReportStep(null);setImportStep(importStart);setImporting(false);retryAttempt.current=null;phasePreviewContext.current=null;selectedRun.current=null;localStorage.removeItem('impact-run');setRun(null);setSelected('');setDigest('');setAcknowledge(false);setManual(null);setError('');setNotice('Start another run. Previous runs are kept; source workbooks will be read again.');}
-async function refresh(id:string){try{const data=await api<{run:Run;approvalDigest:string}>(`/runs/${id}`);if(selectedRun.current!==id)return data.run;setRun(data.run);setDigest(data.approvalDigest);setHistory(h=>h.map(r=>r.id===id?data.run:r));return data.run;}catch(e){if(e instanceof ApiError&&e.status===404&&selectedRun.current===id){clearRunHistory('Saved run history was reset. Read both SharePoint workbooks to start fresh.');return null;}throw e;}}
+async function refresh(id:string){try{const data=await api<{run:Run;approvalDigest:string}>(`/runs/${id}`);if(selectedRun.current!==id)return data.run;setRun(data.run);setDigest(data.approvalDigest);setHistory(h=>h.map(r=>r.id===id?data.run:r));return data.run;}catch(e){if(e instanceof ApiError&&e.status===404&&selectedRun.current===id){await reconcileDeletedRun(id);return null;}throw e;}}
  async function perform(action:()=>Promise<unknown>){setBusy(true);setError('');try{await action();}catch(e){automaticAction.current='';setError((e as Error).message);}finally{setBusy(false);}}
  async function choose(created:Run){setPublicationStep(null);setReportCompletion(null);setReportStep(null);retryAttempt.current=null;setImporting(false);phasePreviewContext.current=null;selectedRun.current=created.id;setNotice('');localStorage.setItem('impact-run',created.id);setSelected('');setAcknowledge(false);await refresh(created.id);setHistory(await api<Run[]>('/runs'));}
  useEffect(()=>{const generation=historyGeneration.current;api<Run[]>('/runs').then(h=>{if(generation===historyGeneration.current)setHistory(h);}).catch(e=>setError(e.message));const id=localStorage.getItem('impact-run');if(id){selectedRun.current=id;refresh(id).catch(()=>{localStorage.removeItem('impact-run');selectedRun.current=null;});}},[]);
-useEffect(()=>{if(!run)return;const id=run.id;const events=new EventSource(`/api/runs/${id}/events`);const timer=window.setInterval(()=>{refresh(id).catch(()=>{});},2500);events.onmessage=(event)=>{let update:{status?:string};try{update=JSON.parse(event.data);}catch{return;}if(update.status==='RESET'){events.close();clearInterval(timer);if(selectedRun.current===id)clearRunHistory('Saved run history was reset. Import a workbook to start fresh.');return;}refresh(id).catch(()=>{});};events.onerror=()=>{refresh(id).catch(()=>{});};return()=>{events.close();clearInterval(timer);};},[run?.id]);
+useEffect(()=>{if(!run)return;const id=run.id;const events=new EventSource(`/api/runs/${id}/events`);const timer=window.setInterval(()=>{refresh(id).catch(()=>{});},2500);events.onmessage=(event)=>{let update:{status?:string};try{update=JSON.parse(event.data);}catch{return;}if(update.status==='RESET'){events.close();clearInterval(timer);if(selectedRun.current===id)void reconcileDeletedRun(id);return;}refresh(id).catch(()=>{});};events.onerror=()=>{refresh(id).catch(()=>{});};return()=>{events.close();clearInterval(timer);};},[run?.id]);
  useEffect(()=>{setAcknowledge(false);if(run&&!selected&&Object.keys(run.artifacts).length)setSelected(Object.keys(run.artifacts)[0]);},[run?.id,run?.version]);
  // Open the relevant result only when its phase has published, including recovery.
  // Polls and later versions preserve the user's explicit preview choice.
@@ -108,6 +132,12 @@ useEffect(()=>{
  }
 },[run?.id,run?.status,run?.version]);
  async function resetHistory(){await perform(async()=>{await api('/runs/reset',post({confirm:true}));clearRunHistory('Run history has been reset. Import a workbook to start fresh.');});}
+ async function deleteSavedRun(){if(!deleteTarget||busy)return;const id=deleteTarget.id;setBusy(true);setDeleteError('');try{
+  try{await api(`/runs/${id}?confirm=true`,{method:'DELETE'});}catch(failure){if(!(failure instanceof ApiError&&failure.status===404))throw failure;}
+  setDeleteTarget(null);
+  if(selectedRun.current===id)clearRunHistory('Run deleted. Other runs are kept; choose one or start a new run.',history.filter(item=>item.id!==id));
+  else{historyGeneration.current++;setHistory(items=>items.filter(item=>item.id!==id));setNotice('Run deleted. Your other runs are kept.');}
+ }catch(failure){setDeleteError((failure as Error).message);}finally{setBusy(false);}}
  const running=run?.status==='RUNNING_PHASE';const waiting=run?.status==='AWAITING_APPROVAL';
  const linkedInIssues=waiting&&run&&[1,4].includes(run.phase)?run.issues.filter(issue=>{
   try{const url=new URL(issue.url);return /(^|\.)linkedin\.com$/i.test(url.hostname)&&/^\/(events|posts|feed\/update|pulse)\//.test(url.pathname)&&!issue.blocking&&['REACTIONS','VIDEO_VIEWS'].includes(issue.metricType);}catch{return false;}
@@ -132,7 +162,7 @@ useEffect(()=>{
   void check();const timer=window.setInterval(check,2500);return()=>{alive=false;clearInterval(timer);};
  },[run?.id,run?.phase,linkedInAttention,linkedInConnecting,linkedInPreparation]);
 useEffect(()=>{
- if(!run||busy||error||manual||resetOpen||importing)return;
+ if(!run||busy||error||manual||resetOpen||deleteTarget||importing)return;
  const ready=run.status==='READY',clean=run.status==='AWAITING_APPROVAL'&&run.issues.length===0;
  if(!ready&&!clean)return;
  if(linkedInPreparation||(ready||run.phase===3)&&linkedInUpcomingCount>0&&!connection)return;
@@ -150,7 +180,7 @@ useEffect(()=>{
   }
   await refresh(run.id);
  });
-},[run?.id,run?.status,run?.phase,run?.version,busy,error,manual,resetOpen,importing,linkedInPreparation,connection,digest]);
+},[run?.id,run?.status,run?.phase,run?.version,busy,error,manual,resetOpen,deleteTarget,importing,linkedInPreparation,connection,digest]);
  const publicationRequired=!!run?.workbook?.publicationCheckpoint;
  const publicationDone=run?.publication?.status==='PUBLISHED'&&run.publication.stage==='COMPLETED';
  const reportReady=!run?.workbook?.month||reportCompletion?.id===run.id&&reportCompletion.ready&&reportCompletion.attention===0&&reportCompletion.chartsReady;
@@ -184,7 +214,7 @@ useEffect(()=>{
  <div className="workspace"><span className="workspace-symbol"><Icon name="layers"/></span><span>AppDev Developer Advocacy</span></div>
  <p className="sidebar-note">From activity to attributable impact.</p>
  <div className="sidebar-label history-title">RECENT RUNS <span>{history.length}</span></div>
- <nav aria-label="Recent runs">{history.slice(0,8).map(h=><button key={h.id} className={`history ${run?.id===h.id?'active':''}`} disabled={busy} aria-current={run?.id===h.id?'page':undefined} onClick={()=>perform(()=>choose(h))}><span>{new Date(h.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})} · {h.currentRows} activities</span><small><span className={`history-dot ${h.status.toLowerCase()}`}/>{statusLabel(h.status)}</small></button>)}</nav>
+ <nav aria-label="Recent runs">{history.slice(0,8).map(h=><div className="history-row" key={h.id}><button className={`history ${run?.id===h.id?'active':''}`} disabled={busy||!!deleteTarget} aria-current={run?.id===h.id?'page':undefined} onClick={()=>perform(()=>choose(h))}><span>{new Date(h.createdAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})} · {h.currentRows} activities</span><small><span className={`history-dot ${h.status.toLowerCase()}`}/>{statusLabel(h.status)} · {h.id.slice(0,8)}</small></button><button className="delete-run" aria-label={`Delete run ${runLabel(h)}`} title={deletionBlocked(h)?'Wait for this run to finish or cancel it before deleting it':`Delete run ${runLabel(h)}`} disabled={busy||!!deleteTarget||deletionBlocked(h)} onClick={()=>{setDeleteError('');setDeleteTarget(h);}}><Icon name="trash"/></button></div>)}</nav>
  <button className="reset-history" disabled={busy||running||run?.status==='PUBLISHING_WORKBOOK'||run?.status==='CANCELLING'} onClick={()=>{setError('');setResetOpen(true);}}>Reset run history</button>
  {!history.length&&<div className="history-empty"><Icon name="file"/><p>Your runs will appear here.<br/>Connect your SharePoint workbooks.</p></div>}
  <div className="sidebar-footer"><span className="footer-mark"><Icon name="shield"/></span><div>Every activity has a story.<small>Make its impact visible.</small></div></div>
@@ -193,7 +223,7 @@ useEffect(()=>{
  <header className="page-head"><div><div className="eyebrow">ACTIVITY INTELLIGENCE</div><h1>Make your impact count.</h1><p>A clearer view of the work you do and the reach it creates.</p></div><div className="header-art" aria-hidden="true"><div className="art-grid"/><span className="art-bar bar-one"/><span className="art-bar bar-two"/><span className="art-bar bar-three"/><span className="art-bar bar-four"/><span className="art-orbit"><Icon name="chart"/></span></div></header>
    {notice&&<div role="status" className="notice"><Icon name="check"/>{notice}</div>}
    {error&&<div id="request-error" role="alert" className="error">{error}<button aria-label="Dismiss error" onClick={()=>setError('')}>×</button></div>}
-   <div className="workflow-monitor"><ProcessStatus run={importing?null:run} importing={importing&&(busy||importStep.key==='import:working')} step={nextStep} chartsReady={!!chartsGenerated} allDone={!!allDone} attention={reportCompletion?.id===run?.id?reportCompletion?.attention||0:0}/><NextAction step={nextStep} paused={!!manual||resetOpen||busy} finished={allDone&&!importing&&!error&&run?{downloadHref:run.workbook?.month?`/api/runs/${run.id}/reporting/download?scope=combined&format=xlsx`:`/api/runs/${run.id}/download-all`,downloadLabel:run.workbook?.month?'Download pivots & charts':'Download CSV bundle',onNewRun:startAnotherRun}:undefined}/></div>
+   <div className="workflow-monitor"><ProcessStatus run={importing?null:run} importing={importing&&(busy||importStep.key==='import:working')} step={nextStep} chartsReady={!!chartsGenerated} allDone={!!allDone} attention={reportCompletion?.id===run?.id?reportCompletion?.attention||0:0}/><NextAction step={nextStep} paused={!!manual||resetOpen||!!deleteTarget||busy} finished={allDone&&!importing&&!error&&run?{downloadHref:run.workbook?.month?`/api/runs/${run.id}/reporting/download?scope=combined&format=xlsx`:`/api/runs/${run.id}/download-all`,downloadLabel:run.workbook?.month?'Download pivots & charts':'Download CSV bundle',onNewRun:startAnotherRun}:undefined}/></div>
    {run?.status==='COMPLETED'&&<section className={`completion-banner ${allDone?'is-complete':''}`} aria-label="Run completion"><div role="status" aria-live="polite"><strong>{chartsGenerated?'Process done — charts generated':'Agent processing finished'}</strong><p>{allDone?'All processes are complete. Results and charts are ready. You can download them or start another run, including the same month.':reportCompletion?.attention?`Report is provisional: ${reportCompletion.attention} reporting items need attention. Saved corrections update the charts automatically.`:publicationRequired&&!publicationDone?'Chart generation is done. Publish the completed snapshot to finish workbook publication.':'Preparing the final report and charts; check chart history if it is unavailable.'}</p></div><button id="start-another-run" className="primary" disabled={busy} onClick={startAnotherRun}>Start another run</button></section>}
    {run&&<div id="source-switch" className="source-switch"><span>Source workbooks · {run.workbook?.month||'Saved run'}</span><button id="show-sources" className="text-button" onClick={()=>setImporting(value=>!value)}>{importing?'Return to active run':'Show source workbooks / start a new run'}</button></div>}
    <div hidden={!!run&&!importing}><WorkbookImport key={importKey} initial={importDefaults} busy={busy} onStep={setImportStep} onActivate={()=>setImporting(true)} onImport={async form=>{let imported=false;await perform(async()=>{await choose(await api<Run>('/runs/from-sharepoint',{method:'POST',body:form}));imported=true;});return imported;}} /></div>
@@ -234,6 +264,7 @@ useEffect(()=>{
    <footer><span><Icon name="shield"/>Original data preserved · Automatic transitions and reviews recorded</span><span>AppDev Developer Advocacy</span></footer>
   </main>
   {resetOpen&&<ResetHistoryDialog busy={busy} error={error} onClose={()=>setResetOpen(false)} onReset={()=>{void resetHistory();}}/>}
+  {deleteTarget&&<DeleteRunDialog run={deleteTarget} busy={busy} error={deleteError} onClose={()=>{setDeleteTarget(null);setDeleteError('');}} onDelete={()=>{void deleteSavedRun();}}/>}
 {manual&&run&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="manual-title" className="modal"><button className="close" aria-label="Close measurement dialog" disabled={busy} onClick={()=>setManual(null)}>×</button><div className="eyebrow">{inputMode?'HISTORICAL INPUT REVIEW':'VERIFIED MEASUREMENT'}</div><h2 id="manual-title">{inputMode?'Review original input':`Enter ${manual.metricType.toLowerCase().replace('_',' ')}`}</h2><p>{manual.activity}</p>
  {sourceInput&&<div className="workbook-rules"><strong>{run.phase===4?'Original historical values':'Original input values'}</strong><p>Views / attendance: {sourceInput.originalViews||'Not recorded'}{sourceInput.hasDuration!==false&&<> · Duration (in hours): {sourceInput.originalDuration||'Not recorded'}</>}</p><p>Previous total: {sourceInput.baseline||'Not recorded'}</p>{sourceInput.source&&<><p>Source workbook: <strong>{sourceInput.source.workbook}</strong>{sourceInput.source.sheet&&<> · Sheet: {sourceInput.source.sheet}</>} · Row: {sourceInput.source.rowId}</p><p>Author: {sourceInput.source.author||'Not recorded'} · Tool: {sourceInput.source.tool||'Not recorded'}</p></>}{run.phase===4&&<p>These values come from the historical metrics source and may already be allocated across authors and tools. They can differ from raw AvocadoBot attendance; fractional shares are valid.</p>}{sourceInput.attributed&&<p>Enter this row’s share of the resource’s total. The same share is applied to other rows for this resource.</p>}<small>{inputMode?'Keeping or editing input values does not create a fresh lifetime total or trailing delta. Then approve phase 4 to complete the run.':run.phase===4?'The field starts with the previous total or your latest entered measurement. Confirm it or enter an updated total for this review.':'The field starts with the saved input or latest entered value. Confirm it or enter an updated measurement.'}</small></div>}
  {manual.metricType==='VIDEO_VIEWS'&&<p>Use post analytics → Video performance → Video Views. Lifetime unique viewers and peak live viewers are different metrics.</p>}

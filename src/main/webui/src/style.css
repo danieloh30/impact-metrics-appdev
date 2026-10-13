@@ -279,6 +279,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 /* Explicit history reset, separate from importing and processing a run. */
+.history-row { display:flex; align-items:center; gap:4px; margin-bottom:6px; min-width:0; }
+.history-row .history { flex:1; min-width:0; margin:0; }
+.delete-run { flex:0 0 36px; width:36px; height:40px; padding:8px; border:1px solid transparent; background:transparent; color:#a8bddb; border-radius:8px; }
+.delete-run:hover:enabled { color:#ffd0cc; background:#b43e3530; border-color:#ffccc533; }
+.delete-run:disabled { opacity:.35; }
+.delete-run:focus-visible { outline:2px solid #9ec1ff; outline-offset:2px; }
+@media(max-width:760px) { .history-row { flex:0 0 220px; margin:0; } }
 .reset-history { border: 1px solid #ffffff20; background: #ffffff06; color: #b6c8e3; font-size: 11px; padding: 10px 12px; margin: 14px 0; text-align: left; }
 .reset-history:hover:enabled { background: #ffffff10; border-color: #ffffff35; color: #fff; }
 .reset-dialog { border: 0; margin: auto; }

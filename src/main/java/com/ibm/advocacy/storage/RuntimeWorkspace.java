@@ -46,6 +46,20 @@ public class RuntimeWorkspace {
     }
     public Data data(String id,String name) throws IOException { return mapper.readValue(Files.readAllBytes(runPath(id,"state/"+name+".json")),Data.class); }
     public void data(String id,String name,Data data) throws IOException { bytes(runPath(id,"state/"+name+".json"),mapper.writeValueAsBytes(data)); }
+    /** Delete only the guarded run directory; nested symlink targets are never followed. */
+    public void deleteRun(String id) throws IOException {
+        Path directory=runPath(id,"");
+        if(!Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS))throw new jakarta.ws.rs.NotFoundException("Run not found");
+        Files.walkFileTree(directory,new SimpleFileVisitor<Path>() {
+            @Override public FileVisitResult visitFile(Path file,java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
+                Files.delete(file);return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult postVisitDirectory(Path dir,IOException error) throws IOException {
+                if(error!=null)throw error;
+                Files.delete(dir);return FileVisitResult.CONTINUE;
+            }
+        });
+    }
     /** Clear run history and the two obsolete seed files; never follow link targets. */
     public int resetRuns() throws IOException {
         Path root=root();

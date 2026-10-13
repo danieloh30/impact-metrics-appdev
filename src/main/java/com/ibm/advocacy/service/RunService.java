@@ -158,6 +158,16 @@ public synchronized byte[] input(String id,String name) throws Exception {
         locks.clear();cancelled.clear();
         return deleted;
     }
+    /** Delete an idle run without blocking on or altering another run's worker. */
+    public synchronized void deleteRun(String id,boolean confirmed) throws Exception {
+        if(!confirmed)throw new BadRequestException("Confirm that this saved run and its generated outputs should be deleted");
+        synchronized(lock(id)) {
+            get(id);
+            if(active.contains(id))throw new ClientErrorException("This run is still processing or publishing. Wait for it to finish or cancel it before deleting it.",409);
+            workspace.deleteRun(id);
+            cancelled.remove(id);locks.remove(id);
+        }
+    }
     public static String digest(Run run) { return RuntimeWorkspace.hash((run.phase+":"+run.version+":"+run.artifacts.values().stream().map(a->a.name()+":"+a.sha256()).sorted().toList()).getBytes(StandardCharsets.UTF_8)); }
     public synchronized Run approve(String id,int phase,int version,String digest,boolean acknowledge) throws Exception {
         return approve(id,phase,version,digest,acknowledge,false);

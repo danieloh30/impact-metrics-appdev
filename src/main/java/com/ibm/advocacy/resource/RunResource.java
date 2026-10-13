@@ -56,6 +56,9 @@ public class RunResource {
     @POST @Path("/runs/reset") @Consumes(MediaType.APPLICATION_JSON)
     public Map<String,Object> reset(@Valid Reset body) throws Exception { return Map.of("deletedRuns",service.resetHistory(body!=null&&body.confirm())); }
     @GET @Path("/runs") public List<Run> list() throws Exception { return service.list(); }
+    @DELETE @Path("/runs/{id}") public Map<String,Object> delete(@PathParam("id") String id,@QueryParam("confirm") @DefaultValue("false") boolean confirm) throws Exception {
+        service.deleteRun(id,confirm);return Map.of("deletedRun",id);
+    }
     @GET @Path("/runs/{id}/inputs/{name}/download") @Produces("text/csv")
     public Response input(@PathParam("id") String id,@PathParam("name") String name) throws Exception {
         Run run=service.get(id);String charset=!run.workbook.isEmpty()||name.equals("AvocadoBot 2.csv")?"utf-8":"windows-1252";

@@ -26,6 +26,8 @@ Reconnecting SharePoint does not release an editing lock. **Check workbook statu
 
 **Start another run** keeps all saved runs and prepares a new source snapshot. Use it for the same month or a later month.
 
+**Delete one run** with the trash button beside its entry in **Recent runs**. The confirmation identifies the run by date, reporting month when available, and ID. It removes only that run’s input copies, measurements and results. Other runs, saved sign-ins, published SharePoint workbooks and `.chart-history/` are kept. Download the run’s results first if needed. Wait for processing or publication to finish, or cancel the run, before deleting it.
+
 **Reset run history** deletes saved runs, imported copies, measurements and output versions. It preserves the canonical instructions, saved sign-in sessions and `.chart-history/`. Download any results you want to keep before reset.
 
 ## Back up a cluster workspace
