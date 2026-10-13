@@ -1,5 +1,7 @@
 # Impact Hours AppDev
 
+**Tutorial:** [ibm.biz/appdev-da-ih](https://ibm.biz/appdev-da-ih)
+
 [![Documentation](https://img.shields.io/badge/deployment-live-2ea44f?logo=github)](https://danieloh30.github.io/impact-metrics-appdev/)
 [![Tests](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/ci.yml/badge.svg)](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/ci.yml)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot)](https://github.com/danieloh30/impact-metrics-appdev/security/dependabot)
