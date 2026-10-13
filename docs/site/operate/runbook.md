@@ -26,6 +26,12 @@ Reconnecting SharePoint does not release an editing lock. **Check workbook statu
 
 If a source workbook exceeds the file-size limit, reduce unused images, sheets or formatting, or configure `METRICS_WORKBOOK_MAX_BYTES` (default `25000000`, 25 MB). The limit applies consistently to imports, chart history and publication. Expanded XLSX contents also have a 100 MB limit via `METRICS_WORKBOOK_MAX_EXPANDED_BYTES`; sheet and row limits remain in place. Restart dev mode after changing configuration, or update the deployment configuration and redeploy on OpenShift, then re-read the failed source. Existing runs and successful snapshots are kept; reconnecting SharePoint does not change the file-size limit.
 
+### Columns outside the activity table
+
+Blank cells retained by Excel formatting do not count toward the 100-column input range. If there is real content beyond that range, the error names its sheet, row and column. Check that location for unintended content or select the correct activity input sheet; preserve valid data rather than deleting columns indiscriminately. The reader never trims or rewrites the source workbook.
+
+A missing selected-month tab in the historical metrics workbook is separate from this error. A first October run can use the completed September snapshot as its baseline. Current-input publication creates the October tab after Phase 3; no empty tab needs to be created manually.
+
 ## History reset versus a new run
 
 **Start another run** keeps all saved runs and prepares a new source snapshot. Use it for the same month or a later month.

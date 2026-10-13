@@ -195,6 +195,16 @@ public class WorkbookService {
         List<String> standard=new ArrayList<>(FINAL_HEADERS);standard.addAll(List.of("Date of activity","Author of activity","Name of event","Duration (in hours)"));
         return standard.stream().filter(name->name.toLowerCase(Locale.ROOT).equals(key)).findFirst().orElse(text);
     }
+    /** Excel retains styled blank cells far beyond the actual input table. */
+    private static int contentColumns(org.apache.poi.ss.usermodel.Row row) {
+        int width=0;
+        for(Cell cell:row) {
+            if(cell.getCellType()==CellType.BLANK||cell.getCellType()==CellType.STRING&&cell.getStringCellValue().isBlank())continue;
+            width=Math.max(width,cell.getColumnIndex()+1);
+        }
+        if(width>100)throw new BadRequestException("Sheet '"+row.getSheet().getSheetName()+"' row "+(row.getRowNum()+1)+" contains data beyond 100 columns (column "+org.apache.poi.ss.util.CellReference.convertNumToColString(width-1)+"). Remove unintended data outside the activity table or select the correct input sheet. Blank formatting alone is ignored.");
+        return width;
+    }
     private SheetData read(Sheet sheet) {
         if(sheet.getLastRowNum()>20_000)throw new BadRequestException("Sheet exceeds 20,000 rows: "+sheet.getSheetName());
         DataFormatter formatter=new DataFormatter(Locale.US);formatter.setUseCachedValuesForFormulaCells(true);
@@ -202,8 +212,8 @@ public class WorkbookService {
         for(int n=0;n<=Math.min(29,sheet.getLastRowNum());n++) {
             org.apache.poi.ss.usermodel.Row row=sheet.getRow(n);if(row==null)continue;
             List<String> candidate=new ArrayList<>();
-            if(row.getLastCellNum()>100)throw new BadRequestException("Sheet exceeds 100 columns");
-            for(int c=0;c<row.getLastCellNum();c++)candidate.add(header(formatter.formatCellValue(row.getCell(c))));
+            int columns=contentColumns(row);
+            for(int c=0;c<columns;c++)candidate.add(header(formatter.formatCellValue(row.getCell(c))));
             if(candidate.contains("Type of activity")&&candidate.contains(URL)&&(candidate.contains("Author")||candidate.contains("Author of activity"))&&(candidate.contains("Date")||candidate.contains("Date of activity"))) {
                 headers=candidate;headerIndex=n;break;
             }
@@ -218,8 +228,8 @@ public class WorkbookService {
         List<Row> result=new ArrayList<>();Map<String,LocalDate> dates=new LinkedHashMap<>();
         for(int n=headerIndex+1;n<=sheet.getLastRowNum();n++) {
             org.apache.poi.ss.usermodel.Row source=sheet.getRow(n);if(source==null)continue;
-            if(source.getLastCellNum()>100)throw new BadRequestException("Sheet exceeds 100 columns");
-            for(int c=headers.size();c<source.getLastCellNum();c++)if(!formatter.formatCellValue(source.getCell(c)).isBlank())throw new BadRequestException("Data without a column header in "+sheet.getSheetName()+" row "+(n+1));
+            int columns=contentColumns(source);
+            for(int c=headers.size();c<columns;c++)if(!formatter.formatCellValue(source.getCell(c)).isBlank())throw new BadRequestException("Data without a column header in "+sheet.getSheetName()+" row "+(n+1));
             Row row=new Row(sheet.getSheetName()+":"+(n+1),Map.of());
             for(int c=0;c<headers.size();c++) {
                 Cell cell=source.getCell(c);String value=WorkbookCells.value(cell,formatter);
