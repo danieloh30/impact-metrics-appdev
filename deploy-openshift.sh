@@ -73,6 +73,10 @@ if [[ $mode == deploy ]]; then
     # Generate and validate first; the extension performs the in-cluster build and deployment.
     ./mvnw "${args[@]}" -Dquarkus.openshift.deploy=true
     oc -n "$namespace" rollout status statefulset/impact-hours --timeout=300s
+    for metrics_endpoint in runs chart-history; do
+        oc -n "$namespace" exec statefulset/impact-hours -- curl --fail --silent --show-error "http://127.0.0.1:8097/api/$metrics_endpoint" > /dev/null
+    done
+    printf 'Stateful API checks passed: run history and chart history.\n'
     printf 'Workspace deployed. Connect with: ./deploy-openshift.sh --connect --namespace %s\n' "$namespace"
 else
     printf 'Validated manifests: target/kubernetes/openshift.yml and target/kubernetes/kubernetes.yml\n'

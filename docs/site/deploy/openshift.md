@@ -13,7 +13,7 @@ The approved **Quarkus OpenShift extension** generates the cluster resources and
 | App port | 8097 inside the pod |
 | Sign-in desktop | 6080 on pod loopback only |
 | Access | Authenticated `oc port-forward`; no public Route |
-| Probes | Startup, readiness and liveness via `/api/config` |
+| Probes | Startup/readiness via stateful `/api/runs`; liveness via `/api/config` |
 | Security | Arbitrary non-root UID, no privilege escalation, read-only root filesystem |
 
 Use one instance per reporting workspace. Runs, sessions and worker ownership are local to that instance. Independent workspaces need separate namespaces/PVCs rather than additional replicas.
@@ -54,7 +54,7 @@ flowchart LR
 ## Prerequisites
 
 - Java 25, Node.js 22/npm, Git and the `oc` CLI on your workstation.
-- An OpenShift login with permission to create or update the project, builds, ImageStreams, StatefulSets, Services, PVCs and NetworkPolicies.
+- An OpenShift login with permission to create or update the project, builds, ImageStreams, StatefulSets, Services, PVCs and NetworkPolicies, plus pod exec for the post-deployment API checks and port-forward for private access.
 - A default storage class that can bind a ReadWriteOnce claim.
 - Build and workload egress for the runtime image, browser dependencies and the metric sources.
 
@@ -98,7 +98,7 @@ oc project -q
 
 The script uses the same SDKMAN/Homebrew JDK lookup as `dev.sh`, and checks Java 25+ before packaging or changing cluster resources. An explicitly configured `JAVA_HOME` takes precedence.
 
-The script validates the generated resources first, creates the project if needed, applies storage and the private-workspace ingress policy, then invokes the Quarkus in-cluster Docker build and deployment. It waits for the StatefulSet rollout.
+The script validates the generated resources first, creates the project if needed, applies storage and the private-workspace ingress policy, then invokes the Quarkus in-cluster Docker build and deployment. It waits for the StatefulSet rollout and checks `/api/runs` and `/api/chart-history` inside the pod before announcing success.
 
 Packaging skips tests; use a reviewed commit whose CI checks have passed. By default the image tag is the Git commit's short SHA. Set `--image-tag` when using a different approved tag.
 
@@ -130,7 +130,7 @@ The desktop listeners are loopback-only and are not exposed through a Service or
 
 ## Persistent state and upgrades
 
-The workspace at `/data/metrics` contains runs, structured results, sessions and `.chart-history/`. Current `RUN.md` and `AGENTS.md` are installed from the deployed image at startup; every existing run retains its frozen instruction copies.
+The PVC mounts at `/data/metrics`; the application workspace is `/data/metrics/runtimes`. That guarded subdirectory contains runs, structured results, sessions and `.chart-history/`. Current `RUN.md` and `AGENTS.md` are installed there from the deployed image at startup; every existing run retains its frozen instruction copies. Startup and readiness probes exercise `/api/runs` so an invalid workspace cannot appear ready merely because the static UI loads.
 
 Finish or cancel active work before upgrading. Deploy the next reviewed commit with the same namespace and PVC. Interrupted work remains available for an explicit **Retry phase**; a new pod does not fabricate completion.
 

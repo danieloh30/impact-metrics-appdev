@@ -24,6 +24,8 @@ try {
  rejects(items=>{const container=items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours');container.image=container.image.replace('image-registry.openshift-image-registry.svc:5000/','');},/OpenShift app must use its internal registry/);
  rejects(items=>{items.push({apiVersion:'route.openshift.io/v1',kind:'Route',metadata:{name:'unintended-public-access'}});},/Workspace access uses the authenticated port-forward/);
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.securityContext.runAsUser=1001;},/OpenShift must assign its namespace UID/);
+ rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0].env.find(variable=>variable.name==='METRICS_RUNTIME_ROOT').value='/data/metrics';},/Runtime workspace must use the guarded runtimes subdirectory/);
+ for(const probe of ['readinessProbe','startupProbe'])rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0][probe].httpGet.path='/api/config';},/Readiness must validate a stateful API/);
  assert.equal(run().status,0,'Original copied manifests must remain valid after negative checks');
- console.log('Deployment manifests: valid generated artifacts and 4 unsafe variants verified using scratch JSON/archive copies only');
+ console.log('Deployment manifests: valid generated artifacts and 7 unsafe variants verified using scratch JSON/archive copies only');
 } finally {rmSync(fixture,{recursive:true,force:true});}

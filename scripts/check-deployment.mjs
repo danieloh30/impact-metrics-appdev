@@ -19,7 +19,9 @@ for(const target of ['openshift','kubernetes']){
  assert(container.volumeMounts.some(item=>item.name===runtime.name&&item.mountPath==='/data/metrics'));
  for(const path of ['/tmp','/dev/shm'])assert(container.volumeMounts.some(item=>item.mountPath===path));
  assert(container.env.some(item=>item.name==='QUARKUS_PROFILE'&&item.value==='openshift'));
- for(const probe of ['readinessProbe','livenessProbe','startupProbe'])assert.equal(container[probe]?.httpGet?.path,'/api/config');
+ assert(container.env.some(item=>item.name==='METRICS_RUNTIME_ROOT'&&item.value==='/data/metrics/runtimes'),'Runtime workspace must use the guarded runtimes subdirectory');
+ for(const probe of ['readinessProbe','startupProbe'])assert.equal(container[probe]?.httpGet?.path,'/api/runs','Readiness must validate a stateful API');
+ assert.equal(container.livenessProbe?.httpGet?.path,'/api/config');
  assert(container.resources?.limits?.memory,'Container memory limit is required');
  const service=items.find(item=>item.kind==='Service'&&item.metadata.name==='impact-hours');
  assert(service);assert(service.spec.ports.every(port=>['http',8097].includes(port.targetPort)),'Only the app HTTP port belongs in the Service');

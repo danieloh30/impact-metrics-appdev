@@ -12,7 +12,7 @@ try {
  copyFileSync(resolve(root,'deploy-openshift.sh'),resolve(fixture,'deploy-openshift.sh'));
  const mock='#!/bin/bash\nprintf "%s" "${0##*/}" >> "$DEPLOYMENT_TEST_LOG"\nprintf " <%s>" "$@" >> "$DEPLOYMENT_TEST_LOG"\nprintf "\\n" >> "$DEPLOYMENT_TEST_LOG"\n';
  for(const command of ['npm','node'])writeFileSync(resolve(bin,command),mock+'if [[ ${0##*/} == node && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\n',{mode:0o755});
- writeFileSync(resolve(bin,'oc'),mock+'if [[ $1 == get && $2 == project && ${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi\n',{mode:0o755});
+ writeFileSync(resolve(bin,'oc'),mock+'if [[ $1 == get && $2 == project && ${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi\nif [[ "$*" == *" exec "* ]]; then\n if [[ -n ${DEPLOYMENT_TEST_FAIL_API:-} && "$*" == *"/api/$DEPLOYMENT_TEST_FAIL_API" ]]; then echo "curl: HTTP500" >&2; exit 22; fi\n echo "synthetic-private-api-response"\nfi\n',{mode:0o755});
  writeFileSync(resolve(fixture,'mvnw'),mock,{mode:0o755});
  const jdk=(label,major,broken=false)=>{
   const directory=resolve(fixture,label);mkdirSync(resolve(directory,'bin'),{recursive:true});
@@ -58,6 +58,18 @@ try {
   assert(commands.indexOf('node <scripts/check-deployment.mjs>')<commands.indexOf('<apply>'),'Manifest validation must precede cluster writes');
   assert(commands.indexOf('<apply>')<commands.indexOf('<-Dquarkus.openshift.deploy=true>'));
   assert(commands.includes('oc <-n> <isolated-fixture> <rollout> <status> <statefulset/impact-hours> <--timeout=300s>'));
+  const runCheck='oc <-n> <isolated-fixture> <exec> <statefulset/impact-hours> <--> <curl> <--fail> <--silent> <--show-error> <http://127.0.0.1:8097/api/runs>';
+  const historyCheck=runCheck.replace('/api/runs','/api/chart-history');
+  assert(commands.indexOf('<rollout>')<commands.indexOf(runCheck));assert(commands.indexOf(runCheck)<commands.indexOf(historyCheck));
+  assert(commands.trim().endsWith(historyCheck),'Stateful API checks must follow rollout');
+  assert.match(deployed.stdout,/Stateful API checks passed/);assert.match(deployed.stdout,/Workspace deployed\./);
+  assert(!deployed.stdout.includes('synthetic-private-api-response'),'API response bodies must be suppressed');
+ }
+ for(const endpoint of ['runs','chart-history']){
+  const failed=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_API:endpoint});assert.equal(failed.status,22);assert.match(failed.stderr,/HTTP500/);
+  assert(!failed.stdout.includes('Stateful API checks passed')&&!failed.stdout.includes('Workspace deployed.'),'An API failure must stop before announcing success');
+  assert(failed.commands.indexOf('<rollout>')<failed.commands.indexOf(`/api/${endpoint}`));
+  if(endpoint==='runs')assert(!failed.commands.includes('/api/chart-history'),'First failing check must stop subsequent checks');
  }
  const invalidManifest=run(['--deploy'],{DEPLOYMENT_TEST_INVALID_MANIFEST:'true'});assert.equal(invalidManifest.status,8);assert(!invalidManifest.commands.includes('<apply>')&&!invalidManifest.commands.includes('<new-project>')&&!invalidManifest.commands.includes('<-Dquarkus.openshift.deploy=true>'));
  console.log(`Deployment CLI: ${checks} isolated cases passed (Java discovery/validation, dry generation, private tunnel, status and mocked deploy ordering; no live commands)`);

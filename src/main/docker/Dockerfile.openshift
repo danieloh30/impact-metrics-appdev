@@ -31,7 +31,7 @@ RUN java -cp '/deployments/lib/main/*' com.microsoft.playwright.CLI install --wi
 
 ENV QUARKUS_PROFILE=openshift \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    METRICS_RUNTIME_ROOT=/data/metrics \
+    METRICS_RUNTIME_ROOT=/data/metrics/runtimes \
     HOME=/data/metrics/.home \
     DISPLAY=:99
 

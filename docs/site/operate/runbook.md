@@ -8,6 +8,7 @@ Use the current state and saved evidence to decide what to retry. A retry keeps 
 |---|---|
 | Deployment prints This command made no cluster changes | Generation succeeded; run with `--deploy` and your existing project namespace |
 | Deployment cannot find Java or reports an older version | Select Java 25+ with `JAVA_HOME` or SDKMAN; the script also checks Homebrew JDK locations |
+| UI says Operation failed and logs say Runtime root must be a runtimes directory | Use the current profile with `METRICS_RUNTIME_ROOT=/data/metrics/runtimes`; preserve the PVC and verify `/api/runs` and `/api/chart-history` |
 | Pod reports ImagePullBackOff / manifest unknown | Compare the BuildConfig output tag and pod image; use the current profile with the explicit OpenShift internal registry, then generate and deploy again |
 | Source read fails or inspection expires | Reconnect if sign-in expired, then re-read the affected source |
 | DZone or another source blocks collection | Retry unresolved collection, or enter a verified measurement |

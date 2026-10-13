@@ -80,6 +80,8 @@ Running the script without an action flag defaults to **generation only**. Use `
 
 The OpenShift profile explicitly selects the internal image registry so the Docker build output and deployed Git-tagged image stay aligned. Manifest validation rejects a mismatched build/container tag before deploying.
 
+The PVC mounts at `/data/metrics`, while `METRICS_RUNTIME_ROOT` points to its `/data/metrics/runtimes` subdirectory. The workspace path guard remains enabled. Startup/readiness probes check `/api/runs`; liveness checks `/api/config`. Deployment validation rejects an invalid workspace path or a readiness probe that checks only static configuration.
+
 ```bash
 # Build and validate manifests locally; no cluster changes.
 ./deploy-openshift.sh --generate

@@ -47,7 +47,7 @@ On a laptop, the sign-in browsers run locally. On a cluster, they run in the pod
 ## State layout
 
 ```text
-runtimes/                    # /data/metrics in the cluster
+runtimes/                    # /data/metrics/runtimes in the cluster
   RUN.md
   AGENTS.md
   runs/<run-id>/
