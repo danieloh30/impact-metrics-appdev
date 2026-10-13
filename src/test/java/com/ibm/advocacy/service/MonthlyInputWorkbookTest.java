@@ -33,7 +33,33 @@ class MonthlyInputWorkbookTest {
         byte[] complete=writer.merge(fixture(false),data(row("1","Existing","200")),"2026-10","COMPLETED","run").bytes();byte[] current;
         try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()){var sheet=book.createSheet("Current month inputs");String[] headers={"Date","Author","Tool","Type of activity","Name of activity",URL,VIEWS};var head=sheet.createRow(0);for(int i=0;i<headers.length;i++)head.createCell(i).setCellValue(headers[i]);for(int r=1;r<=2;r++){var row=sheet.createRow(r);String[] values={r==1?"2026-10-01":"2026-11-01","A","X","Recorded video","Current","https://example.com/current","300"};for(int c=0;c<values.length;c++)row.createCell(c).setCellValue(values[c]);}book.write(out);current=out.toByteArray();}
         WorkbookService reader=new WorkbookService();reader.blogs=new BlogSheetReader();
-        var rerun=reader.prepare(new WorkbookRequest(current,"2026-10","Current month inputs",List.of("October 2026 inputs"),complete));assertEquals("100",rerun.trailing().rows.getFirst().get("Current total"));assertEquals("200",rerun.trailing().rows.getFirst().get("Snapshot cumulative total"));var next=reader.prepare(new WorkbookRequest(current,"2026-11","Current month inputs",List.of("October 2026 inputs"),complete));assertEquals("200",next.trailing().rows.getFirst().get("Current total"));
+        var rerun=reader.prepare(new WorkbookRequest(current,"2026-10","Current month inputs",List.of("October 2026 inputs"),complete),java.time.LocalDate.of(2026,10,31));assertEquals("100",rerun.trailing().rows.getFirst().get("Current total"));assertEquals("200",rerun.trailing().rows.getFirst().get("Snapshot cumulative total"));var next=reader.prepare(new WorkbookRequest(current,"2026-11","Current month inputs",List.of("October 2026 inputs"),complete),java.time.LocalDate.of(2026,11,1));assertEquals("200",next.trailing().rows.getFirst().get("Current total"));
+    }
+    @Test void provisionalOctoberUpsertsExactTotalsBesideSeptemberButCannotBecomeNovembersBaseline() throws Exception {
+        byte[] original=fixture(false);var interim=writer.merge(original,data(row("1","Existing","166.5")),"2026-10","PROVISIONAL","oct-13");
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(interim.bytes()))){
+            assertEquals(book.getSheetIndex("September inputs")+1,book.getSheetIndex("October 2026 inputs"));assertTrue(book.getSheetIndex("October 2026 inputs")<book.getSheetIndex("DA metric model 2026"));
+            var sheet=book.getSheet("October 2026 inputs");assertEquals(166.5,sheet.getRow(1).getCell(MonthlyInputWorkbook.columns(sheet.getRow(0),new org.apache.poi.ss.usermodel.DataFormatter()).get("Current total")).getNumericCellValue());
+        }
+        WorkbookService reader=new WorkbookService();assertEquals(List.of("October 2026 inputs"),reader.historySheets(interim.bytes(),"2026-10"));
+        var blocked=assertThrows(BadRequestException.class,()->reader.historySheets(interim.bytes(),"2026-11"));assertTrue(blocked.getMessage().contains("provisional"));
+        var later=writer.merge(interim.bytes(),data(row("1","Existing","200")),"2026-10","PROVISIONAL","oct-20");assertEquals(1,later.updated());assertEquals(0,later.appended());assertFalse(later.created());
+        assertThrows(BadRequestException.class,()->reader.historySheets(later.bytes(),"2026-11"));
+        var finalSnapshot=writer.merge(later.bytes(),data(row("1","Existing","250")),"2026-10","COMPLETED","oct-31");assertEquals(List.of("October 2026 inputs"),reader.historySheets(finalSnapshot.bytes(),"2026-11"));
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(finalSnapshot.bytes()))){var sheet=book.getSheet("October 2026 inputs");assertEquals(250,sheet.getRow(1).getCell(MonthlyInputWorkbook.columns(sheet.getRow(0),new org.apache.poi.ss.usermodel.DataFormatter()).get("Current total")).getNumericCellValue());assertEquals(1,sheet.getLastRowNum());}
+    }
+    @Test void monthTabFallsBackToEndWhenPriorMonthDoesNotExist() throws Exception {
+        var result=writer.merge(fixture(false),data(row("1","Existing","200")),"2026-11","PROVISIONAL","run");
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){assertTrue(book.getSheetIndex("November 2026 inputs")>book.getSheetIndex("DA metric model 2026"));}
+    }
+    @Test void olderInterimPublicationAndInterimAfterFinalCannotReplaceNewerSnapshot() throws Exception {
+        Row latest=row("1","Existing","200");latest.cells.put("Snapshot as of","2026-10-20");
+        byte[] interim=writer.merge(fixture(false),data(latest),"2026-10","PROVISIONAL","oct-20").bytes();
+        Row older=row("1","Existing","166.5");older.cells.put("Snapshot as of","2026-10-13");
+        var stale=assertThrows(BadRequestException.class,()->writer.merge(interim,data(older),"2026-10","PROVISIONAL","oct-13"));assertTrue(stale.getMessage().contains("newer snapshot"));
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(interim))){assertEquals("2026-10-20",book.getSheet(MonthlyInputWorkbook.META).getRow(1).getCell(4).getStringCellValue());}
+        latest.cells.put("Snapshot as of","2026-10-31");byte[] completed=writer.merge(interim,data(latest),"2026-10","COMPLETED","oct-31").bytes();
+        var downgraded=assertThrows(BadRequestException.class,()->writer.merge(completed,data(older),"2026-10","PROVISIONAL","oct-13"));assertTrue(downgraded.getMessage().contains("final snapshot"));
     }
     @Test void ownedMetricFormulasBecomeReviewedValuesWhileCustomFormulasRemain() throws Exception {
         byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){var row=book.getSheet("September inputs").getRow(1);row.getCell(6).setCellFormula("753/4");row.getCell(8).setCellFormula("753/4");book.getCreationHelper().createFormulaEvaluator().evaluateAll();book.write(out);original=out.toByteArray();}

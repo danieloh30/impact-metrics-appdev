@@ -31,7 +31,7 @@ public class FakeSharePointCollector extends SharePointCollector {
                 int last=java.time.Month.valueOf(month.toUpperCase()).getValue();int n=1;
                 for(int m=7;m<=last;m++) {
                     String title=java.time.Month.of(m).getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.US);
-                    String date=m==7?"2026-07-31":m==8?"2026-08-01":m==9?"2026-09-30":m==10?"2026-10-31":"2026-11-01";
+                    String date=m==7?"2026-07-31":m==8?"2026-08-01":m==9?"2026-09-30":m==10?"2026-10-10":"2026-11-01";
                     fixture.row(sheet,n++,date,"A","X","Recorded video",title+" history","100","https://example.com/"+title,"Yes");
                 }
             }

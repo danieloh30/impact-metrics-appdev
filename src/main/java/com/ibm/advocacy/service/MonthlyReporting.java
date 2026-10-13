@@ -24,7 +24,7 @@ public class MonthlyReporting {
     public record Rule(String unit,String weight,String trailing) {}
     public record Context(Map<String,Rule> rules,Map<String,String> geography,Data snapshot,boolean sameMonth) {}
     public record Aggregate(String name,String currentImpact,String trailingImpact,String impact,String metrics,String unit,int rows) {}
-    public record Report(String month,String cutoff,String scope,int revision,boolean complete,int included,int excluded,
+    public record Report(String month,String cutoff,String scope,int revision,boolean complete,boolean provisional,int included,int excluded,
                          String impact,List<Aggregate> activity,List<Aggregate> tool,List<Aggregate> bob,Data details,List<String> warnings,ImpactTrends.Timeline trends) {}
     static String key(String value) {return value.strip().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);}
     static boolean oneTime(Row row) {return row.id.toLowerCase(Locale.ROOT).startsWith("markus blog data:")||row.id.toLowerCase(Locale.ROOT).startsWith("elder blog data:")||BlogSheetReader.matches(row.get("Source sheet"));}
@@ -96,7 +96,7 @@ public class MonthlyReporting {
     }
     static Data transform(Run run,Data data,boolean current,Context context,Set<String> followup) {
         String month=String.valueOf(run.workbook.getOrDefault("month",""));
-        String cutoff=month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString();
+        String cutoff=ReportingPeriod.cutoff(run);
         Map<List<String>,List<Row>> lookup=index(context.snapshot());List<Row> rows=new ArrayList<>();
         for(Row original:data.rows) {
             Row row=original.copy();rows.add(row);Rule rule=context.rules().get(row.type());
@@ -128,7 +128,8 @@ public class MonthlyReporting {
             else if(original.get("Duplicate collection attribution").equals("Yes"))reason="Duplicate activity attribution; unique resource share counted once";
             else if(!original.get("Baseline allocation issue").isBlank())reason="Historical baseline allocation needs correction — "+original.get("Baseline allocation issue");
             else if(rule==null)reason="Activity has no rule in DA metric model 2026";
-            else if(!cutoff.isBlank()&&!LocalDate.parse(cutoff).isBefore(LocalDate.now()))reason="Reporting month has not closed; month-end totals are not available yet";
+            else if(!month.isBlank()&&YearMonth.parse(month).atDay(1).isAfter(ReportingPeriod.runDate(run)))reason="Reporting month has not started yet";
+            else if(current&&!cutoff.isBlank()&&!row.get("Date").isBlank()&&LocalDate.parse(row.get("Date")).isAfter(LocalDate.parse(cutoff)))reason="Activity is after this run's reporting date";
             else if(current&&!row.get("Participation correction").isBlank())reason="Shared participation input needs correction — "+row.get("Participation correction");
             else if(current&&!row.get("Attendance correction").isBlank())reason="Monthly attendance total needs correction — "+row.get("Attendance correction");
             else if(current&&followup.contains(row.id)&&override==null&&!shared&&!monthly)reason="Unresolved follow-up activity";
@@ -183,7 +184,7 @@ public class MonthlyReporting {
         Object metadata=run.workbook.get("chartHistory");if(metadata instanceof Map<?,?> map)map.forEach((key,value)->source.put(String.valueOf(key),value));
         Path historyFile=workspace.runPath(run.id,"rawdata/"+String.valueOf(source.getOrDefault("snapshotFilename","chart-history.xlsx")));
         if(Files.isRegularFile(historyFile))history=trends.read(Files.readAllBytes(historyFile),String.valueOf(source.getOrDefault("filename","")),String.valueOf(source.getOrDefault("endMonth","")));
-        return new Report(report.month(),report.cutoff(),report.scope(),report.revision(),report.complete(),report.included(),report.excluded(),report.impact(),report.activity(),report.tool(),report.bob(),report.details(),report.warnings(),ImpactTrends.build(report.month(),report.activity(),report.tool(),history,Map.copyOf(source),report.included()>0||report.excluded()==0));
+        return new Report(report.month(),report.cutoff(),report.scope(),report.revision(),report.complete(),report.provisional(),report.included(),report.excluded(),report.impact(),report.activity(),report.tool(),report.bob(),report.details(),report.warnings(),ImpactTrends.build(report.month(),report.activity(),report.tool(),history,Map.copyOf(source),report.included()>0||report.excluded()==0));
     }
     static Report build(Run run,Data current,Data trailing,Data follow,String scope,Context context) {
         Set<String> unresolved=new HashSet<>();follow.rows.forEach(row->unresolved.add(row.id));
@@ -201,7 +202,7 @@ public class MonthlyReporting {
         for(Row row:selected) {
             String reason=row.get("Reporting reason");String handling=row.get("Reporting status").equals("Included")?"Included":reason.contains("precedence")||reason.startsWith("Duplicate")?"Already counted":reason.equals("Retained historical input is not new growth")||reason.equals("One-time activity is not trailing-eligible")?"No new contribution":"Needs attention";
             row.cells.put("Reporting handling",handling);row.cells.put("Counted impact hours",handling.equals("Included")?row.get("Impact hours"):"0");
-            row.cells.put("Reporting guidance",handling.equals("Already counted")?"No action required: the eligible contribution is counted once elsewhere":handling.equals("No new contribution")?"No confirmation required: prior totals or one-time inputs do not establish additional trailing growth":handling.equals("Included")?"This contribution is included in the selected month":row.get("Reporting action").equals("Confirm total")?"Confirm an attributed total to resolve this contribution":"Correct the source data or reporting month, then rerun");
+            row.cells.put("Reporting guidance",handling.equals("Already counted")?"No action required: the eligible contribution is counted once elsewhere":handling.equals("No new contribution")?"No confirmation required: prior totals or one-time inputs do not establish additional trailing growth":handling.equals("Included")?"This contribution is included in the selected month":row.get("Reporting action").equals("Confirm total")?"Confirm an attributed total to resolve this contribution":reason.equals("Activity is after this run's reporting date")?"Start a new run on or after the activity date to include it":"Correct the source data or reporting month, then rerun");
         }
         Data details=Data.output(new Data(FINAL_HEADERS,List.of()),selected);List<Row> eligible=selected.stream().filter(row->row.get("Reporting status").equals("Included")).toList();
         String month=String.valueOf(run.workbook.getOrDefault("month",""));List<String> warnings=new ArrayList<>();
@@ -210,10 +211,10 @@ public class MonthlyReporting {
         long attention=selected.stream().filter(row->row.get("Reporting handling").equals("Needs attention")).count();
         if(attention>0)warnings.add(attention+" contributions need attention before they can be counted. Review their specific correction reasons.");
         long omitted=selected.size()-eligible.size()-attention;if(omitted>0)warnings.add(omitted+" rows are intentionally not added: already counted elsewhere or no additional trailing growth. No confirmation is required.");
-        warnings.add("Approved agent counts are assigned to "+month+" as its final reporting data, including counts collected later. Measured at preserves the actual collection date; As of is the reporting month-end.");
+        warnings.add(ReportingPeriod.provisional(run)?"Provisional snapshot as of "+ReportingPeriod.cutoff(run)+". Collected current and trailing contributions are included. Start another run for updated totals; run on the last day of the month or later for a final snapshot.":"Final snapshot for "+month+" as of "+ReportingPeriod.cutoff(run)+". Measured at preserves the actual collection date, including later collection.");
         BigDecimal total=eligible.stream().map(row->Calculations.number(row.get("Impact hours"))).reduce(BigDecimal.ZERO,BigDecimal::add);
         var activity=aggregate(eligible,"Type of activity");var tool=aggregate(eligible,"Tool");
-        return new Report(month,month.isBlank()?"":YearMonth.parse(month).atEndOfMonth().toString(),scope,run.reportingRevision,run.status.equals("COMPLETED"),eligible.size(),selected.size()-eligible.size(),Calculations.format(total),activity,tool,aggregate(eligible.stream().filter(row->row.get("Tool").equals("IBM Bob")).toList(),"Type of activity"),details,warnings,month.isBlank()?null:ImpactTrends.build(month,activity,tool,null,Map.of(),!eligible.isEmpty()||selected.isEmpty()));
+        return new Report(month,ReportingPeriod.cutoff(run),scope,run.reportingRevision,run.status.equals("COMPLETED"),ReportingPeriod.provisional(run),eligible.size(),selected.size()-eligible.size(),Calculations.format(total),activity,tool,aggregate(eligible.stream().filter(row->row.get("Tool").equals("IBM Bob")).toList(),"Type of activity"),details,warnings,month.isBlank()?null:ImpactTrends.build(month,activity,tool,null,Map.of(),!eligible.isEmpty()||selected.isEmpty()));
     }
     static List<Aggregate> aggregate(List<Row> rows,String field) {
         Map<String,List<Row>> groups=new TreeMap<>();for(Row row:rows)groups.computeIfAbsent(row.get(field),k->new ArrayList<>()).add(row);

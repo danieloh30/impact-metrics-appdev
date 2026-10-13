@@ -67,6 +67,7 @@ catch(RuntimeException failure) {
         Run run=createPrepared(prepared.current(),prepared.trailing(),null,null);
         workspace.bytes(workspace.runPath(run.id,"rawdata/original.xlsx"),bytes);
         run.workbook.putAll(Map.of("filename",filename,"sha256",RuntimeWorkspace.hash(bytes),"month",prepared.month(),"currentSheet",currentSheet,"historySheets",prepared.historySheets(),"windowStart",prepared.windowStart(),"windowEnd",prepared.windowEnd(),"missingBaselines",prepared.missingBaselines(),"csvEncoding","UTF-8"));
+        run.workbook.put("asOf",prepared.windowEnd());run.workbook.put("snapshotStage",ReportingPeriod.publicationStage(run));
         run.workbook.put("linkedInCurrentRows",linkedInRows(prepared.current()));run.workbook.put("linkedInTrailingRows",linkedInRows(prepared.trailing()));
         run.workbook.put("blogRows",prepared.blogRows());run.workbook.put("blogSkippedRows",prepared.blogSkippedRows());
         Pipeline.event(run,"WorkbookPreparationAgent","Prepared structured workbook rows without intermediate CSV files; "+prepared.missingBaselines()+" historical activities need baseline review");
@@ -127,6 +128,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
             Run run=workspace.load(id);
             if(!run.workbook.isEmpty()) {
                 boolean changed=false;
+                if(run.workbook.containsKey("month")&&!run.workbook.containsKey("asOf")){run.workbook.put("asOf",ReportingPeriod.cutoff(run));run.workbook.put("snapshotStage",ReportingPeriod.publicationStage(run));changed=true;}
                 for(String source:List.of("source","trailing-source")) {
                     String key=source.equals("source")?"linkedInCurrentRows":"linkedInTrailingRows";
                     if(!run.workbook.containsKey(key)&&Files.exists(workspace.runPath(id,"state/"+source+".json"))) {
@@ -357,8 +359,7 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
             if(run.reportingRevision!=revision)throw new ClientErrorException("Reporting values changed; reload the report before saving",409);
             if(!Set.of("current","trailing").contains(contribution))throw new BadRequestException("Unknown contribution");
             String month=String.valueOf(run.workbook.getOrDefault("month",""));
-            if(month.isBlank()||!java.time.YearMonth.parse(month).atEndOfMonth().toString().equals(asOf))throw new BadRequestException("Measurement date must be the reporting month's last day");
-            if(!java.time.LocalDate.parse(asOf).isBefore(java.time.LocalDate.now()))throw new BadRequestException("The reporting month must close before confirming a month-end total");
+            if(month.isBlank()||!ReportingPeriod.cutoff(run).equals(asOf))throw new BadRequestException("Measurement date must match this run's reporting date: "+ReportingPeriod.cutoff(run));
             BigDecimalValidation(value);if(note!=null&&note.length()>1000)throw new BadRequestException("Month-end evidence note must be at most 1000 characters");
             note=note==null||note.isBlank()?"User confirmed total as of "+asOf:note.strip();
             Data data=rawArtifact(run,contribution.equals("current")?"current.csv":"updated_90-day.csv");
@@ -368,7 +369,7 @@ public synchronized MeasurementInput measurementInput(String id,String rowId,Str
             if(!baseline.isBlank()&&Calculations.number(value).compareTo(Calculations.number(baseline))<0)
                 throw new BadRequestException("Attributed total "+Calculations.format(Calculations.number(value))+" is below previous baseline "+baseline+". Checking the confirmation box cannot resolve negative growth. Verify the total and its author/tool share; if the baseline or allocation is wrong, correct the source workbook and start a new run. No reporting changes were saved.");
             run.monthEndValues.put(contribution+":"+rowId,new com.ibm.advocacy.model.MonthEndValue(Calculations.format(Calculations.number(value)),asOf,note.strip(),Instant.now().toString()));
-            if(run.publication!=null&&run.publication.stage.equals("COMPLETED")){run.publication.status="STALE";run.publication.message="Reporting totals changed. Publish the completed snapshot again.";}
+            if(run.publication!=null&&Set.of("COMPLETED","PROVISIONAL").contains(run.publication.stage)){run.publication.status="STALE";run.publication.message="Reporting totals changed. Publish this reporting snapshot again.";}
             run.reportingRevision++;Pipeline.event(run,"Month-end reporting","Confirmed "+contribution+" total for "+rowId+" as of "+asOf);workspace.save(run);return run;
         }
     }

@@ -98,11 +98,30 @@ class MonthlyReportingTest {
         Row result=report.details().rows.getFirst();assertEquals("83.25",report.impact());assertEquals("AvocadoBot.xlsx",result.get("Source workbook"));assertEquals("Current month inputs",result.get("Source sheet"));assertEquals("Current month inputs:12",result.get("Source row"));assertEquals("https://ibm.sharepoint.com/current.xlsx",result.get("Source workbook URL"));assertEquals("https://example.com/Current month inputs:12/0",result.get(URL));
         assertEquals("167",Calculations.reported(report.details(),false).rows.getFirst().get(VIEWS));
     }
-    @Test void anOpenReportingMonthCannotProduceFinalMonthEndTotals(){
+    @Test void aFutureReportingMonthCannotProduceTotals(){
         Run run=run();run.workbook.put("month",java.time.YearMonth.now().plusMonths(1).toString());
         Row workshop=row("workshop","2026-09-01","IBM Bob","Customer workshop","25");
         var report=MonthlyReporting.build(run,data(workshop),new Data(),new Data(),"current",context(new Data()));
-        assertEquals(0,report.included());assertTrue(report.details().rows.getFirst().get("Reporting reason").contains("has not closed"));
+        assertEquals(0,report.included());assertTrue(report.details().rows.getFirst().get("Reporting reason").contains("has not started"));
+    }
+    @Test void interimOctoberReportIncludesCollectedCurrentAndTrailingAndExcludesFutureDelivery(){
+        Run run=run();run.workbook.put("month","2026-10");run.workbook.put("asOf","2026-10-13");
+        Row current=row("oct-video","2026-10-02","IBM Runtimes","Recorded video","500");
+        Row future=row("future-video","2026-10-20","IBM Runtimes","Recorded video","100");
+        Row history=row("old-video","2026-08-01","IBM Bob","Recorded video","40");history.cells.put("Metric basis","Trailing delta");history.cells.put("Current total","140");history.cells.put("Previous total","100");
+        var report=MonthlyReporting.build(run,data(current,future),data(history),new Data(),"combined",context(new Data()));
+        assertEquals("270",report.impact());assertEquals(2,report.included());assertTrue(report.provisional());assertEquals("2026-10-13",report.cutoff());
+        assertTrue(report.details().rows.get(1).get("Reporting reason").contains("after this run's reporting date"));assertEquals("",report.details().rows.get(1).get("Reporting action"));
+        assertEquals("500",report.details().rows.getFirst().get("Current total"));assertEquals("40",report.details().rows.getLast().get("Exact reporting metric"));
+        assertTrue(report.warnings().stream().anyMatch(w->w.contains("Provisional snapshot as of 2026-10-13")));
+    }
+    @Test void laterOctoberRunIncludesNewActivitiesWhileLastDayAndNovemberRunsAreFinal(){
+        Row current=row("oct-video","2026-10-20","IBM Runtimes","Recorded video","500");
+        for(String date:List.of("2026-10-20","2026-10-31","2026-11-01")){
+            Run run=run();run.workbook.put("month","2026-10");run.workbook.put("asOf",date);
+            var report=MonthlyReporting.build(run,data(current),new Data(),new Data(),"current",context(new Data()));
+            assertEquals("250",report.impact());assertEquals(date.equals("2026-10-20")?"2026-10-20":"2026-10-31",report.cutoff());assertEquals(date.equals("2026-10-20"),report.provisional());
+        }
     }
     @Test void nativeExcelPivotsUseSumAndChartsReconcileWithTypedExactDetail() throws Exception {
         Row row=row("video","2026-09-10","IBM Bob","Recorded video","166.5");var report=MonthlyReporting.build(run(),data(row),new Data(),new Data(),"combined",context(data(snapshot(row,"166.5","0"))));

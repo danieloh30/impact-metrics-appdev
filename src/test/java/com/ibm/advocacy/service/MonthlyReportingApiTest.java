@@ -71,6 +71,22 @@ class MonthlyReportingApiTest {
         byte[] excel=runs.reportingDownload(run.id,"combined",true);try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(excel))){assertEquals(925,book.getSheet("Report").getRow(5).getCell(1).getNumericCellValue());}
         assertArrayEquals(original,Files.readAllBytes(workspace.runPath(run.id,"output/1/current.json")));assertTrue(runs.get(run.id).monthEndValues.isEmpty());
     }
+    @Test void interimConfirmationMustMatchFrozenRunDateAndRecalculatesImmediately() throws Exception {
+        Run run=fixture();run.workbook.put("month","2026-10");run.workbook.put("asOf","2026-10-13");
+        Row row=new Row("oct-current/0",Map.of("Date","2026-10-02","Author","Daniel Oh","Tool","IBM Runtimes","Type of activity","Recorded video","Name of activity","October video","Views / attendance","100"));
+        workspace.bytes(workspace.runPath(run.id,"output/1/current.json"),new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(Data.output(new Data(),List.of(row))));workspace.save(run);
+        assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"current",row.id,"200","2026-10-31",""));
+        assertThrows(jakarta.ws.rs.BadRequestException.class,()->runs.confirmMonthEnd(run.id,0,"current",row.id,"200","2026-10-20",""));
+        runs.confirmMonthEnd(run.id,0,"current",row.id,"200","2026-10-13","Verified interim total");
+        var report=runs.report(run.id,"current");assertTrue(report.provisional());assertEquals("2026-10-13",report.cutoff());assertEquals("100",report.impact());assertEquals("200",report.details().rows.getFirst().get("Current total"));assertEquals(1,runs.get(run.id).reportingRevision);
+    }
+    @Test void oldWorkbookRunMigratesOnceToItsCreationDateWithoutBecomingFinal(){
+        assertDoesNotThrow(()->{
+            Run run=fixture();run.workbook.put("month","2026-10");run.workbook.remove("asOf");run.workbook.remove("snapshotStage");run.createdAt="2026-10-13T12:00:00Z";workspace.save(run);
+            Run migrated=runs.get(run.id);assertEquals("2026-10-13",migrated.workbook.get("asOf"));assertEquals("PROVISIONAL",migrated.workbook.get("snapshotStage"));
+            migrated.createdAt="2026-11-01T12:00:00Z";workspace.save(migrated);Run reopened=runs.get(run.id);assertEquals("2026-10-13",reopened.workbook.get("asOf"));assertTrue(ReportingPeriod.provisional(reopened));
+        });
+    }
 @Test void negativeConfirmationIsRejectedWithoutSavingAndCorrectedTotalResolves() throws Exception {
     Run run=fixture();Row row=new Row("September inputs:153/0",Map.of("Date","2026-09-10","Author","Markus Eisele","Tool","IBM Bob","Type of activity","Recorded video","Name of activity","Storage article","Current total","1150","Previous total","2100","Metric basis","Trailing delta","Views / attendance","-950"));
     byte[] original=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(Data.output(new Data(),List.of(row)));

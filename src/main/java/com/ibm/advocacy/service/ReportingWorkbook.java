@@ -24,6 +24,7 @@ public class ReportingWorkbook {
             line(overview,0,"AppDev advocacy impact",report.month());line(overview,1,"As of",report.cutoff());line(overview,2,"Scope",report.scope());
             line(overview,3,"Included rows",report.included());line(overview,4,"Excluded rows",report.excluded());line(overview,5,"Impact hours",Double.parseDouble(report.impact()));
             line(overview,6,"Model","DA metric model 2026");line(overview,7,"Report state",report.complete()?"Completed agent run":"Agent processing incomplete");
+            line(overview,11,"Snapshot",report.provisional()?"Provisional through "+report.cutoff():"Final month-end snapshot");
             line(overview,8,"Precision","Impact uses exact allocation before rounding views.");
             line(overview,9,"Charts","Charts reflect this exported report snapshot; regenerate the export after changes.");
             line(overview,10,"Pivots","Native PivotTables refresh when opened in Excel; also use Refresh All after editing detail.");

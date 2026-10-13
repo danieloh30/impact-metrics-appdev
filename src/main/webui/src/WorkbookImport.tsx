@@ -52,7 +52,10 @@ export function WorkbookImport({busy,onImport,onStep,onActivate,initial}:{busy:b
  const matching=historicalSheets(history,month);
  const missing=window.filter(target=>!matching.some(sheet=>sheet.months.includes(`${target.year}-${String(target.month).padStart(2,'0')}`)));
  const blocked=matching.length>1||matching.some(sheet=>!sheet.eligible);
- const bounds=window.length?`${window[0].year}-${String(window[0].month).padStart(2,'0')}-01 – ${new Date(Date.UTC(window[2].year,window[2].month,0)).toISOString().slice(0,10)}`:'';
+ const localDate=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+ const calendarEnd=window.length?new Date(Date.UTC(window[2].year,window[2].month,0)).toISOString().slice(0,10):'';
+ const reportEnd=calendarEnd&&calendarEnd<localDate?calendarEnd:localDate;
+ const bounds=window.length?`${window[0].year}-${String(window[0].month).padStart(2,'0')}-01 – ${reportEnd}`:'';
  async function readAndPrepare(){
   if(flowLock.current||working||session?.busy||session?.status!=='CONNECTED')return;
   flowLock.current=true;setFlowBusy(true);onActivate();setErrors(old=>({...old,prepare:''}));
@@ -91,7 +94,7 @@ export function WorkbookImport({busy,onImport,onStep,onActivate,initial}:{busy:b
   {session&&<p role="status" className="sharepoint-status">{session.message}</p>}
   {connectTarget==='history'&&<p className="baseline-notice">The metrics workbook needs sign-in. Connect SharePoint will open that workbook to refresh access.</p>}
   <p className="sharepoint-signin-note">Connect opens a separate Chrome window with an app-specific profile. Complete IBM sign-in there. Source links remain editable during sign-in; changes apply to the next workbook read. Access to each workbook is checked when you read it.</p>
-  <label className="reporting-month-picker" id="reporting-month">Reporting month<input id="reporting-month-input" aria-label="Reporting month" type="month" required value={month} disabled={working} onChange={e=>{onActivate();setMonth(e.target.value);}}/><small>Trailing window: {bounds||'Choose a month'}</small></label>
+  <label className="reporting-month-picker" id="reporting-month">Reporting month<input id="reporting-month-input" aria-label="Reporting month" type="month" required value={month} disabled={working} onChange={e=>{onActivate();setMonth(e.target.value);}}/><small>Trailing window: {bounds||'Choose a month'}. In-month reports are provisional through the run date; run on month-end or later for a final snapshot.</small></label>
   <div className="sharepoint-workbooks">{(['current','history'] as Role[]).map(role=><section key={role} id={`workbook-${role}`} className="sharepoint-workbook" aria-label={`${role==='current'?'Current activities':'Historical metrics'} workbook`}>
    <span className="workbook-source-label">{role==='current'?'CURRENT-MONTH ACTIVITIES':'TRAILING HISTORY'}</span><h3>{titles[role]}</h3>
    <p>{role==='current'?'Current month inputs plus matching Markus and Elder blog data.':'Latest monthly input sheet selected automatically; its rolling history is filtered to the reporting window.'}</p>

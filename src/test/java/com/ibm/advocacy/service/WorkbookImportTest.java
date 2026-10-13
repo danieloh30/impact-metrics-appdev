@@ -46,7 +46,7 @@ class WorkbookImportTest {
         byte[] bytes=fixture(false);var inspection=workbooks.inspect(bytes);
         assertEquals("2026-10",inspection.suggestedMonth());assertEquals("October inputs",inspection.suggestedCurrentSheet());
         assertFalse(inspection.sheets().get(2).eligible());
-        var result=workbooks.prepare(new WorkbookRequest(bytes,"2026-10","October inputs",List.of("Previous months")));
+        var result=workbooks.prepare(new WorkbookRequest(bytes,"2026-10","October inputs",List.of("Previous months")),LocalDate.of(2026,10,31));
         assertEquals("2026-08-01",result.windowStart());assertEquals("2026-10-31",result.windowEnd());assertEquals(1,result.current().rows.size());assertEquals(6,result.trailing().rows.size());
         assertEquals(4,result.trailing().rows.stream().filter(r->r.get("Current total").equals("20")).count());
         assertEquals(0,result.missingBaselines());
@@ -94,6 +94,18 @@ class WorkbookImportTest {
             var prepared=workbooks.prepare(new WorkbookRequest(out.toByteArray(),"2026-10","All activities",List.of("All activities")));
             assertEquals(1,prepared.current().rows.size());assertEquals(2,prepared.trailing().rows.size());assertEquals("80",prepared.trailing().rows.getLast().get("Current total"));assertEquals(0,prepared.missingBaselines());
         }
+    }
+    @Test void reportingDateFiltersCurrentAndBlogActivitiesAndRejectsNotStartedMonths() throws Exception {
+        byte[] bytes;
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(new BlogWorkbookTest().fixture()));ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            var current=book.getSheet("Current month inputs");row(current,2,"2026-10-20","Daniel","Quarkus","Customer meeting","Later delivery","");
+            var markus=book.getSheet("Markus blog data");markus.getRow(1).getCell(0).setCellValue(LocalDate.of(2026,10,20));book.write(out);bytes=out.toByteArray();
+        }
+        var request=new WorkbookRequest(bytes,"2026-10","Current month inputs",List.of("Previous months inputs"));
+        var first=workbooks.prepare(request,LocalDate.of(2026,10,13));assertEquals("2026-10-13",first.windowEnd());assertEquals(2,first.current().rows.size());assertEquals(0,first.blogRows().get("Markus blog data"));assertEquals(1,first.blogRows().get("Elder blog data"));
+        var later=workbooks.prepare(request,LocalDate.of(2026,10,20));assertEquals("2026-10-20",later.windowEnd());assertEquals(4,later.current().rows.size());assertEquals(1,later.blogRows().get("Markus blog data"));
+        var finalReport=workbooks.prepare(request,LocalDate.of(2026,11,1));assertEquals("2026-10-31",finalReport.windowEnd());assertEquals(4,finalReport.current().rows.size());
+        assertThrows(BadRequestException.class,()->workbooks.prepare(request,LocalDate.of(2026,9,30)));
     }
     @Test void invalidSelectionsFilesAndDatesAreRejected() throws Exception {
         byte[] bytes=fixture(false);

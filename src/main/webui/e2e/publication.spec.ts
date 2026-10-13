@@ -74,3 +74,23 @@ test('Specific SharePoint conflicts retain failed stage and offer status diagnos
 test('A preview can be reviewed but cannot publish into Phase 4 before LinkedIn setup is chosen',async({page})=>{
  const state=await mock(page);await page.route('**/api/runs/publish-run',route=>{const run=fixture();(run.workbook as any).linkedInTrailingRows=2;return route.fulfill({json:{run,approvalDigest:'fixture'}});});await page.goto('/');await page.locator('#preview-publication').click();await page.locator('#confirm-publication').check();await expect(page.locator('#publish-workbook')).toBeDisabled();await expect(page.getByRole('region',{name:'Publish monthly metrics workbook'})).toContainText('complete the LinkedIn setup');expect(state.counts().publishes).toBe(0);await page.locator('#skip-linkedin-preparation').click();await expect(page.locator('#publish-workbook')).toBeEnabled();expect(state.counts().publishes).toBe(0);
 });
+
+test('Published in-month snapshot finishes processing and keeps reruns available without claiming month-end finality',async({page})=>{
+ let saved=false,previews=0,publishes=0;
+ const interim={...fixture(true),workbook:{...fixture(true).workbook,month:'2026-10',snapshotStage:'PROVISIONAL',asOf:'2026-10-13',windowStart:'2026-08-01',windowEnd:'2026-10-13'},publication:publication('CURRENT_INPUTS')};
+ const snapshot=(status='PUBLISHED')=>({...publication('PROVISIONAL',status),sheet:'October 2026 inputs',publishedAt:'2026-10-13T12:00:00Z'});
+ await page.addInitScript(()=>localStorage.setItem('impact-run','publish-run'));
+ await page.route('**/api/**',route=>{
+  const path=new URL(route.request().url()).pathname;let body:unknown={};
+  const run={...interim,publication:saved?snapshot():interim.publication};
+  if(path==='/api/runs')body=[run];else if(path==='/api/runs/publish-run')body={run,approvalDigest:'fixture'};
+  else if(path.endsWith('/publication/preview')){previews++;body={publication:{...snapshot('PREVIEW_READY'),planDigest:'oct-plan',version:7},rows:[{id:'c1',cells:{'Name of activity':'October DZone article','Current total':'150'}}],warnings:[]};}
+  else if(path.endsWith('/publication')){publishes++;expect(route.request().postDataJSON()).toMatchObject({digest:'oct-plan',confirmed:true});saved=true;body={...run,publication:snapshot()};}
+  else if(path.endsWith('/reporting')){const chart={months:['2026-09','2026-10'],available:[true,true],series:[{name:'Blog post',values:['100','75']}]};body={month:'2026-10',cutoff:'2026-10-13',provisional:true,scope:'combined',revision:0,complete:true,included:1,excluded:0,impact:'75',activity:[],tool:[],bob:[],warnings:[],details:{rows:[]},trends:{channel:chart,tool:chart,source:{filename:'Published.xlsx',endMonth:'2026-09'},warnings:[]}};}
+  return route.fulfill({json:body});
+ });
+ await page.goto('/');const panel=page.getByRole('region',{name:'Publish monthly metrics workbook'});await expect(panel.getByRole('heading',{name:'Publish provisional snapshot',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'Run completion'})).not.toContainText('All processes are complete');expect(publishes).toBe(0);
+ await page.locator('#preview-publication').click();await page.locator('#confirm-publication').check();await expect(page.locator('#publish-workbook')).toHaveText('Publish provisional snapshot');await page.locator('#publish-workbook').click();await expect(panel).toContainText('Provisional snapshot published and verified');await expect(panel).not.toContainText('Completed snapshot published and verified');
+ const completion=page.getByRole('region',{name:'Run completion'});await expect(completion).toContainText('This run is complete');await expect(completion).toContainText('provisional as of 2026-10-13');await expect(completion).toContainText('run on month-end or later');await expect(page.getByRole('region',{name:'Process status'})).toContainText('Process done');await expect(page.getByRole('navigation',{name:'Completed run actions'})).toBeVisible();expect({previews,publishes}).toEqual({previews:1,publishes:1});await completion.screenshot({path:'../../../target/e2e-provisional-completion-desktop.png'});await page.setViewportSize({width:390,height:844});await completion.screenshot({path:'../../../target/e2e-provisional-completion-mobile.png'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.locator('#start-another-run').click();await expect(page.getByLabel('Reporting month',{exact:true})).toHaveValue('2026-10');await expect(page.getByRole('navigation',{name:'Recent runs'}).locator('.history')).toHaveCount(1);await expect(page.getByLabel('AvocadoBot SharePoint link')).toHaveValue(currentUrl);
+});

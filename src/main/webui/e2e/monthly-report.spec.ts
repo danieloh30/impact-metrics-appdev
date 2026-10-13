@@ -24,3 +24,22 @@ test('selected-month report exposes source evidence and only confirms resolvable
  await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Save & recalculate report'}).click();await expect(dialog).not.toBeVisible();expect(measurement).toMatchObject({revision:0,contribution:'current',rowId:'missing',value:'200',asOf:'2026-09-30',note:''});
  await page.setViewportSize({width:390,height:844});await expect(section.getByRole('combobox',{name:'Reporting scope'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
+
+test('in-month snapshots include collected totals and confirm corrections as of the run date',async({page})=>{
+ let measurement:Record<string,unknown>|undefined,saved=false;
+ const run={id:'oct-interim',createdAt:'2026-10-13T12:00:00Z',status:'COMPLETED',phase:7,version:7,currentRows:2,trailingRows:1,trailing:true,review:'Complete',error:'',issues:[],artifacts:{},events:[],approvals:[],workbook:{month:'2026-10',snapshotStage:'PROVISIONAL',asOf:'2026-10-13',currentSheet:'Current month inputs',historySheets:['September inputs'],windowStart:'2026-08-01',windowEnd:'2026-10-13',missingBaselines:0}};
+ await page.addInitScript(()=>localStorage.setItem('impact-run','oct-interim'));
+ await page.route('**/api/**',route=>{
+  const path=new URL(route.request().url()).pathname;let body:unknown={};
+  if(path==='/api/runs')body=[run];else if(path==='/api/runs/oct-interim')body={run,approvalDigest:'fixture'};
+  else if(path.endsWith('/reporting/measurements')){measurement=route.request().postDataJSON();saved=true;body=run;}
+  else if(path.endsWith('/reporting'))body={month:'2026-10',cutoff:'2026-10-13',scope:'combined',revision:saved?1:0,complete:true,provisional:true,included:saved?2:1,excluded:saved?0:1,impact:saved?'125':'75',activity:[],tool:[],bob:[],warnings:[],details:{rows:[{id:'collected',cells:{'Name of activity':'October DZone article',Author:'Daniel Oh',Tool:'IBM Runtimes',Contribution:'Current','Reporting status':'Included','Exact reporting metric':'150','Impact hours':'75'}},{id:'correction',cells:{'Name of activity':'October measured article',Author:'Daniel Oh',Tool:'IBM Runtimes',Contribution:'Current','Reporting status':saved?'Included':'Excluded','Reporting handling':saved?'Included':'Needs attention','Reporting reason':saved?'':'Reporting total unavailable','Reporting action':saved?'':'Confirm total','Pre-report Current total':'90','Previous total':'0','Exact reporting metric':saved?'100':'','Impact hours':saved?'50':''}}]}};
+  return route.fulfill({json:body});
+ });
+ await page.goto('/');const report=page.getByRole('region',{name:'Month-end pivots and charts'});
+ await expect(report.getByRole('status').filter({hasText:'Provisional snapshot'})).toContainText('as of 2026-10-13');await expect(report).toContainText('last day of the month or later');await expect(report).not.toContainText('Reporting month has not closed');await report.locator('.baseline-notice').first().screenshot({path:'../../../target/e2e-provisional-banner-desktop.png'});
+ await report.getByLabel('Reporting status').selectOption('all');await expect(report.locator('tbody')).toContainText('October DZone article');await expect(report.locator('tbody')).toContainText('75 impact hours');
+ await report.getByRole('button',{name:'Confirm reporting total',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Confirm reporting total'});await expect(dialog).toContainText('2026-10-13');await expect(dialog).not.toContainText('2026-10-31');await dialog.getByLabel('Attributed total as of run date').fill('100');await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Save & recalculate report'}).click();await expect(dialog).toHaveCount(0);
+ expect(measurement).toMatchObject({revision:0,contribution:'current',rowId:'correction',value:'100',asOf:'2026-10-13'});await expect(report.locator('.report-totals')).toContainText('125');
+ await page.setViewportSize({width:390,height:844});await expect(report.getByRole('status').filter({hasText:'Provisional snapshot'})).toBeVisible();await report.locator('.baseline-notice').first().screenshot({path:'../../../target/e2e-provisional-banner-mobile.png'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

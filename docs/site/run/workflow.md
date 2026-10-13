@@ -80,6 +80,6 @@ When the last issue is resolved, automatic processing resumes. An open measureme
 
 ## Publish at the two checkpoints
 
-After Phase 3, preview and confirm the current-input update before trailing collection. After reporting is complete, publish the **completed monthly snapshot**.
+After Phase 3, preview and confirm the current-input update before trailing collection. After reporting is complete, publish the **provisional snapshot** for an in-month run, or the **completed monthly snapshot** for a run on the last day or later. Start a new run, even for the same month, to collect newer totals. Newly created monthly tabs are placed after the previous month’s tab when available.
 
 Publication updates matching attributions and appends new ones. It preserves unmatched rows, custom columns and other sheets. It uses a live preview hash, checkout, upload verification and check-in. A stale preview, editing lock or ambiguous attribution stops publication for review.

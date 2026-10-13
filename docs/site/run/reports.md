@@ -2,6 +2,14 @@
 
 The monthly report combines eligible current contributions and fresh trailing growth. It applies the selected metric model and counts an overlapping activity attribution once.
 
+## Run during the month or at month-end
+
+You can run October’s report on October 13, October 20, and October 31. Each run reads fresh workbook snapshots and freezes its reporting date. Dated current activities through that date and measured trailing growth contribute to its tables and charts. Future-dated activities wait for a later run.
+
+Before the last day, the report, Excel export and publication panel identify a **provisional snapshot**. Publishing it updates or appends the monthly input data without deleting existing rows. Later runs update the same tab. A run on the last day or later produces the **final month-end snapshot** (for example, October 31 or November 1 for October). Reopening an October 13 run never promotes it to final.
+
+An interim run can show **Process done**: that run’s processing and publication have finished, while the month’s totals remain provisional. Download its results or choose **Start another run** for fresh measurements. A later month requires a published final baseline. Older provisional publications cannot overwrite a newer snapshot or a final one.
+
 ## Recognize a completed run
 
 ![Process done with seven phases finished, a verified completed monthly snapshot and download or new-run actions](../assets/screenshots/process-done.png)

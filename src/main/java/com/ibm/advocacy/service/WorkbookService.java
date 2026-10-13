@@ -65,15 +65,17 @@ public class WorkbookService {
         List<String> history=namedHistory.isEmpty()?sheets.stream().filter(info->info.eligible()&&!info.blog()&&!info.name().equals(current)).map(SheetInfo::name).toList():namedHistory;
         return new Inspection(sheets,latest,suggested,history);
     }
-    public PreparedWorkbook prepare(WorkbookRequest request) throws IOException {
+    public PreparedWorkbook prepare(WorkbookRequest request) throws IOException {return prepare(request,LocalDate.now());}
+    PreparedWorkbook prepare(WorkbookRequest request,LocalDate runDate) throws IOException {
         YearMonth month;try {month=YearMonth.parse(request.month());}catch(Exception e){throw new BadRequestException("Choose a reporting month (YYYY-MM)");}
-        LocalDate end=month.atEndOfMonth(),start=month.minusMonths(2).atDay(1);
+        LocalDate end=ReportingPeriod.cutoff(month,runDate),start=month.minusMonths(2).atDay(1);
+        if(end.isBefore(month.atDay(1)))throw new BadRequestException("The reporting month has not started yet. Choose the current month or a past month.");
         List<String> history=request.historySheets()==null?List.of():request.historySheets();
         if(new HashSet<>(history).size()!=history.size())throw new BadRequestException("Select each history sheet only once");
         List<Row> past=new ArrayList<>();LinkedHashSet<String> pastHeaders=new LinkedHashSet<>();int missing=0;
         try(XSSFWorkbook book=open(request.bytes())) {
             SheetData current=selected(book,request.currentSheet());
-            List<Row> rows=new ArrayList<>(current.data.rows.stream().filter(r->YearMonth.from(current.dates.get(r.id)).equals(month)).map(Row::copy).toList());
+            List<Row> rows=new ArrayList<>(current.data.rows.stream().filter(r->YearMonth.from(current.dates.get(r.id)).equals(month)&&!current.dates.get(r.id).isAfter(end)).map(Row::copy).toList());
             LinkedHashSet<String> currentHeaders=new LinkedHashSet<>(current.data.headers);currentHeaders.add("Source sheet");
             currentHeaders.addAll(List.of("Date of activity","Author of activity"));
             rows.forEach(row->{
@@ -86,7 +88,7 @@ public class WorkbookService {
                 int index=book.getSheetIndex(sheet);
                 if(!BlogSheetReader.matches(sheet.getSheetName())||book.isSheetHidden(index)||book.isSheetVeryHidden(index))continue;
                 var supplement=blogs.read(sheet);
-                List<Row> selected=supplement.data().rows.stream().filter(row->supplement.months().get(row.id).equals(month)).map(Row::copy).toList();
+                List<Row> selected=supplement.data().rows.stream().filter(row->supplement.months().get(row.id).equals(month)&&!LocalDate.parse(row.get("Date of activity")).isAfter(end)).map(Row::copy).toList();
                 selected.forEach(row->{row.cells.put("Trailing 90-day","No");row.cells.put("Current total","");row.cells.put("Previous total","");});
                 rows.addAll(selected);currentHeaders.addAll(supplement.data().headers);
                 blogRows.put(sheet.getSheetName(),selected.size());blogSkippedRows.put(sheet.getSheetName(),supplement.undatedRows());

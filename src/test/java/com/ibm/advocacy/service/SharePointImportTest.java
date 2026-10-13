@@ -44,7 +44,7 @@ class SharePointImportTest {
     }
     @Test void monthSelectionChangesMonthlySheetsAndDateCutoffs() throws Exception {
         byte[] bytes=FakeSharePointCollector.history();assertEquals(List.of("September inputs"),workbooks.historySheets(bytes,"2026-09"));
-        var result=workbooks.prepare(new com.ibm.advocacy.model.WorkbookRequest(new WorkbookImportTest().fixture(false),"2026-10","October inputs",workbooks.historySheets(bytes,"2026-10"),bytes));
+        var result=workbooks.prepare(new com.ibm.advocacy.model.WorkbookRequest(new WorkbookImportTest().fixture(false),"2026-10","October inputs",workbooks.historySheets(bytes,"2026-10"),bytes),java.time.LocalDate.of(2026,10,31));
         assertEquals("2026-08-01",result.windowStart());assertEquals("2026-10-31",result.windowEnd());assertEquals(3,result.trailing().rows.size());
         assertThrows(BadRequestException.class,()->workbooks.historySheets(bytes,"2026-03"));
     }

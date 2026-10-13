@@ -17,7 +17,7 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 @ApplicationScoped
 public class MonthlyInputWorkbook {
     public static final String META="RUN publication";
-    static final List<String> EXTRA=List.of("Starting baseline","Baseline as of","Snapshot reporting month","Snapshot stage","Source run","Measured at","Verified reporting month","Activity stage","Reporting disposition");
+    static final List<String> EXTRA=List.of("Starting baseline","Snapshot as of","Baseline as of","Snapshot reporting month","Snapshot stage","Source run","Measured at","Verified reporting month","Activity stage","Reporting disposition");
     static final Set<String> NUMERIC=Set.of("Current total","Previous total",VIEWS,"Weight","Impact hours","Starting baseline");
     public record Merge(byte[] bytes,String sheet,boolean created,int updated,int appended,int unchanged) {}
     static String canonical(String header){String h=WorkbookService.header(header);return switch(h){case "Date of activity"->"Date";case "Author of activity"->"Author";case "Name of event"->"Event";default->h;};}
@@ -32,6 +32,10 @@ public class MonthlyInputWorkbook {
             List<XSSFSheet> candidates=new ArrayList<>();for(var sheet:book){int[] label=WorkbookService.monthlyLabel(sheet.getSheetName());if(label[0]==selected.getMonthValue()&&(label[1]==0||label[1]==selected.getYear()))candidates.add((XSSFSheet)sheet);}
             if(candidates.size()>1)throw new BadRequestException("Multiple monthly tabs match "+month+"; select one authoritative sheet before publishing");
             boolean created=candidates.isEmpty();XSSFSheet sheet=created?book.createSheet(selected.getMonth().getDisplayName(TextStyle.FULL,Locale.US)+" "+selected.getYear()+" inputs"):candidates.getFirst();
+            if(created) {
+                YearMonth previous=selected.minusMonths(1);
+                for(var existing:book) {int[] label=WorkbookService.monthlyLabel(existing.getSheetName());if(label[0]==previous.getMonthValue()&&(label[1]==0||label[1]==previous.getYear())) {book.setSheetOrder(sheet.getSheetName(),book.getSheetIndex(existing)+1);break;}}
+            }
             if(book.isSheetHidden(book.getSheetIndex(sheet))||book.isSheetVeryHidden(book.getSheetIndex(sheet)))throw new BadRequestException("Cannot publish into a hidden monthly tab");
             DataFormatter format=new DataFormatter(Locale.US);format.setUseCachedValuesForFormulaCells(true);
             int header=created?0:headerIndex(sheet,format);var head=created?sheet.createRow(0):sheet.getRow(header);Map<String,Integer> columns=created?new LinkedHashMap<>():columns(head,format);
@@ -63,10 +67,17 @@ public class MonthlyInputWorkbook {
             if(sheet.getLastRowNum()>20_000)throw new BadRequestException("Published monthly tab exceeds 20,000 rows");
             for(var table:sheet.getTables()){Set<String> names=new HashSet<>();for(var column:table.getCTTable().getTableColumns().getTableColumnArray())if(column.getName()==null||column.getName().isBlank()||!names.add(column.getName().toLowerCase(Locale.ROOT)))throw new BadRequestException("Existing Excel table has blank or duplicate column names. Repair the workbook table before publishing; no workbook changes were published.");AreaReference area=table.getArea();if(area.getFirstCell().getRow()==header)table.setArea(new AreaReference(area.getFirstCell(),new CellReference(sheet.getLastRowNum(),area.getLastCell().getCol()),org.apache.poi.ss.SpreadsheetVersion.EXCEL2007));}
             if(created){sheet.createFreezePane(0,1);for(int i=0;i<columns.size();i++)sheet.setColumnWidth(i,24*256);}
-            XSSFSheet metadata=book.getSheet(META);if(metadata==null){metadata=book.createSheet(META);var titles=metadata.createRow(0);String[] fields={"Reporting month","Stage","Run","Updated at"};for(int i=0;i<fields.length;i++)titles.createCell(i).setCellValue(fields[i]);}
+            XSSFSheet metadata=book.getSheet(META);if(metadata==null){metadata=book.createSheet(META);var titles=metadata.createRow(0);String[] fields={"Reporting month","Stage","Run","Updated at","As of"};for(int i=0;i<fields.length;i++)titles.createCell(i).setCellValue(fields[i]);}
             if(metadata.getRow(0)==null||!format.formatCellValue(metadata.getRow(0).getCell(0)).equals("Reporting month")||!format.formatCellValue(metadata.getRow(0).getCell(1)).equals("Stage"))throw new BadRequestException("The RUN publication tab has an incompatible layout; no workbook changes were published");
             int metadataRow=-1;for(int i=1;i<=metadata.getLastRowNum();i++)if(metadata.getRow(i)!=null&&format.formatCellValue(metadata.getRow(i).getCell(0)).equals(month))metadataRow=i;
-            var mark=metadataRow<0?metadata.createRow(metadata.getLastRowNum()+1):metadata.getRow(metadataRow);String[] values={month,stage,runId,Instant.now().toString()};for(int i=0;i<values.length;i++){Cell cell=mark.getCell(i);if(cell==null)cell=mark.createCell(i);cell.setCellValue(values[i]);}
+            String asOf=incoming.rows.stream().map(row->row.get("Snapshot as of")).filter(value->!value.isBlank()).findFirst().orElse("");
+            if(metadataRow>=0) {
+                var previous=metadata.getRow(metadataRow);String previousDate=format.formatCellValue(previous.getCell(4));
+                if(stage.equals("PROVISIONAL")&&format.formatCellValue(previous.getCell(1)).equals("COMPLETED"))throw new BadRequestException("A final snapshot is already published for "+month+". Start a new run rather than replacing it with an older provisional snapshot.");
+                if(!asOf.isBlank()&&!previousDate.isBlank()&&LocalDate.parse(asOf).isBefore(LocalDate.parse(previousDate)))throw new BadRequestException("A newer snapshot is already published for "+month+" as of "+previousDate+". Start a new run to update it.");
+            }
+            if(metadata.getRow(0).getCell(4)==null)metadata.getRow(0).createCell(4).setCellValue("As of");
+            var mark=metadataRow<0?metadata.createRow(metadata.getLastRowNum()+1):metadata.getRow(metadataRow);String[] values={month,stage,runId,Instant.now().toString(),asOf};for(int i=0;i<values.length;i++){Cell cell=mark.getCell(i);if(cell==null)cell=mark.createCell(i);cell.setCellValue(values[i]);}
             if(book.getNumberOfSheets()>100)throw new BadRequestException("Updated workbook exceeds 100 sheets");
             book.write(out);byte[] bytes=out.toByteArray();WorkbookLimits.checkArchive(bytes,"Updated workbook");return new Merge(bytes,sheet.getSheetName(),created,updated,appended,unchanged);
         }

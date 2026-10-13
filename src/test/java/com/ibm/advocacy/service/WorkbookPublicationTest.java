@@ -48,5 +48,16 @@ class WorkbookPublicationTest {
         io.restassured.RestAssured.given().get("/api/runs/"+run.id+"/publication/status").then().statusCode(200).body("checkoutType",org.hamcrest.Matchers.equalTo(2)).body("lockOwnerReported",org.hamcrest.Matchers.equalTo(true));
         Run after=runs.get(run.id);assertEquals("AWAITING_PUBLICATION",after.status);assertEquals(run.version,after.version);assertEquals("Previous failure",after.error);assertEquals(writes,FakeSharePointCollector.writes.get());assertFalse(after.artifacts.containsKey("updated_90-day.csv"));
     }
+    @Test void completedAgentRunDuringOctoberPublishesProvisionalCurrentAndTrailingSnapshot() throws Exception {
+        byte[] currentBytes;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(current(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){book.getSheet("Current month inputs").getRow(1).getCell(0).setCellValue("2026-10-05");book.write(out);currentBytes=out.toByteArray();}
+        byte[] historical=history();FakeSharePointCollector.files.put(collector.fileUri(url).toASCIIString(),historical);
+        Run run=runs.createSharePointWorkbooks(currentBytes,"AvocadoBot.xlsx",historical,"Metrics.xlsx","2026-10","Current month inputs",List.of("August inputs"),"https://ibm-my.sharepoint.com/personal/test/Documents/AvocadoBot.xlsx",url);run.workbook.put("asOf","2026-10-13");run.workbook.put("snapshotStage","PROVISIONAL");workspace.save(run);
+        runs.start(run.id,true);for(int phase=1;phase<=3;phase++){Run ready=await(run.id,"AWAITING_APPROVAL");assertEquals(phase,ready.phase);approve(ready);}run=await(run.id,"AWAITING_PUBLICATION");
+        var currentPlan=publications.preview(run.id,run.version,run.reportingRevision);assertEquals("CURRENT_INPUTS",currentPlan.publication().stage);assertTrue(currentPlan.publication().createdSheet);assertTrue(currentPlan.rows().stream().anyMatch(row->row.get("Contribution").equals("Current")));assertTrue(currentPlan.rows().stream().allMatch(row->row.get("Snapshot as of").equals("2026-10-13")));
+        publications.publish(run.id,run.version,run.reportingRevision,currentPlan.publication().planDigest,true);approve(await(run.id,"AWAITING_APPROVAL"));Run complete=await(run.id,"COMPLETED");
+        var plan=publications.preview(run.id,complete.version,complete.reportingRevision);assertEquals("PROVISIONAL",plan.publication().stage);assertTrue(plan.rows().stream().anyMatch(row->row.get("Contribution").equals("Current")));assertTrue(runs.report(run.id,"combined").provisional());
+        publications.publish(run.id,complete.version,complete.reportingRevision,plan.publication().planDigest,true);Run saved=await(run.id,"COMPLETED");assertEquals("PUBLISHED",saved.publication.status);assertEquals("PROVISIONAL",saved.publication.stage);assertTrue(saved.publication.message.contains("Provisional snapshot published"));
+        byte[] workbook=FakeSharePointCollector.files.get(collector.fileUri(url).toASCIIString());assertThrows(BadRequestException.class,()->new WorkbookService().historySheets(workbook,"2026-11"));
+    }
 
 }
