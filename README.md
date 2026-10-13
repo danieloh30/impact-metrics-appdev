@@ -1,13 +1,15 @@
 # Impact Hours AppDev
 
-**Tutorial:** [ibm.biz/appdev-da-ih](https://ibm.biz/appdev-da-ih)
-
 [![Documentation](https://img.shields.io/badge/deployment-live-2ea44f?logo=github)](https://danieloh30.github.io/impact-metrics-appdev/)
 [![Tests](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/ci.yml/badge.svg)](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/ci.yml)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot)](https://github.com/danieloh30/impact-metrics-appdev/security/dependabot)
 [![Auto-merge Dependabot PRs](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/danieloh30/impact-metrics-appdev/actions/workflows/dependabot-automerge.yml)
 
 [**Operations guide →**](https://danieloh30.github.io/impact-metrics-appdev/) · [Local setup](docs/site/run/local.md) · [OpenShift deployment](docs/site/deploy/openshift.md) · [Kubernetes deployment](docs/site/deploy/kubernetes.md)
+
+> [!TIP]
+> **AppDev Impact Hours tutorial**
+> [**ibm.biz/appdev-da-ih ↗**](https://ibm.biz/appdev-da-ih) — screenshots, agent workflow, chart exports, and deployment walkthroughs.
 
 The guide includes screenshots with fictional data, workflow and architecture diagrams, editable chart exports, and recovery instructions. It uses a separate slate/teal design for platform teams. Only `docs/site` is published; internal analysis, live workbook links and authentication files are excluded.
 
