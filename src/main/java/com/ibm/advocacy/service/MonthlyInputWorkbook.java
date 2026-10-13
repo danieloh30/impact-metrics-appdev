@@ -26,9 +26,9 @@ public class MonthlyInputWorkbook {
     static Row read(org.apache.poi.ss.usermodel.Row row,Map<String,Integer> columns,DataFormatter format){Row value=new Row("excel:"+(row.getRowNum()+1),Map.of());for(var entry:columns.entrySet()){Cell cell=row.getCell(entry.getValue());String text=WorkbookCells.value(cell,format);if(entry.getKey().equals("Date")&&cell!=null&&(cell.getCellType()==CellType.NUMERIC||cell.getCellType()==CellType.FORMULA&&cell.getCachedFormulaResultType()==CellType.NUMERIC)&&DateUtil.isCellDateFormatted(cell))text=cell.getLocalDateTimeCellValue().toLocalDate().toString();if(entry.getKey().equals("Date")&&!text.isBlank())text=WorkbookService.parseDate(text,"monthly publication",row.getRowNum()+1).toString();value.cells.put(entry.getKey(),text);}return value;}
     static List<String> baseKey(Row row){List<String> key=new ArrayList<>(TrailingReporting.activityKey(row));key.remove(6);return key;}
     public Merge merge(byte[] original,Data incoming,String month,String stage,String runId) throws IOException {
-        if(original.length>6_000_000||incoming.rows.size()>20_000)throw new BadRequestException("Workbook publication exceeds the supported size");
+        if(incoming.rows.size()>20_000)throw new BadRequestException("Workbook publication exceeds 20,000 rows");
         YearMonth selected=YearMonth.parse(month);
-        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(original));ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+        try(XSSFWorkbook book=WorkbookLimits.open(original,"Publication workbook");ByteArrayOutputStream out=new ByteArrayOutputStream()) {
             List<XSSFSheet> candidates=new ArrayList<>();for(var sheet:book){int[] label=WorkbookService.monthlyLabel(sheet.getSheetName());if(label[0]==selected.getMonthValue()&&(label[1]==0||label[1]==selected.getYear()))candidates.add((XSSFSheet)sheet);}
             if(candidates.size()>1)throw new BadRequestException("Multiple monthly tabs match "+month+"; select one authoritative sheet before publishing");
             boolean created=candidates.isEmpty();XSSFSheet sheet=created?book.createSheet(selected.getMonth().getDisplayName(TextStyle.FULL,Locale.US)+" "+selected.getYear()+" inputs"):candidates.getFirst();
@@ -67,7 +67,8 @@ public class MonthlyInputWorkbook {
             if(metadata.getRow(0)==null||!format.formatCellValue(metadata.getRow(0).getCell(0)).equals("Reporting month")||!format.formatCellValue(metadata.getRow(0).getCell(1)).equals("Stage"))throw new BadRequestException("The RUN publication tab has an incompatible layout; no workbook changes were published");
             int metadataRow=-1;for(int i=1;i<=metadata.getLastRowNum();i++)if(metadata.getRow(i)!=null&&format.formatCellValue(metadata.getRow(i).getCell(0)).equals(month))metadataRow=i;
             var mark=metadataRow<0?metadata.createRow(metadata.getLastRowNum()+1):metadata.getRow(metadataRow);String[] values={month,stage,runId,Instant.now().toString()};for(int i=0;i<values.length;i++){Cell cell=mark.getCell(i);if(cell==null)cell=mark.createCell(i);cell.setCellValue(values[i]);}
-            book.write(out);byte[] bytes=out.toByteArray();if(bytes.length>6_000_000)throw new BadRequestException("Updated workbook exceeds 6 MB");return new Merge(bytes,sheet.getSheetName(),created,updated,appended,unchanged);
+            if(book.getNumberOfSheets()>100)throw new BadRequestException("Updated workbook exceeds 100 sheets");
+            book.write(out);byte[] bytes=out.toByteArray();WorkbookLimits.checkArchive(bytes,"Updated workbook");return new Merge(bytes,sheet.getSheetName(),created,updated,appended,unchanged);
         }
     }
 }

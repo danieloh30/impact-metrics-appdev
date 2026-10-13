@@ -35,13 +35,7 @@ public class WorkbookService {
         DateTimeFormatter.ofPattern("M/d/uu").withResolverStyle(ResolverStyle.STRICT));
 
     private XSSFWorkbook open(byte[] bytes) {
-        if(bytes==null||bytes.length==0||bytes.length>6_000_000)throw new BadRequestException("Workbook must be smaller than 6 MB");
-        try {
-            XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(bytes));
-            if(book.getNumberOfSheets()>100) { book.close();throw new BadRequestException("Workbook exceeds 100 sheets"); }
-            return book;
-        } catch(BadRequestException e) { throw e; }
-        catch(Exception e) { throw new BadRequestException("Cannot read workbook. Upload an unencrypted .xlsx file."); }
+        return WorkbookLimits.open(bytes,"Workbook");
     }
     public Inspection inspect(byte[] bytes) throws IOException {
         List<SheetInfo> sheets=new ArrayList<>();String latest="",suggested="";

@@ -50,7 +50,7 @@ public final class SharePointFileWriter {
     }
     private RequestOptions options(){return RequestOptions.create().setTimeout(30_000).setMaxRedirects(0).setFailOnStatusCode(false).setHeader("Accept","application/json;odata=verbose");}
     private JsonNode json(String url,RequestOptions options,boolean post,String stage) throws Exception {APIResponse response=call(url,options,post,stage);try{return mapper.readTree(response.body());}finally{response.dispose();}}
-    private byte[] bytes(URI endpoint,String stage){APIResponse response=call(endpoint.toASCIIString()+"/$value",options(),false,stage);try{byte[] bytes=response.body();if(bytes.length>6_000_000||bytes.length<4||bytes[0]!='P'||bytes[1]!='K')throw new ClientErrorException("SharePoint did not return a supported Excel workbook. Reconnect or verify the file link.",422);return bytes;}finally{response.dispose();}}
+    private byte[] bytes(URI endpoint,String stage){APIResponse response=call(endpoint.toASCIIString()+"/$value",options(),false,stage);try{byte[] bytes=response.body();if(bytes.length<4||bytes[0]!='P'||bytes[1]!='K')throw new ClientErrorException("SharePoint did not return a supported Excel workbook. Reconnect or verify the file link.",422);com.ibm.advocacy.service.WorkbookLimits.checkSize(bytes,"SharePoint workbook");return bytes;}finally{response.dispose();}}
     private void post(String url,String digest,byte[] data,boolean put,String stage){RequestOptions options=options().setHeader("X-RequestDigest",digest);if(put)options.setHeader("X-HTTP-Method","PUT").setHeader("Content-Type","application/octet-stream").setData(data);APIResponse response=call(url,options,true,stage);response.dispose();}
     public FileStatus status(URI file) throws Exception {
         JsonNode data=json(endpoint(file).toASCIIString()+"?$select=CheckOutType,TimeLastModified,UIVersionLabel,LockedByUser/Title,CheckedOutByUser/Title&$expand=LockedByUser,CheckedOutByUser",options().setHeader("Cache-Control","no-cache"),false,"checking workbook status").path("d");
@@ -58,6 +58,7 @@ public final class SharePointFileWriter {
         return new FileStatus(data.path("CheckOutType").asInt(-1),locked.path("Title").asText(""),checkout.path("Title").asText(""),data.has("LockedByUser")&&(locked.isNull()||locked.has("Title")),data.has("CheckedOutByUser")&&(checkout.isNull()||checkout.has("Title")),data.path("TimeLastModified").asText(""),data.path("UIVersionLabel").asText(""),java.time.Instant.now().toString());
     }
     public byte[] replace(URI file,String expectedSha,byte[] candidate) throws Exception {
+        com.ibm.advocacy.service.WorkbookLimits.checkSize(candidate,"Updated workbook");
         URI endpoint=endpoint(file);byte[] before=bytes(endpoint,"reading the live workbook");
         // A retry after a committed response was lost is idempotent.
         if(Arrays.equals(before,candidate))return before;

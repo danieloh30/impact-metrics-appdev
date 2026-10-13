@@ -112,8 +112,7 @@ public class SharePointCollector {
         if(code==404)throw new ClientErrorException("SharePoint could not find the workbook (HTTP 404). Check the file link and try again.",404);
         if(!response.ok())throw new WebApplicationException("SharePoint file request returned HTTP "+code+". Try again or verify the file in SharePoint.",502);
         byte[] bytes=response.body();
-        if(bytes.length>6_000_000)throw new BadRequestException("SharePoint workbook must be smaller than 6 MB");
-        if(bytes.length>=4&&bytes[0]=='P'&&bytes[1]=='K'&&bytes[2]==3&&bytes[3]==4)return bytes;
+        if(bytes.length>=4&&bytes[0]=='P'&&bytes[1]=='K'&&bytes[2]==3&&bytes[3]==4){com.ibm.advocacy.service.WorkbookLimits.checkSize(bytes,"SharePoint workbook");return bytes;}
         URI finalUrl=URI.create(response.url());String path=Optional.ofNullable(finalUrl.getPath()).orElse("").toLowerCase(Locale.ROOT);
         if(!allowed(finalUrl.getHost())||path.contains("authenticate.aspx")||path.contains("login.aspx"))throw new ClientErrorException("SharePoint redirected the file request to sign-in. Reconnect SharePoint before importing.",401);
         throw new ClientErrorException("SharePoint returned a web page instead of an Excel file. Verify that the link opens the original workbook and that download is permitted.",422);
@@ -182,7 +181,7 @@ byte[] downloadWorkbook(BrowserContext browser,String originalUrl,URI file) {
     /** Update only the already-authorized workbook, with checkout and a preview hash precondition. */
     public Workbook update(String url,String expectedSha,byte[] candidate) throws Exception {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint publishing is disabled");
-        if(candidate.length>6_000_000)throw new BadRequestException("Updated workbook must be smaller than 6 MB");
+        com.ibm.advocacy.service.WorkbookLimits.checkSize(candidate,"Updated workbook");
         if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint is busy. Finish sign-in or wait for the current request.",409);
         downloadStage="PUBLISHING";
         Future<Workbook> future=browserWorker.submit(()->{

@@ -22,8 +22,7 @@ public class ImpactTrends {
     public static final String SHEET="AppDev Advocacy";
     public static final YearMonth START=YearMonth.of(2025,9);
     public Snapshot read(byte[] bytes,String filename,String endMonth) throws IOException {
-        if(bytes==null||bytes.length==0||bytes.length>6_000_000)throw new BadRequestException("Chart history workbook must be smaller than 6 MB");
-        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+        try(XSSFWorkbook book=WorkbookLimits.open(bytes,"Chart history workbook")) {
             Sheet sheet=book.getSheet(SHEET);if(sheet==null||book.isSheetHidden(book.getSheetIndex(sheet))||book.isSheetVeryHidden(book.getSheetIndex(sheet)))throw new BadRequestException("Chart history needs the visible AppDev Advocacy sheet");
             DataFormatter formatter=new DataFormatter(Locale.US);formatter.setUseCachedValuesForFormulaCells(true);
             org.apache.poi.ss.usermodel.Row channels=header(sheet,"Type of activity",formatter),tools=header(sheet,"Tool",formatter);

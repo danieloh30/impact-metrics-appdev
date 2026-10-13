@@ -48,12 +48,19 @@ class SharePointDownloadTest {
     }
     @Test void httpErrorsAndHtmlResponsesAreDistinctFromValidWorkbooks() throws Exception {
         byte[] html="<html>A workbook viewer, not a download</html>".getBytes(StandardCharsets.UTF_8);
-        endpoint("/html",200,html);endpoint("/denied",403,html);endpoint("/expired",401,html);endpoint("/missing",404,html);endpoint("/unavailable",503,html);endpoint("/oversize",200,new byte[6_000_001]);endpoint("/_layouts/15/Authenticate.aspx",200,html);server.start();
+        byte[] oversize=new byte[Math.toIntExact(com.ibm.advocacy.service.WorkbookLimits.maxBytes())+1];oversize[0]='P';oversize[1]='K';oversize[2]=3;oversize[3]=4;
+        endpoint("/html",200,html);endpoint("/denied",403,html);endpoint("/expired",401,html);endpoint("/missing",404,html);endpoint("/unavailable",503,html);endpoint("/oversize",200,oversize);endpoint("/_layouts/15/Authenticate.aspx",200,html);server.start();
         try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {
-            for(var entry:Map.of("/html",422,"/denied",403,"/expired",401,"/missing",404,"/unavailable",502,"/oversize",400,"/_layouts/15/Authenticate.aspx",401).entrySet()) {
+            for(var entry:Map.of("/html",422,"/denied",403,"/expired",401,"/missing",404,"/unavailable",502,"/oversize",413,"/_layouts/15/Authenticate.aspx",401).entrySet()) {
                 WebApplicationException error=assertThrows(WebApplicationException.class,()->collector.requestWorkbook(browser,base.resolve(entry.getKey())));
                 assertEquals(entry.getValue(),error.getResponse().getStatus(),entry.getKey());
             }
+        }
+    }
+    @Test void largerThanFormerSixMegabyteLimitDownloadsOriginalBytes() throws Exception {
+        workbook=com.ibm.advocacy.service.WorkbookLimitsTest.padded(workbook);assertTrue(workbook.length>6_000_000);endpoint("/large",200,workbook);server.start();
+        try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext browser=collector.downloadContext(chrome)) {
+            assertArrayEquals(workbook,collector.requestWorkbook(browser,base.resolve("/large")));
         }
     }
     @Test void aViewerResponseWarmsTheOriginalLinkAndRetriesTheDirectDownload() throws Exception {

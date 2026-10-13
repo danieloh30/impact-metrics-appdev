@@ -22,6 +22,10 @@ Use the current state and saved evidence to decide what to retry. A retry keeps 
 
 Reconnecting SharePoint does not release an editing lock. **Check workbook status** is a read-only metadata check; the previous failure remains an audit of that attempt until a fresh preview succeeds.
 
+## Workbook size limits
+
+If a source workbook exceeds the file-size limit, reduce unused images, sheets or formatting, or configure `METRICS_WORKBOOK_MAX_BYTES` (default `25000000`, 25 MB). The limit applies consistently to imports, chart history and publication. Expanded XLSX contents also have a 100 MB limit via `METRICS_WORKBOOK_MAX_EXPANDED_BYTES`; sheet and row limits remain in place. Restart dev mode after changing configuration, or update the deployment configuration and redeploy on OpenShift, then re-read the failed source. Existing runs and successful snapshots are kept; reconnecting SharePoint does not change the file-size limit.
+
 ## History reset versus a new run
 
 **Start another run** keeps all saved runs and prepares a new source snapshot. Use it for the same month or a later month.
