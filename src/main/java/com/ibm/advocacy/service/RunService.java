@@ -170,6 +170,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
         workers.submit(()->execute(run.id,phase));
     }
     void execute(String id,int phase) {
+        boolean ownsWork=true;
         try {
             int current=phase;
             while(current<=7) {
@@ -177,17 +178,19 @@ public synchronized byte[] input(String id,String name) throws Exception {
                 workflow.execute(id+":"+current+":"+UUID.randomUUID(),new PhaseTask(id,current));
                 synchronized(lock(id)) {
                     Run run=workspace.load(id);
-                    if(cancelled.contains(id)) { run.status="CANCELLED";workspace.save(run);break; }
-                    if(current<=4&&(current!=4||run.trailing)) { run.status="AWAITING_APPROVAL";workspace.save(run);return; }
-                    if(current==7) { run.status="COMPLETED";workspace.save(run);return; }
+                    if(cancelled.contains(id)) { run.status="CANCELLED";workspace.save(run);active.remove(id);ownsWork=false;return; }
+                    // Publish readiness and release ownership under the same lock used by approval.
+                    // The old worker must not remove a newly approved worker's active entry in finally.
+                    if(current<=4&&(current!=4||run.trailing)) { run.status="AWAITING_APPROVAL";workspace.save(run);active.remove(id);ownsWork=false;return; }
+                    if(current==7) { run.status="COMPLETED";workspace.save(run);active.remove(id);ownsWork=false;return; }
                     current++;run.phase=current;workspace.save(run);
                 }
             }
-            synchronized(lock(id)) { Run run=workspace.load(id);run.status="CANCELLED";workspace.save(run); }
+            synchronized(lock(id)) { Run run=workspace.load(id);run.status="CANCELLED";workspace.save(run);active.remove(id);ownsWork=false; }
         } catch(Exception e) {
             org.jboss.logging.Logger.getLogger(RunService.class).error("Agent phase "+phase+" failed for "+id,e);
-            try { synchronized(lock(id)) { Run run=workspace.load(id);run.status=cancelled.contains(id)?"CANCELLED":"FAILED_RETRYABLE";run.error=Pipeline.message(e);Pipeline.event(run,"RunOrchestrator",run.error);workspace.save(run); } }catch(Exception ignored) {}
-        } finally { active.remove(id); }
+            try { synchronized(lock(id)) { Run run=workspace.load(id);run.status=cancelled.contains(id)?"CANCELLED":"FAILED_RETRYABLE";run.error=Pipeline.message(e);Pipeline.event(run,"RunOrchestrator",run.error);workspace.save(run);active.remove(id);ownsWork=false; } }catch(Exception ignored) {}
+        } finally { if(ownsWork)synchronized(lock(id)){active.remove(id);} }
     }
     public synchronized Run retry(String id) throws Exception {
         synchronized(lock(id)) { Run run=get(id);if(!run.status.equals("FAILED_RETRYABLE")&&!(run.status.equals("AWAITING_APPROVAL")&&Set.of(1,4).contains(run.phase)))throw new ClientErrorException("Retry an interrupted phase or a current collection review",409);cancelled.remove(id);Pipeline.event(run,"Collection retry","Retrying phase "+run.phase+" from saved source rows; successful and manual measurements are reused, failed requests are attempted again");enqueue(run,run.phase);return run; }

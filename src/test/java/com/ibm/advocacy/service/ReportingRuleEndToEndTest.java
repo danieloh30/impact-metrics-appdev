@@ -5,7 +5,7 @@ import com.ibm.advocacy.storage.RuntimeWorkspace;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.RepeatedTest;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -20,10 +20,10 @@ class ReportingRuleEndToEndTest {
     @Inject RunService runs;
     @Inject RuntimeWorkspace workspace;
 
-    @Test void participationAndVerifiedAugustActivitiesConserveSeptemberReportAndExports() throws Exception {
+    @RepeatedTest(20) void participationAndVerifiedAugustActivitiesConserveSeptemberReportAndExports() throws Exception {
         for(String name:List.of("RUN.md","AGENTS.md"))workspace.bytes(workspace.path(name),Files.readAllBytes(Path.of("runtimes",name)));
         String current="Date,Author,Tool,Name of activity,Type of activity,Views / attendance,Duration (in hours),Link / URL to resource\n2026-09-10,Daniel Oh;Kevin Dubois,IBM Bob;IBM Runtimes,TAG meeting,Standard participation,15,2,\n";
-        String past="Date,Author,Tool,Name of activity,Type of activity,Views / attendance,Link / URL to resource,Current total,Previous total,Trailing 90-day,Verified reporting month,Verified workbook current total,Verified workbook previous total,Activity stage\n2026-08-19,Markus Eisele,IBM Bob,Use Bob,Recorded video,3100,https://www.linkedin.com/events/verified-use-bob/,9533,6433,Yes,2026-09,9533,6433,Delivery\n2026-08-24,Markus Eisele,IBM Bob,Token first reported,Recorded video,300,https://www.linkedin.com/events/verified-token/,300,0,Yes,2026-09,300,0,First reported\n";
+        String past="Date,Author,Tool,Name of activity,Type of activity,Views / attendance,Link / URL to resource,Current total,Previous total,Trailing 90-day,Verified reporting month,Verified workbook current total,Verified workbook previous total,Activity stage\n2026-08-19,Markus Eisele,IBM Bob,Use Bob,Recorded video,3100,https://www.linkedin.com/events/verified-use-bob/,9533,6433,Yes,2026-09,9533,6433,Delivery\n2026-08-27,Markus Eisele,IBM Bob,Token first reported,Recorded video,300,https://www.linkedin.com/events/verified-token/,300,0,Yes,2026-09,300,0,Delivery\n";
         Run run=runs.create(current.getBytes(StandardCharsets.UTF_8),past.getBytes(StandardCharsets.UTF_8));
         run.workbook.put("month","2026-09");run.workbook.put("reportingPolicy","MONTH_END");run.workbook.put("filename","AvocadoBot fixture.xlsx");run.workbook.put("historyFilename","Metrics fixture.xlsx");run.workbook.put("historySheets",List.of());
         try(XSSFWorkbook book=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
@@ -47,12 +47,22 @@ class ReportingRuleEndToEndTest {
             Data data=runs.artifactData(run.id,output,null);assertEquals(2,data.rows.size());
             Row bob=data.rows.stream().filter(row->row.get("Name of activity").equals("Use Bob")).findFirst().orElseThrow();
             assertEquals("2026-08-19",bob.get("Date"));assertEquals("9533",bob.get("Current total"));assertEquals("6433",bob.get("Previous total"));assertEquals("3100",bob.get(VIEWS));assertEquals("2480",bob.get("Impact hours"));assertEquals("",bob.get("Measured at"));
-            Row token=data.rows.stream().filter(row->row.get("Name of activity").equals("Token first reported")).findFirst().orElseThrow();assertEquals("2026-08-24",token.get("Date"));assertEquals("0",token.get("Previous total"));assertEquals("240",token.get("Impact hours"));assertEquals("First reported",token.get("Activity stage"));
+            Row token=data.rows.stream().filter(row->row.get("Name of activity").equals("Token first reported")).findFirst().orElseThrow();assertEquals("2026-08-27",token.get("Date"));assertEquals("0",token.get("Previous total"));assertEquals("240",token.get("Impact hours"));assertEquals("Delivery",token.get("Activity stage"));
         }
         Data exported=runs.artifactData(run.id,"current.csv",null);assertEquals(4,exported.rows.size());assertEquals(0,new BigDecimal("100").compareTo(exported.rows.stream().map(row->Calculations.number(row.get("Impact hours"))).reduce(BigDecimal.ZERO,BigDecimal::add)));
-        String csv=new String(runs.artifact(run.id,"updated_90-day.csv",null),StandardCharsets.UTF_8);assertTrue(csv.contains("6433"));assertTrue(csv.contains("2480"));assertTrue(csv.contains("2026-08-24"));
+        String csv=new String(runs.artifact(run.id,"updated_90-day.csv",null),StandardCharsets.UTF_8);assertTrue(csv.contains("6433"));assertTrue(csv.contains("2480"));assertTrue(csv.contains("2026-08-27"));
         assertArrayEquals(currentSource,Files.readAllBytes(workspace.runPath(run.id,"state/source.json")));assertArrayEquals(pastSource,Files.readAllBytes(workspace.runPath(run.id,"state/trailing-source.json")));assertEquals("2820",runs.report(run.id,"combined").impact());
     }
-    private Run await(String id,String status) throws Exception {for(int i=0;i<500;i++){Run run=runs.get(id);if(run.status.equals(status))return run;if(run.status.equals("FAILED_RETRYABLE"))fail(run.error);Thread.sleep(20);}throw new AssertionError("Timed out waiting for "+status);}
+    private Run await(String id,String status) throws Exception {
+        // Public readiness must mean the next approval is immediately accepted.
+        // Do not inspect internal locks or hide a busy failure with retries.
+        for(int i=0;i<500;i++){
+            Run run=runs.get(id);
+            if(run.status.equals(status))return run;
+            if(run.status.equals("FAILED_RETRYABLE"))fail(run.error);
+            Thread.sleep(20);
+        }
+        throw new AssertionError("Timed out waiting for "+status);
+    }
     private static void cells(org.apache.poi.ss.usermodel.Row row,String...values){for(int i=0;i<values.length;i++)row.createCell(i).setCellValue(values[i]);}
 }

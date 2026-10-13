@@ -184,6 +184,8 @@ RUN.md and AGENTS.md must match the reviewed instruction SHA-256 in `metrics.ins
 
 `agentic.PhaseWorkflow` is a LangChain4j sequence of InstructionAgent, DigitalMetricsAgent, AttendanceAgent, AttributionAgent, Trailing90Agent, ExportAgent, and ValidationAgent, with isolated AgenticScope IDs. Durable Java orchestration enforces approvals and recovery.
 
+Phase readiness and background-worker release happen under the same run lock. A phase shown as awaiting approval can immediately accept approval; the finishing worker cannot clear the next worker's busy state. A repeated seven-phase regression exercises immediate approvals without delays or busy retries.
+
 Plain Java agents perform exact calculations and I/O. Optional InstructionReviewer and QualityReviewer model agents explain bounded contract/phase summaries. Models cannot invent measurements or approve phases. The complete workflow runs without model credentials; commentary is disabled by default.
 
 To enable commentary before starting, set `METRICS_AI_ENABLED=true`, `METRICS_MODEL_API_KEY`, `METRICS_MODEL_BASE_URL`, and `METRICS_MODEL_NAME`. The configured endpoint must support the OpenAI-compatible chat API. Frozen instructions and bounded issue summaries are sent to it; full CSVs and personal columns are not sent. Model failures preserve deterministic processing.
