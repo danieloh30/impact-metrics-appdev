@@ -27,5 +27,14 @@ try {
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0].env.find(variable=>variable.name==='METRICS_RUNTIME_ROOT').value='/data/metrics';},/Runtime workspace must use the guarded runtimes subdirectory/);
  for(const probe of ['readinessProbe','startupProbe'])rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0][probe].httpGet.path='/api/config';},/Readiness must validate a stateful API/);
  assert.equal(run().status,0,'Original copied manifests must remain valid after negative checks');
- console.log('Deployment manifests: valid generated artifacts and 7 unsafe variants verified using scratch JSON/archive copies only');
+ const archive=readdirSync(resolve(root,'target/quarkus-app/app')).find(name=>name.endsWith('.jar'));
+ const sourceJar=resolve(root,'target/quarkus-app/app',archive),fixtureJar=resolve(fixture,'target/quarkus-app/app',archive);
+ for(const [entry,message] of [['metrics-instructions/synthetic-secret.json',/Only canonical instructions may be packaged/],['.sessions/sharepoint/synthetic-secret.json',/Runtime profiles and run data must never be packaged/]]){
+  mkdirSync(dirname(resolve(fixture,entry)),{recursive:true});writeFileSync(resolve(fixture,entry),'SYNTHETIC_PACKAGING_REGRESSION_MARKER');
+  const zip=spawnSync('zip',['-q',fixtureJar,entry],{cwd:fixture,encoding:'utf8'});assert.equal(zip.status,0,zip.stderr);
+  const result=run();assert.notEqual(result.status,0,'Runtime-contaminated archive was accepted');assert.match(result.stderr,message);
+  copyFileSync(sourceJar,fixtureJar);
+ }
+ assert.equal(run().status,0,'Original copied archive must remain valid after contamination checks');
+ console.log('Deployment manifests: 7 unsafe variants and 2 runtime-contaminated archives rejected using scratch copies only');
 } finally {rmSync(fixture,{recursive:true,force:true});}
