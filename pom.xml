@@ -87,9 +87,31 @@
     <build>
         <resources>
             <resource><directory>src/main/resources</directory></resource>
-            <resource><directory>runtimes</directory><targetPath>metrics-instructions</targetPath><includes><include>RUN.md</include><include>AGENTS.md</include></includes></resource>
         </resources>
         <plugins>
+            <!-- Keep browser profiles and run data out of Quarkus dev-mode resource scanning. -->
+            <plugin>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>package-metrics-instructions</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/metrics-instructions</outputDirectory>
+                            <overwrite>true</overwrite>
+                            <resources>
+                                <resource>
+                                    <directory>runtimes</directory>
+                                    <filtering>false</filtering>
+                                    <includes><include>RUN.md</include><include>AGENTS.md</include></includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>

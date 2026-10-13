@@ -63,6 +63,8 @@ The screenshots below use representative sample data to illustrate the interface
 
 All three workbook URLs remain editable while SharePoint sign-in is in progress. Edits apply to the next workbook read and invalidate the corresponding saved input selection; they do not start sign-in or processing. Inputs are locked only during workbook reads and preparation. Complete IBM sign-in in the connected browser (the private sign-in desktop on OpenShift) before reading workbooks.
 
+The runtime workspace is not a Quarkus dev-mode resource directory. Maven copies only `runtimes/RUN.md` and `runtimes/AGENTS.md` into packaged instructions during `generate-resources`; browser profiles, transient Chromium `SingletonCookie` links, uploads and run data stay outside resource scanning. If upgrading from the previous resource configuration, restart dev mode once so it reloads the Maven resource model. Keep the saved sessions and history.
+
 Choose a reporting month, connect once, and read the activity workbooks and load saved chart history with one action. Source details and progress make each step easy to follow.
 
 ![SharePoint import with reporting-month selection, workbook sources, and guided preparation using fictional data](docs/site/assets/screenshots/source-preparation.png)

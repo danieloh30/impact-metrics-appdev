@@ -38,6 +38,9 @@ for(const target of ['openshift','kubernetes']){
 const archives=readdirSync(resolve(root,'target/quarkus-app/app')).filter(name=>name.endsWith('.jar'));
 assert.equal(archives.length,1,'Expected one application archive');
 const jar=resolve(root,'target/quarkus-app/app',archives[0]);
+const archiveEntries=execFileSync('unzip',['-Z1',jar]).toString().split('\n').filter(Boolean);
+assert.deepEqual(archiveEntries.filter(name=>name.startsWith('metrics-instructions/')&&!name.endsWith('/')).sort(),['metrics-instructions/AGENTS.md','metrics-instructions/RUN.md'],'Only canonical instructions may be packaged');
+assert(!archiveEntries.some(name=>/(^|\/)(runtimes|\.sessions|\.uploads|runs)\//.test(name)),'Runtime profiles and run data must never be packaged');
 for(const name of ['RUN.md','AGENTS.md'])assert.equal(execFileSync('unzip',['-p',jar,`metrics-instructions/${name}`]).toString(),readFileSync(resolve(root,'runtimes',name),'utf8'));
 assert(execFileSync('unzip',['-p',jar,'metrics-container/start-container.sh']).toString().includes('127.0.0.1:6080'));
 console.log('Packaged instructions and private desktop entrypoint validated');
