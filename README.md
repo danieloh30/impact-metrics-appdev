@@ -56,6 +56,8 @@ The screenshots below use representative sample data to illustrate the interface
 
 ### 1. Connect your SharePoint workbooks
 
+All three workbook URLs remain editable while SharePoint sign-in is in progress. Edits apply to the next workbook read and invalidate the corresponding saved input selection; they do not start sign-in or processing. Inputs are locked only during workbook reads and preparation. Complete IBM sign-in in the connected browser (the private sign-in desktop on OpenShift) before reading workbooks.
+
 Choose a reporting month, connect once, and read the activity workbooks and load saved chart history with one action. Source details and progress make each step easy to follow.
 
 ![SharePoint import with reporting-month selection, workbook sources, and guided preparation using fictional data](docs/site/assets/screenshots/source-preparation.png)

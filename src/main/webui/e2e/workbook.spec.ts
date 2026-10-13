@@ -1,6 +1,21 @@
 import {test,expect} from '@playwright/test';
 test('SharePoint workbook fields remain editable and saved connection checks never start sign-in',async({page})=>{
- let signIns=0;await page.route('**/api/runs',route=>route.fulfill({json:[]}));await page.route('**/api/sharepoint/session',route=>{if(route.request().method()==='POST')signIns++;return route.fulfill({json:{busy:false,status:'CONNECTED',message:'Signed in.'}});});
+ await page.route('**/api/**',route=>route.fulfill({json:{}}));let signIns=0;await page.route('**/api/runs',route=>route.fulfill({json:[]}));await page.route('**/api/sharepoint/session',route=>{if(route.request().method()==='POST')signIns++;return route.fulfill({json:{busy:false,status:'CONNECTED',message:'Signed in.'}});});
  await page.goto('/');await page.locator('.source-details summary').nth(0).click();await page.locator('.source-details summary').nth(1).click();await expect(page.getByRole('button',{name:'Read AvocadoBot workbook',exact:true})).toBeEnabled();await expect(page.getByRole('button',{name:'Read metrics workbook',exact:true})).toBeEnabled();expect(signIns).toBe(0);
  const field=page.getByLabel('Metrics SharePoint link');const edited='https://ibm.sharepoint.com/sites/DEPT-DeveloperRelations/Shared%20Documents/Other.xlsx';await field.fill(edited);await expect(field).toHaveValue(edited);await page.getByRole('button',{name:'Check SharePoint connection',exact:true}).click();expect(signIns).toBe(0);
+});
+for(const target of ['current','chart'] as const)test(`All source URLs stay editable during sign-in; held ${target} reads use edited URLs and lock inputs`,async({page})=>{
+ await page.setViewportSize({width:target==='chart'?390:1280,height:1000});
+ let session={busy:true,status:'CONNECTING',message:'Complete sign-in in the test browser'},release=()=>{},readStarted=false;const requests:{path:string;body:any}[]=[];
+ const urls={current:'https://example.sharepoint.com/demo/EditedAvocado.xlsx',history:'https://example.sharepoint.com/demo/EditedMetrics.xlsx',chart:'https://example.sharepoint.com/demo/EditedChartHistory.xlsx'};
+ await page.route('**/api/**',async route=>{const request=route.request(),path=new URL(request.url()).pathname;if(request.method()==='POST')requests.push({path,body:request.postDataJSON()});
+  if(path==='/api/runs')return route.fulfill({json:[]});if(path==='/api/sharepoint/session')return route.fulfill({json:session});if(path==='/api/linkedin/session')return route.fulfill({json:{message:'Not connected',connecting:false}});if(path==='/api/chart-history'&&request.method()==='GET')return route.fulfill({json:{source:{}}});
+  if(request.method()==='POST'&&(path==='/api/workbooks/from-sharepoint'||path==='/api/chart-history')){readStarted=true;await new Promise<void>(resolve=>{release=resolve;});return route.fulfill({status:502,json:{error:'Synthetic read stopped after verifying the requested URL'}});}return route.fulfill({json:{}});
+ });
+ await page.goto('/');const fields=[page.getByLabel('AvocadoBot SharePoint link'),page.getByLabel('Metrics SharePoint link'),page.getByLabel('Initial chart history SharePoint link')];await expect(page.locator('#connect-sharepoint')).toBeDisabled();
+ for(const [index,url]of Object.values(urls).entries()){await expect(fields[index]).toBeEnabled();await fields[index].fill(url);await expect(fields[index]).toHaveValue(url);}expect(requests).toEqual([]);await expect(page.locator('#prepare-workbooks')).toBeDisabled();
+ session={busy:false,status:'CONNECTED',message:'Test session saved'};await page.getByRole('button',{name:'Check SharePoint connection',exact:true}).click();expect(requests).toEqual([]);
+ if(target==='current'){await page.locator('.source-details summary').first().click();await expect(page.locator('#read-current')).toBeEnabled();await page.locator('#read-current').click();}else{await expect(page.locator('#read-chart-history')).toBeEnabled();await page.locator('#read-chart-history').click();}
+ await expect.poll(()=>readStarted).toBe(true);expect(requests).toEqual([{path:target==='current'?'/api/workbooks/from-sharepoint':'/api/chart-history',body:target==='current'?{url:urls.current}:{url:urls.chart}}]);
+ for(const field of fields)await expect(field).toBeDisabled();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);release();await expect(page.getByRole('alert')).toContainText('Synthetic read stopped');for(const field of fields)await expect(field).toBeEnabled();expect(requests).toHaveLength(1);
 });
