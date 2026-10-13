@@ -59,6 +59,8 @@ jobs:
         run: node scripts/test-deployment.mjs
       - name: Generate and validate deployment resources without deploying
         run: ./deploy-openshift.sh --generate --image-tag ci-validation
+      - name: Deployment manifest regression checks
+        run: node scripts/test-deployment-manifests.mjs
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15

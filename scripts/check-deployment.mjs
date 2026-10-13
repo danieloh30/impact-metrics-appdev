@@ -24,7 +24,13 @@ for(const target of ['openshift','kubernetes']){
  const service=items.find(item=>item.kind==='Service'&&item.metadata.name==='impact-hours');
  assert(service);assert(service.spec.ports.every(port=>['http',8097].includes(port.targetPort)),'Only the app HTTP port belongs in the Service');
  assert(!items.some(item=>['Route','Ingress'].includes(item.kind)),'Workspace access uses the authenticated port-forward');
- if(target==='openshift')assert(items.some(item=>item.kind==='BuildConfig'&&(item.spec.strategy?.type==='Docker'||item.spec.strategy?.dockerStrategy)));
+ if(target==='openshift'){
+  const build=items.find(item=>item.kind==='BuildConfig'&&(item.spec.strategy?.type==='Docker'||item.spec.strategy?.dockerStrategy));
+  assert(build,'OpenShift Docker BuildConfig is required');
+  assert.equal(build.spec.output.to.kind,'ImageStreamTag');
+  assert.equal(build.spec.output.to.name,container.image.split('/').at(-1),'Build output tag must match the deployed container image');
+  assert(container.image.startsWith('image-registry.openshift-image-registry.svc:5000/'),'OpenShift app must use its internal registry');
+ }
  console.log(`${target}: stateful workspace, probes, private access and persistent storage validated`);
 }
 const archives=readdirSync(resolve(root,'target/quarkus-app/app')).filter(name=>name.endsWith('.jar'));

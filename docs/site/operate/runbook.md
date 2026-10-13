@@ -6,6 +6,9 @@ Use the current state and saved evidence to decide what to retry. A retry keeps 
 
 | Symptom | Action |
 |---|---|
+| Deployment prints This command made no cluster changes | Generation succeeded; run with `--deploy` and your existing project namespace |
+| Deployment cannot find Java or reports an older version | Select Java 25+ with `JAVA_HOME` or SDKMAN; the script also checks Homebrew JDK locations |
+| Pod reports ImagePullBackOff / manifest unknown | Compare the BuildConfig output tag and pod image; use the current profile with the explicit OpenShift internal registry, then generate and deploy again |
 | Source read fails or inspection expires | Reconnect if sign-in expired, then re-read the affected source |
 | DZone or another source blocks collection | Retry unresolved collection, or enter a verified measurement |
 | LinkedIn sign-in appears unfinished | Complete the browser sign-in and use Check LinkedIn connection |

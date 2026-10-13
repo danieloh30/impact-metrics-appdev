@@ -76,6 +76,10 @@ Filter preview rows by author, tool, activity, or other cell text across every p
 
 The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates OpenShift and Kubernetes resources. The `openshift` profile uses an in-cluster Docker build with Java 25, Chromium and a private sign-in desktop. One StatefulSet replica mounts the `impact-hours-data` PVC so run history, sign-in sessions and chart history survive replacement. The image supports arbitrary non-root OpenShift UIDs and a read-only root filesystem. No public Route is created.
 
+Running the script without an action flag defaults to **generation only**. Use `--deploy` to create the workspace. On Developer Sandbox, pass your assigned existing project with `--namespace "$(oc project -q)"`. The script finds the SDKMAN/Homebrew JDK like `dev.sh` and validates Java 25+ before packaging or changing cluster resources.
+
+The OpenShift profile explicitly selects the internal image registry so the Docker build output and deployed Git-tagged image stay aligned. Manifest validation rejects a mismatched build/container tag before deploying.
+
 ```bash
 # Build and validate manifests locally; no cluster changes.
 ./deploy-openshift.sh --generate

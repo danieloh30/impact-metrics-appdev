@@ -45,7 +45,20 @@ fi
 if [[ $mode == status ]]; then
     exec oc -n "$namespace" get statefulset,pods,pvc,builds -l app.kubernetes.io/name=impact-hours
 fi
-command -v java >/dev/null || { echo 'Java 25 is required.' >&2; exit 1; }
+# Match dev.sh's macOS/SDKMAN lookup before Maven or any cluster mutation.
+if [[ -z ${JAVA_HOME:-} ]]; then
+    for metrics_jdk in "$HOME/.sdkman/candidates/java/current" /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home /opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home /usr/local/opt/openjdk/libexec/openjdk.jdk/Contents/Home; do
+        if [[ -x $metrics_jdk/bin/java ]]; then export JAVA_HOME="$metrics_jdk"; break; fi
+    done
+fi
+if [[ -n ${JAVA_HOME:-} ]]; then export PATH="$JAVA_HOME/bin:$PATH"; fi
+if ! metrics_java_version=$(java -version 2>&1); then
+    echo 'A working Java 25+ JDK is required. Set JAVA_HOME to your JDK installation.' >&2; exit 1
+fi
+metrics_java_major=$(printf '%s\n' "$metrics_java_version" | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -n 1)
+if [[ ! $metrics_java_major =~ ^[0-9]+$ || $metrics_java_major -lt 25 ]]; then
+    echo 'Java 25+ is required. Select a supported JDK using JAVA_HOME or SDKMAN.' >&2; exit 1
+fi
 command -v npm >/dev/null || { echo 'Node.js 22 and npm are required.' >&2; exit 1; }
 npm ci --prefix src/main/webui
 

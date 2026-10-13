@@ -60,7 +60,12 @@ flowchart LR
 
 The image uses Eclipse Temurin 25 on Ubuntu Noble to supply the browser libraries. It runs with the UID assigned by the OpenShift namespace. No `anyuid` or privileged SCC is required by the supplied configuration.
 
+The profile aligns `quarkus.application.name` with the `impact-hours` resource name and selects the internal image registry. This keeps the BuildConfig output tag identical to the deployed container tag. Generation validates that match before any deployment.
+
 ## 1. Generate and inspect
+
+!!! note "Generation is the default"
+    Running `./deploy-openshift.sh` without an action flag only generates and validates files. **This command made no cluster changes** means that step succeeded. Use `--deploy` to actually build and deploy the workspace.
 
 ```bash
 ./deploy-openshift.sh --generate --namespace impact-metrics
@@ -83,6 +88,15 @@ target/kubernetes/kubernetes.json
 oc login <your-cluster-api>
 ./deploy-openshift.sh --deploy --namespace impact-metrics
 ```
+
+For **Red Hat Developer Sandbox**, use the existing project assigned to your account rather than creating a new one. After signing in and selecting that project:
+
+```bash
+oc project -q
+./deploy-openshift.sh --deploy --namespace "$(oc project -q)"
+```
+
+The script uses the same SDKMAN/Homebrew JDK lookup as `dev.sh`, and checks Java 25+ before packaging or changing cluster resources. An explicitly configured `JAVA_HOME` takes precedence.
 
 The script validates the generated resources first, creates the project if needed, applies storage and the private-workspace ingress policy, then invokes the Quarkus in-cluster Docker build and deployment. It waits for the StatefulSet rollout.
 
