@@ -2,6 +2,8 @@
 
 Use the current state and saved evidence to decide what to retry. A retry keeps successful and manually entered measurements; a new run re-reads the source workbooks.
 
+The examples use the project `impact-hours`. For backups, upgrades and inspection, substitute the namespace of your existing workspace.
+
 ## Common recovery paths
 
 | Symptom | Action |
@@ -51,7 +53,7 @@ Finish or cancel active work before taking a consistent backup. Copy the PVC's `
 ```bash
 mkdir -p secure-backup
 chmod 700 secure-backup
-oc -n impact-metrics cp impact-hours-0:/data/metrics secure-backup/metrics
+oc -n impact-hours cp impact-hours-0:/data/metrics secure-backup/metrics
 ```
 
 Restore into a compatible workspace with the correct volume permissions. Do not commit backups, `.sessions`, uploaded workbooks or generated run state to Git.
@@ -61,16 +63,16 @@ Restore into a compatible workspace with the correct volume permissions. Do not 
 1. Use a reviewed commit whose CI has passed.
 2. Finish or cancel active runs and retain a protected backup.
 3. Deploy with the same namespace and claim.
-4. Re-open the tunnel, check saved runs, and reconnect a session only when requested.
+4. Open the app Route, check saved runs, and reconnect a session only when requested.
 
 Current packaged instructions replace the workspace's canonical templates at startup. Existing runs retain their frozen rule copies and source snapshots.
 
 ## Read-only cluster inspection
 
 ```bash
-./deploy-openshift.sh --status --namespace impact-metrics
-oc -n impact-metrics describe pod impact-hours-0
-oc -n impact-metrics logs statefulset/impact-hours
+./deploy-openshift.sh --status --namespace impact-hours
+oc -n impact-hours describe pod impact-hours-0
+oc -n impact-hours logs statefulset/impact-hours
 ```
 
 For pending storage, inspect the PVC and storage-class binding mode. For pod startup failures, inspect image pulls, resource limits and volume permissions. Headless Chromium uses `/tmp`; preserve its writable emptyDir even when the image root is read-only.

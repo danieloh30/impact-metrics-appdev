@@ -2,6 +2,8 @@
 
 The same runtime image and persistent-workspace layout can run on Kubernetes. The difference is the image build: Kubernetes does not provide OpenShift's binary Docker BuildConfig and ImageStream path.
 
+The examples use the `impact-hours` namespace. Substitute your chosen namespace, and keep the original namespace when updating an existing workspace.
+
 ## Build an image for your cluster
 
 Replace the example registry and tag with a destination your cluster can pull from. Match the image architecture to the cluster workers.
@@ -10,7 +12,7 @@ Replace the example registry and tag with a destination your cluster can pull fr
 npm ci --prefix src/main/webui
 ./mvnw -B package -DskipTests -Dquarkus.profile=openshift \
   -Dquarkus.kubernetes.deployment-target=kubernetes \
-  -Dquarkus.kubernetes.namespace=impact-metrics \
+  -Dquarkus.kubernetes.namespace=impact-hours \
   -Dquarkus.container-image.image=registry.example.internal/team/impact-hours:reviewed-tag
 
 podman build -f src/main/docker/Dockerfile.openshift \
@@ -23,11 +25,11 @@ The `openshift` runtime profile supplies the browser and storage settings for bo
 ## Apply the workspace resources
 
 ```bash
-kubectl create namespace impact-metrics --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n impact-metrics apply -f deploy/storage.yaml \
+kubectl create namespace impact-hours --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n impact-hours apply -f deploy/storage.yaml \
   -f deploy/workspace-isolation.yaml \
   -f target/kubernetes/kubernetes.yml
-kubectl -n impact-metrics rollout status statefulset/impact-hours
+kubectl -n impact-hours rollout status statefulset/impact-hours
 ```
 
 Configure an image pull secret if required by the registry. The claim uses your cluster's default storage class; select a storage class in `deploy/storage.yaml` if your platform requires one.
@@ -37,7 +39,7 @@ The pod runs as a non-root user. On platforms without OpenShift's namespace UID/
 ## Access and account sign-in
 
 ```bash
-kubectl -n impact-metrics port-forward --address 127.0.0.1 \
+kubectl -n impact-hours port-forward --address 127.0.0.1 \
   statefulset/impact-hours 8097:8097
 ```
 

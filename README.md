@@ -114,15 +114,17 @@ The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshi
 
 One replica keeps run history, source snapshots, saved provider sessions and chart history on the existing `impact-hours-data` PVC. The proxy exposes the app through a re-encrypted Route and checks project workspace permissions; no cluster-wide OAuthClient or auth-delegator binding is needed. The image supports arbitrary non-root UIDs and a read-only root filesystem.
 
+> **Project name:** `impact-hours` is the example project. Choose any project your account can access. On Developer Sandbox, use your assigned project (check with `oc project -q`). For an existing deployment, keep its original namespace when updating it.
+
 ```bash
 # Package and validate only (default); no cluster changes.
-./deploy-openshift.sh --generate --namespace doh-dev
+./deploy-openshift.sh --generate --namespace impact-hours
 
 # After oc login, build and deploy; rerun this command to apply updates.
-./deploy-openshift.sh --deploy --namespace doh-dev
+./deploy-openshift.sh --deploy --namespace impact-hours
 
 # Print the HTTPS app URL; no persistent terminal/tunnel needed.
-./deploy-openshift.sh --url --namespace doh-dev
+./deploy-openshift.sh --url --namespace impact-hours
 ```
 
 Open the printed Route and sign in to OpenShift. The Connect buttons show the local helper command for IBM/LinkedIn. Run `npm ci --prefix src/main/webui` once in your local checkout, copy that command, and complete the provider sign-in in its dedicated Chrome window. The pod verifies access before saving the session; passwords stay on provider pages. OpenShift login cookies are excluded from provider transfer. See the [OpenShift guide](docs/site/deploy/openshift.md) for the complete flow, permissions and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for other clusters.

@@ -33,9 +33,12 @@ This uses OpenShift's [service-account OAuth clients](https://docs.redhat.com/en
 
 Use Java 25+, Node.js 22/npm and an up-to-date `oc` CLI. Sign in to your cluster using its console's **Copy login command**. Never commit tokens or provider sessions.
 
+!!! note "Choose your project"
+    `impact-hours` is the example project; `--namespace` accepts any valid project name. Generation does not contact the cluster. Deployment requires access to the project or permission to create it. On Developer Sandbox, substitute your assigned project (check with `oc project -q`). For an existing workspace, use its original namespace when updating it.
+
 ```bash
 # Local packaging and validation only; no cluster writes.
-./deploy-openshift.sh --generate --namespace doh-dev
+./deploy-openshift.sh --generate --namespace impact-hours
 ```
 
 The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates the build/workload resources. The script adds the protected Route configuration and validates the final manifests, single-replica storage, stateful API probes and packaged instructions. Generation uses a placeholder workspace owner; `--deploy` resolves the real owner with `oc whoami`.
@@ -45,7 +48,7 @@ The image contains Java 25, the compiled app, canonical instructions and Playwri
 ## 2. Deploy or update
 
 ```bash
-./deploy-openshift.sh --deploy --namespace doh-dev
+./deploy-openshift.sh --deploy --namespace impact-hours
 ```
 
 The script:
@@ -60,20 +63,20 @@ The script:
 A failed build stops before changing the running StatefulSet. Rerun the same command after pulling code changes; it builds and rolls out the new image without resetting history. The old tunnel command `--connect` is retained as an alias for `--url`; it now prints the Route URL and exits.
 
 ```bash
-./deploy-openshift.sh --url --namespace doh-dev
-./deploy-openshift.sh --status --namespace doh-dev
+./deploy-openshift.sh --url --namespace impact-hours
+./deploy-openshift.sh --status --namespace impact-hours
 ```
 
-For an existing project outside Sandbox, substitute its namespace. If the project does not exist, deployment attempts `oc new-project`; your account must have project creation permission.
+Substitute your chosen project throughout these examples. If the project does not exist, deployment attempts `oc new-project`; your account must have project creation permission.
 
 Optional settings:
 
 ```bash
 # Grant workspace access to another explicitly selected account at deployment.
-METRICS_WORKSPACE_OWNER=your-openshift-user ./deploy-openshift.sh --deploy --namespace your-project
+METRICS_WORKSPACE_OWNER=your-openshift-user ./deploy-openshift.sh --deploy --namespace impact-hours
 # Pin an approved proxy image if cluster ImageStream discovery is unavailable.
 METRICS_OAUTH_PROXY_IMAGE=quay.io/your-team/oauth-proxy@sha256:YOUR_DIGEST \
-  ./deploy-openshift.sh --deploy --namespace your-project
+  ./deploy-openshift.sh --deploy --namespace impact-hours
 ```
 
 ## 3. Connect IBM and LinkedIn from your computer
@@ -111,9 +114,9 @@ The PVC mounts at `/data/metrics`; `METRICS_RUNTIME_ROOT` is `/data/metrics/runt
 The image supports arbitrary non-root OpenShift UIDs. Keep one replica and preserve the existing PVC during upgrades. Deleting the StatefulSet does not remove this separately managed PVC; deleting the PVC removes the saved workspace.
 
 ```bash
-oc -n doh-dev get pods,pvc,route
-oc -n doh-dev logs statefulset/impact-hours -c impact-hours --tail=50
-oc -n doh-dev logs statefulset/impact-hours -c oauth-proxy --tail=50
+oc -n impact-hours get pods,pvc,route
+oc -n impact-hours logs statefulset/impact-hours -c impact-hours --tail=50
+oc -n impact-hours logs statefulset/impact-hours -c oauth-proxy --tail=50
 ```
 
 For Route errors, check proxy readiness, serving-certificate Secret creation and the Route ingress status. For a 403 after sign-in, verify the account's access to `impact-hours-access`. Reconnecting provider sessions does not release SharePoint editing locks; wait for AutoSave and close Excel editing sessions before publishing.
