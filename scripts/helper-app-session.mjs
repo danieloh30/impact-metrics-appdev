@@ -6,7 +6,7 @@ import {createHash,randomUUID} from 'node:crypto';
 export const appSessionDirectory=join(homedir(),'.impact-hours','helper-app-sessions');
 export function appState(state,origin){
  const host=new URL(origin).hostname,now=Date.now()/1000;
- return {cookies:(state.cookies??[]).filter(cookie=>cookie.domain?.replace(/^\./,'')===host&&(cookie.expires===undefined||cookie.expires===-1||cookie.expires>now)),origins:(state.origins??[]).filter(entry=>entry.origin===origin)};
+ return {cookies:(state.cookies??[]).filter(cookie=>cookie.domain?.replace(/^\./,'')===host&&!cookie.name?.endsWith('_csrf')&&(cookie.expires===undefined||cookie.expires===-1||cookie.expires>now)),origins:(state.origins??[]).filter(entry=>entry.origin===origin)};
 }
 export function appSessionFile(origin,directory=appSessionDirectory){return join(directory,createHash('sha256').update(origin).digest('hex')+'.json');}
 async function privateDirectory(directory){
@@ -30,7 +30,16 @@ export async function saveAppSession(origin,state,directory=appSessionDirectory)
 }
 export async function forgetAppSession(origin,directory=appSessionDirectory){await unlink(appSessionFile(origin,directory)).catch(error=>{if(error.code!=='ENOENT')throw error;});}
 async function verified(context,origin){
- try{const response=await context.request.get(origin+'/api/config',{timeout:15000});return response.ok()&&Array.isArray((await response.json()).phases);}catch{return false;}
+ try{
+  // The proxy's auth-only endpoint returns 202/401 without starting OAuth.
+  // Probing a protected app URL while login is pending replaces its CSRF nonce.
+  if(new URL(origin).protocol==='https:'){
+   const auth=await context.request.get(origin+'/oauth/auth',{timeout:15000,maxRedirects:0});
+   if(auth.status()!==202)return false;
+  }
+  const response=await context.request.get(origin+'/api/config',{timeout:15000,maxRedirects:0});
+  return response.ok()&&Array.isArray((await response.json()).phases);
+ }catch{return false;}
 }
 /** Keep Route authentication on this computer; provider contexts remain separate and temporary. */
 export async function connectAppSession(browser,origin,terminal,{directory=appSessionDirectory,forget=false,log=console.log}={}){
