@@ -81,7 +81,7 @@ METRICS_OAUTH_PROXY_IMAGE=quay.io/your-team/oauth-proxy@sha256:YOUR_DIGEST \
 
 ## 3. Connect IBM and LinkedIn from your computer
 
-Open the Route and complete **OpenShift sign-in**. Choose **Connect SharePoint** or **Connect LinkedIn**. The app shows the helper command with the correct Route and workbook URL.
+Open the Route and complete **OpenShift sign-in**. Choose **Connect SharePoint** or **Connect LinkedIn**. The app shows the helper command with the correct Route and workbook URL. The SharePoint connection section also links to this **Local sign-in helper guide**. **Connect SharePoint** reveals the instructions even when a saved session is already connected, so you can renew sign-in when needed.
 
 From your **local checkout**, install the helper's dependency once:
 

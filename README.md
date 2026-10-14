@@ -127,7 +127,7 @@ One replica keeps run history, source snapshots, saved provider sessions and cha
 ./deploy-openshift.sh --url --namespace impact-hours
 ```
 
-Open the printed Route and sign in to OpenShift. The Connect buttons show the local helper command for IBM/LinkedIn. Run `npm ci --prefix src/main/webui` once in your local checkout, copy that command, and complete the provider sign-in in its dedicated Chrome window. The pod verifies access before saving the session; passwords stay on provider pages. OpenShift login cookies are excluded from provider transfer. See the [OpenShift guide](docs/site/deploy/openshift.md) for the complete flow, permissions and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for other clusters.
+Open the printed Route and sign in to OpenShift. The Connect buttons show the local helper command for IBM/LinkedIn. The SharePoint section includes a **Local sign-in helper guide** link; **Connect SharePoint** reveals instructions even with an existing saved session. Run `npm ci --prefix src/main/webui` once in your local checkout, copy that command, and complete the provider sign-in in its dedicated Chrome window. The pod verifies access before saving the session; passwords stay on provider pages. OpenShift login cookies are excluded from provider transfer. See the [OpenShift guide](docs/site/deploy/openshift.md) for the complete flow, permissions and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for other clusters.
 
 Deployment checks cover build ordering, immutable image pinning, Route authentication, credential isolation, provider session validation, storage, probes and packaged instructions. The obsolete VNC stack and unused JVM/native Dockerfile templates have been removed.
 
