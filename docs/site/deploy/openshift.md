@@ -125,6 +125,10 @@ A failure message with **HTTP 401** means the request was rejected as unauthenti
 
 Local `./dev.sh` behavior remains unchanged: its Connect buttons open browsers locally without needing the helper. OpenShift's helper is needed only when signing in or renewing an expired session; workbook reads, publishing and collection then reuse the saved session.
 
+## Automatic YouTube views
+
+YouTube public video views use the automatic collector in OpenShift, with no YouTube sign-in helper. It verifies the requested video and reads its exact lifetime Views, including comma-separated counters. If YouTube withholds the counter, retry unresolved collection or supply verified views. Update and redeploy before retrying; completed runs retain their saved measurements, so use a new run or a verified reporting correction for previously misread totals.
+
 ## Collect DZone views from your computer
 
 If the pod's headless DZone collection returns HTTP 403, the OpenShift UI offers **Collect DZone views locally** beside LinkedIn. The next-action bar highlights it during a Phase 1 or Phase 4 review with pending DZone article views. This is public counter collection, not a DZone account connection: the helper sends measured totals, never browser cookies.

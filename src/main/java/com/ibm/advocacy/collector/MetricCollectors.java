@@ -50,10 +50,9 @@ public class MetricCollectors {
         if(Set.of("dzone.com","www.dzone.com").contains(host))return dzone.collect(uri);
         String value,evidence;
         if(Set.of("youtube.com","www.youtube.com","m.youtube.com","youtu.be").contains(host)) {
-            if(host.equals("youtu.be"))uri=URI.create("https://www.youtube.com/watch?v="+URLEncoder.encode(uri.getPath().substring(1),java.nio.charset.StandardCharsets.UTF_8));
-            String html=fetch(uri);Matcher match=Pattern.compile("\"viewCount\"\\s*:\\s*\"?(\\d+)").matcher(html);
-            if(!match.find())throw new IOException("YouTube viewCount unavailable; enter Video Views manually");
-            value=match.group(1);evidence="YouTube public page viewCount";
+            String videoId=YouTubeViews.videoId(uri);
+            uri=URI.create("https://www.youtube.com/watch?v="+videoId+"&hl=en&gl=US");
+            value=YouTubeViews.read(mapper,fetch(uri),videoId);evidence="YouTube public page exact lifetime Views; verified videoId="+videoId;
         } else if(host.equals("github.com")||host.equals("www.github.com")) {
             String[] segments=uri.getPath().split("/");if(segments.length<3||!segments[1].matches("[A-Za-z0-9_.-]+")||!segments[2].matches("[A-Za-z0-9_.-]+"))throw new IOException("Invalid GitHub repository URL");
             var data=mapper.readTree(fetch(URI.create("https://api.github.com/repos/"+segments[1]+"/"+segments[2])));
