@@ -58,6 +58,7 @@ jobs:
       - name: Deployment script regression tests
         run: |
           node scripts/test-deployment.mjs
+          node scripts/test-deployment-build.mjs
           node scripts/test-container-entrypoint.mjs
           node scripts/test-deployment-resources.mjs
           node scripts/test-secure-route.mjs

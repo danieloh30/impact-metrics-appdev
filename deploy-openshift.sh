@@ -63,6 +63,10 @@ if [[ ! $metrics_java_major =~ ^[0-9]+$ || $metrics_java_major -lt 25 ]]; then
     echo 'Java 25+ is required. Select a supported JDK using JAVA_HOME or SDKMAN.' >&2; exit 1
 fi
 command -v npm >/dev/null || { echo 'Node.js 22 and npm are required.' >&2; exit 1; }
+build_dir=$(mktemp -d "${TMPDIR:-/tmp}/impact-hours-build.XXXXXXXX")
+trap 'rm -rf -- "$build_dir"' EXIT
+node scripts/prepare-deployment-build.mjs prepare "$build_dir"
+cd "$build_dir"
 npm ci --prefix src/main/webui
 
 args=(-B package -DskipTests -Dquarkus.profile=openshift
@@ -79,6 +83,7 @@ if [[ $mode == deploy ]]; then
 fi
 node scripts/secure-route.mjs target/kubernetes/openshift.json "$namespace" "$workspace_owner" "$oauth_proxy_image"
 node scripts/check-deployment.mjs
+node scripts/prepare-deployment-build.mjs publish "$repo_dir"
 if [[ $mode == deploy ]]; then
     if ! oc get project "$namespace" >/dev/null 2>&1; then oc new-project "$namespace"; fi
     oc -n "$namespace" apply -f deploy/storage.yaml -f deploy/route-access.yaml
@@ -102,6 +107,6 @@ if [[ $mode == deploy ]]; then
     metrics_route=$(oc -n "$namespace" get route impact-hours -o jsonpath='{.spec.host}')
     printf 'Workspace deployed. Impact Hours: https://%s\nSign in with your OpenShift account. Use the local sign-in helper for IBM/LinkedIn.\n' "$metrics_route"
 else
-    printf 'Validated manifests: target/kubernetes/openshift.yml and target/kubernetes/kubernetes.yml\n'
+    printf 'Validated manifests: target/deployment/kubernetes/openshift.yml and target/deployment/kubernetes/kubernetes.yml\n'
     printf 'This command made no cluster changes. Deploy with: ./deploy-openshift.sh --deploy --namespace %s\n' "$namespace"
 fi

@@ -61,6 +61,8 @@ Restore into a compatible workspace with the correct volume permissions. Do not 
 
 ## Upgrade the application
 
+If deployment reports **Runtime profiles and run data must never be packaged**, the archive contains files from an older local build. Pull the latest deployment script and rerun it: it packages from a fresh temporary source workspace and preserves your dev-mode build output and saved sessions. Do not bypass the archive check or delete saved runtime data.
+
 1. Use a reviewed commit whose CI has passed.
 2. Finish or cancel active runs and retain a protected backup.
 3. Deploy with the same namespace and claim.

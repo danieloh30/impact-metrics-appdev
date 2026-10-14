@@ -8,9 +8,14 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),fixture=mkdtemp
 try {
  const bin=resolve(fixture,'bin'),log=resolve(fixture,'commands.log'),home=resolve(fixture,'home');mkdirSync(bin);mkdirSync(home);
  copyFileSync(resolve(root,'deploy-openshift.sh'),resolve(fixture,'deploy-openshift.sh'));
+ for(const path of ['scripts','deploy','.mvn','src/main/resources','runtimes','target/classes/.sessions'])mkdirSync(resolve(fixture,path),{recursive:true});
+ copyFileSync(resolve(root,'scripts/prepare-deployment-build.mjs'),resolve(fixture,'scripts/prepare-deployment-build.mjs'));
+ writeFileSync(resolve(fixture,'pom.xml'),'<project/>');
+ for(const name of ['RUN.md','AGENTS.md'])writeFileSync(resolve(fixture,'runtimes',name),'canonical');
+ writeFileSync(resolve(fixture,'target/classes/.sessions/synthetic-secret'),'synthetic stale profile');
  const mock='#!/bin/bash\nprintf "%s" "${0##*/}" >> "$DEPLOYMENT_TEST_LOG"\nprintf " <%s>" "$@" >> "$DEPLOYMENT_TEST_LOG"\nprintf "\\n" >> "$DEPLOYMENT_TEST_LOG"\n';
  writeFileSync(resolve(bin,'npm'),mock,{mode:0o755});
- writeFileSync(resolve(bin,'node'),mock+'if [[ $1 == scripts/check-deployment.mjs && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\nif [[ $3 == tag ]]; then echo "impact-hours:release"; fi\n',{mode:0o755});
+ writeFileSync(resolve(bin,'node'),mock+`if [[ $1 == scripts/prepare-deployment-build.mjs ]]; then exec '${process.execPath}' "$@"; fi\n`+'if [[ $1 == scripts/check-deployment.mjs && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\nif [[ $3 == tag ]]; then echo "impact-hours:release"; fi\n',{mode:0o755});
  writeFileSync(resolve(bin,'oc'),mock+`
 if [[ $1 == whoami ]]; then echo owner; fi
 if [[ $1 == get && $2 == project && \${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi
@@ -24,13 +29,14 @@ if [[ "$*" == *" exec "* ]]; then
  echo synthetic-private-api-response
 fi
 `,{mode:0o755});
- writeFileSync(resolve(fixture,'mvnw'),mock,{mode:0o755});
+ writeFileSync(resolve(fixture,'mvnw'),mock+'[[ ! -e target/classes/.sessions/synthetic-secret ]] || exit 9\nmkdir -p target/quarkus-app/app target/kubernetes\n',{mode:0o755});
  const jdk=(label,major)=>{const dir=resolve(fixture,label);mkdirSync(resolve(dir,'bin'),{recursive:true});writeFileSync(resolve(dir,'bin/java'),`#!/bin/bash\nprintf 'java:${label} <%s>\\n' "$*" >> "$DEPLOYMENT_TEST_LOG"\necho 'openjdk version "${major}.0.1"' >&2\n`,{mode:0o755});return dir;};
  const java25=jdk('jdk25',25),java21=jdk('jdk21',21);copyFileSync(resolve(java25,'bin/java'),resolve(bin,'java'));
  const sdkman=resolve(home,'.sdkman/candidates/java/current');mkdirSync(resolve(sdkman,'bin'),{recursive:true});copyFileSync(resolve(java25,'bin/java'),resolve(sdkman,'bin/java'));
  let checks=0;
  const run=(args=[],overrides={})=>{checks++;writeFileSync(log,'');const result=spawnSync('/bin/bash',[resolve(fixture,'deploy-openshift.sh'),...args,'--image-tag','release'],{encoding:'utf8',env:{PATH:`${bin}:/usr/bin:/bin`,HOME:home,JAVA_HOME:java25,DEPLOYMENT_TEST_LOG:log,...overrides}});return {...result,commands:readFileSync(log,'utf8')};};
  const generated=run();assert.equal(generated.status,0,generated.stderr);assert(!generated.commands.includes('oc '));assert(generated.commands.includes('<scripts/secure-route.mjs>'));assert(!generated.commands.includes('-Dquarkus.openshift.deploy=true'));
+ assert.equal(readFileSync(resolve(fixture,'target/classes/.sessions/synthetic-secret'),'utf8'),'synthetic stale profile','Deployment must leave dev output untouched');
  assert.equal(run([],{JAVA_HOME:''}).status,0);
  for(const args of [[],['--deploy']]){const invalid=run(args,{JAVA_HOME:java21});assert.equal(invalid.status,1);assert.match(invalid.stderr,/Java 25/);assert(!invalid.commands.includes('<apply>')&&!invalid.commands.includes('npm '));}
  for(const option of ['--url','--connect']){const result=run([option,'--namespace','isolated-fixture'],{JAVA_HOME:java21});assert.equal(result.status,0);assert.match(result.stdout,/https:\/\/app.apps.example.com/);assert(!result.commands.includes('port-forward')&&!result.commands.includes('java:'));}

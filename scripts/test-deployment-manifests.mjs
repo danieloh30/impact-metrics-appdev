@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,copyFileSync,readFileSync,writeFileSync,readdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,copyFileSync,readFileSync,writeFileSync,readdirSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const build=existsSync(resolve(root,'target/deployment/kubernetes/openshift.json'))?resolve(root,'target/deployment'):resolve(root,'target');
 const fixture=mkdtempSync(resolve(tmpdir(),'impact-manifest-test-'));
 try {
  for(const path of ['scripts','target/kubernetes','target/quarkus-app/app','runtimes'])mkdirSync(resolve(fixture,path),{recursive:true});
  copyFileSync(resolve(root,'scripts/check-deployment.mjs'),resolve(fixture,'scripts/check-deployment.mjs'));
- for(const target of ['openshift','kubernetes'])copyFileSync(resolve(root,`target/kubernetes/${target}.json`),resolve(fixture,`target/kubernetes/${target}.json`));
- for(const name of readdirSync(resolve(root,'target/quarkus-app/app')).filter(name=>name.endsWith('.jar')))copyFileSync(resolve(root,'target/quarkus-app/app',name),resolve(fixture,'target/quarkus-app/app',name));
+ for(const target of ['openshift','kubernetes'])copyFileSync(resolve(build,`kubernetes/${target}.json`),resolve(fixture,`target/kubernetes/${target}.json`));
+ for(const name of readdirSync(resolve(build,'quarkus-app/app')).filter(name=>name.endsWith('.jar')))copyFileSync(resolve(build,'quarkus-app/app',name),resolve(fixture,'target/quarkus-app/app',name));
  for(const name of ['RUN.md','AGENTS.md'])copyFileSync(resolve(root,'runtimes',name),resolve(fixture,'runtimes',name));
  const manifest=resolve(fixture,'target/kubernetes/openshift.json'),original=readFileSync(manifest,'utf8');
  const run=()=>spawnSync(process.execPath,[resolve(fixture,'scripts/check-deployment.mjs')],{encoding:'utf8',env:{PATH:process.env.PATH}});
@@ -33,8 +34,8 @@ try {
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0].env.find(item=>item.name==='QUARKUS_HTTP_HOST').value='0.0.0.0';},/App must bind pod loopback/);
  rejects(items=>{items.find(item=>item.kind==='BuildConfig').spec.source.dockerfile=items.find(item=>item.kind==='BuildConfig').spec.source.dockerfile.replace('COPY lib/','COPY target/quarkus-app/lib/');},/Dockerfile must match/);
  assert.equal(run().status,0,'Original copied manifests must remain valid after negative checks');
- const archive=readdirSync(resolve(root,'target/quarkus-app/app')).find(name=>name.endsWith('.jar'));
- const sourceJar=resolve(root,'target/quarkus-app/app',archive),fixtureJar=resolve(fixture,'target/quarkus-app/app',archive);
+ const archive=readdirSync(resolve(build,'quarkus-app/app')).find(name=>name.endsWith('.jar'));
+ const sourceJar=resolve(build,'quarkus-app/app',archive),fixtureJar=resolve(fixture,'target/quarkus-app/app',archive);
  for(const [entry,message] of [['metrics-instructions/synthetic-secret.json',/Only canonical instructions may be packaged/],['.sessions/sharepoint/synthetic-secret.json',/Runtime profiles and run data must never be packaged/]]){
   mkdirSync(dirname(resolve(fixture,entry)),{recursive:true});writeFileSync(resolve(fixture,entry),'SYNTHETIC_PACKAGING_REGRESSION_MARKER');
   const zip=spawnSync('zip',['-q',fixtureJar,entry],{cwd:fixture,encoding:'utf8'});assert.equal(zip.status,0,zip.stderr);

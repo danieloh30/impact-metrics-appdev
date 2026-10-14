@@ -43,7 +43,7 @@ Use Java 25+, Node.js 22/npm and an up-to-date `oc` CLI. Sign in to your cluster
 
 The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates the build/workload resources. The script adds the protected Route configuration and validates the final manifests, single-replica storage, stateful API probes and packaged instructions. Generation uses a placeholder workspace owner; `--deploy` resolves the real owner with `oc whoami`.
 
-The image contains Java 25, the compiled app, canonical instructions and Playwright Chromium. Xvfb, Openbox, VNC and noVNC are absent. The binary build context is **only `target/quarkus-app`**; local run data, credentials and browser profiles are excluded by construction. The Dockerfile's COPY paths are relative to this packaged context.
+The image contains Java 25, the compiled app, canonical instructions and Playwright Chromium. Xvfb, Openbox, VNC and noVNC are absent. Packaging runs in a fresh temporary source workspace, so stale `target/classes` files, saved browser profiles and run data cannot enter the build. Local dev-mode output and sessions are kept. The binary build context is **only that workspace's `target/quarkus-app`**. Validated artifacts are copied to `target/deployment/quarkus-app` and `target/deployment/kubernetes` in your checkout. The Dockerfile's COPY paths are relative to this packaged context.
 
 ## 2. Deploy or update
 
@@ -53,7 +53,7 @@ The image contains Java 25, the compiled app, canonical instructions and Playwri
 
 The script:
 
-1. Packages the app and validates the secured generated resources.
+1. Packages the app in a fresh temporary workspace and validates the secured generated resources and archive contents.
 2. Keeps the existing PVC and reuses the OAuth cookie Secret.
 3. Applies build and Route prerequisites, then streams the packaged app with `oc start-build --follow --wait`.
 4. Resolves the built image's immutable digest and applies the StatefulSet with that digest.
