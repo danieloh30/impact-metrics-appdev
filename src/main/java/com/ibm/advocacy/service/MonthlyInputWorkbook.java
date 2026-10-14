@@ -65,6 +65,7 @@ public class MonthlyInputWorkbook {
                 if(matches.isEmpty()){appended++;exact.put(key,List.of(target));base.computeIfAbsent(baseKey(data),k->new ArrayList<>()).add(target);}else if(changed)updated++;else unchanged++;
             }
             if(sheet.getLastRowNum()>20_000)throw new BadRequestException("Published monthly tab exceeds 20,000 rows");
+            MonthlyRowSort.sort(sheet,header,columns,format);
             for(var table:sheet.getTables()){Set<String> names=new HashSet<>();for(var column:table.getCTTable().getTableColumns().getTableColumnArray())if(column.getName()==null||column.getName().isBlank()||!names.add(column.getName().toLowerCase(Locale.ROOT)))throw new BadRequestException("Existing Excel table has blank or duplicate column names. Repair the workbook table before publishing; no workbook changes were published.");AreaReference area=table.getArea();if(area.getFirstCell().getRow()==header)table.setArea(new AreaReference(area.getFirstCell(),new CellReference(sheet.getLastRowNum(),area.getLastCell().getCol()),org.apache.poi.ss.SpreadsheetVersion.EXCEL2007));}
             if(created){sheet.createFreezePane(0,1);for(int i=0;i<columns.size();i++)sheet.setColumnWidth(i,24*256);}
             XSSFSheet metadata=book.getSheet(META);if(metadata==null){metadata=book.createSheet(META);var titles=metadata.createRow(0);String[] fields={"Reporting month","Stage","Run","Updated at","As of"};for(int i=0;i<fields.length;i++)titles.createCell(i).setCellValue(fields[i]);}

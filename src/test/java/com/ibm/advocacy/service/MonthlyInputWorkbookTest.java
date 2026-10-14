@@ -20,9 +20,11 @@ class MonthlyInputWorkbookTest {
         sheet.createTable(new AreaReference(new CellReference(0,0),new CellReference(sheet.getLastRowNum(),10),SpreadsheetVersion.EXCEL2007));var model=book.createSheet("DA metric model 2026");model.createRow(0).createCell(0).setCellValue("Unchanged model");book.createName().setNameName("ImportantRange");book.getName("ImportantRange").setRefersToFormula("'DA metric model 2026'!$A$1");book.write(out);return out.toByteArray();}}
     Row row(String id,String name,String total){return new Row(id,Map.of("Date","2026-09-10","Author","A","Tool","X","Name of activity",name,"Type of activity","Recorded video",URL,"https://example.com/"+name.toLowerCase(),"Current total",total,"Previous total","100",VIEWS,total,"Starting baseline","100"));}
     Data data(Row... rows){return Data.output(new Data(),List.of(rows));}
+    Row dated(String id,String name,String date){Row result=row(id,name,"200");result.cells.put("Date",date);return result;}
+    org.apache.poi.ss.usermodel.Row named(XSSFSheet sheet,String name){for(var row:sheet)if(row.getCell(3)!=null&&row.getCell(3).getCellType()==org.apache.poi.ss.usermodel.CellType.STRING&&row.getCell(3).getStringCellValue().equals(name))return row;throw new AssertionError("Missing activity: "+name);}
     @Test void upsertNormalizesHeadersAndDatesAndKeepsUnmatchedDataFormulasTablesAndExactCounts() throws Exception {
         byte[] original=fixture(false),unchangedOriginal=original.clone();var result=writer.merge(original,data(row("1","Existing","200"),row("2","New","166.5")),"2026-09","CURRENT_INPUTS","run");assertFalse(result.created());assertEquals(1,result.updated());assertEquals(1,result.appended());
-        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){var sheet=book.getSheet("September inputs");assertEquals(3,sheet.getLastRowNum());assertEquals(200,sheet.getRow(1).getCell(6).getNumericCellValue());assertEquals("Unmatched",sheet.getRow(2).getCell(3).getStringCellValue());assertEquals("100",sheet.getRow(2).getCell(6).getStringCellValue());assertEquals("1+2",sheet.getRow(1).getCell(10).getCellFormula());assertEquals(166.5,sheet.getRow(3).getCell(6).getNumericCellValue());assertEquals(3,sheet.getTables().getFirst().getArea().getLastCell().getRow());assertEquals("Unchanged model",book.getSheet("DA metric model 2026").getRow(0).getCell(0).getStringCellValue());assertNotNull(book.getName("ImportantRange"));}
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){var sheet=book.getSheet("September inputs");assertEquals(3,sheet.getLastRowNum());assertEquals(200,named(sheet,"Existing").getCell(6).getNumericCellValue());assertEquals("100",named(sheet,"Unmatched").getCell(6).getStringCellValue());assertEquals("1+2",named(sheet,"Existing").getCell(10).getCellFormula());assertEquals(166.5,named(sheet,"New").getCell(6).getNumericCellValue());assertEquals(List.of("Existing","New","Unmatched"),java.util.stream.IntStream.rangeClosed(1,3).mapToObj(i->sheet.getRow(i).getCell(3).getStringCellValue()).toList());assertEquals(3,sheet.getTables().getFirst().getArea().getLastCell().getRow());assertEquals("Unchanged model",book.getSheet("DA metric model 2026").getRow(0).getCell(0).getStringCellValue());assertNotNull(book.getName("ImportantRange"));}
         var repeated=writer.merge(result.bytes(),data(row("1","Existing","200"),row("2","New","166.5")),"2026-09","CURRENT_INPUTS","run");assertEquals(0,repeated.appended());assertEquals(0,repeated.updated());assertEquals(2,repeated.unchanged());assertArrayEquals(unchangedOriginal,original);
     }
     @Test void carryOnlyRowsNeverOverwriteAnExistingNewerTotal() throws Exception {Row carry=row("1","Existing","999");carry.cells.put("Snapshot stage","BASELINE_CARRY");var result=writer.merge(fixture(false),data(carry),"2026-09","CURRENT_INPUTS","run");assertEquals(1,result.unchanged());try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){assertEquals("100",book.getSheet("September inputs").getRow(1).getCell(6).getStringCellValue());}}
@@ -74,6 +76,58 @@ class MonthlyInputWorkbookTest {
     @Test void malformedBlankTableHeadersStopBeforePublication() throws Exception {
         byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){var sheet=book.getSheet("September inputs");sheet.getTables().getFirst().setArea(new AreaReference(new CellReference(0,0),new CellReference(2,13),SpreadsheetVersion.EXCEL2007));for(int i=11;i<14;i++)sheet.getTables().getFirst().getCTTable().getTableColumns().getTableColumnArray(i).setName("");book.write(out);original=out.toByteArray();}
         var error=assertThrows(BadRequestException.class,()->writer.merge(original,data(row("1","Existing","200")),"2026-09","COMPLETED","run"));assertTrue(error.getMessage().contains("blank or duplicate column names"));
+    }
+
+    @Test void newlyCreatedMonthlySheetSortsDatesAscendingAndKeepsEqualDateAttributionsInInputOrder() throws Exception {
+        Data input=data(dated("last","Last","2026-10-31"),dated("tie-first","First tie","2026-10-13"),dated("early","Earliest","2026-08-01"),dated("tie-second","Second tie","2026-10-13"));
+        var result=writer.merge(fixture(false),input,"2026-10","PROVISIONAL","oct-13");assertEquals(4,result.appended());assertEquals(0,result.updated());
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){
+            var sheet=book.getSheet("October 2026 inputs");var columns=MonthlyInputWorkbook.columns(sheet.getRow(0),new org.apache.poi.ss.usermodel.DataFormatter());
+            assertEquals(List.of("Earliest","First tie","Second tie","Last"),java.util.stream.IntStream.rangeClosed(1,4).mapToObj(i->sheet.getRow(i).getCell(columns.get("Name of activity")).getStringCellValue()).toList());
+            assertEquals(book.getSheetIndex("September inputs")+1,book.getSheetIndex(sheet));assertEquals("Unmatched",book.getSheet("September inputs").getRow(2).getCell(3).getStringCellValue());
+        }
+        var repeated=writer.merge(result.bytes(),input,"2026-10","PROVISIONAL","oct-13");assertEquals(0,repeated.appended());assertEquals(0,repeated.updated());assertEquals(4,repeated.unchanged());
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(repeated.bytes()))){var sheet=book.getSheet("October 2026 inputs");var columns=MonthlyInputWorkbook.columns(sheet.getRow(0),new org.apache.poi.ss.usermodel.DataFormatter());assertEquals(List.of("Earliest","First tie","Second tie","Last"),java.util.stream.IntStream.rangeClosed(1,4).mapToObj(i->sheet.getRow(i).getCell(columns.get("Name of activity")).getStringCellValue()).toList());}
+    }
+
+    @Test void updatingAndAppendingSortsWholeRowsIncludingUnmatchedNumericDatesAndPreservesCustomCells() throws Exception {
+        byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            var sheet=book.getSheet("September inputs");var unmatched=sheet.getRow(2);var style=book.createCellStyle();style.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_BLUE.getIndex());style.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);style.setDataFormat(book.createDataFormat().getFormat("yyyy-mm-dd"));
+            unmatched.getCell(0).setCellValue(java.time.LocalDate.of(2026,9,11));unmatched.getCell(0).setCellStyle(style);unmatched.setHeightInPoints(36);unmatched.setZeroHeight(true);
+            var link=book.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL);link.setAddress("https://example.com/unmatched");unmatched.getCell(5).setHyperlink(link);unmatched.getCell(5).setCellStyle(style);
+            var anchor=book.getCreationHelper().createClientAnchor();anchor.setCol1(5);anchor.setCol2(7);anchor.setRow1(2);anchor.setRow2(5);var comment=sheet.createDrawingPatriarch().createCellComment(anchor);comment.setString(book.getCreationHelper().createRichTextString("Keep this author's note"));comment.setAuthor("Reviewer");unmatched.getCell(5).setCellComment(comment);
+            unmatched.getCell(10).setCellFormula("G3*2+$G$2+G$3");sheet.getRow(1).getCell(10).setCellFormula("G2*2");
+            var model=book.getSheet("DA metric model 2026");model.getRow(0).createCell(1).setCellFormula("1+2");book.write(out);original=out.toByteArray();
+        }
+        byte[] preserved=original.clone();var result=writer.merge(original,data(row("update","Existing","200"),dated("early","Early","2026-08-01"),dated("same","Same date","2026-09-10")),"2026-09","COMPLETED","sort-run");assertEquals(1,result.updated());assertEquals(2,result.appended());
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){
+            var sheet=book.getSheet("September inputs");assertEquals(List.of("Early","Existing","Same date","Unmatched"),java.util.stream.IntStream.rangeClosed(1,4).mapToObj(i->sheet.getRow(i).getCell(3).getStringCellValue()).toList());
+            var unmatched=named(sheet,"Unmatched");assertEquals(4,unmatched.getRowNum());assertEquals(org.apache.poi.ss.usermodel.CellType.NUMERIC,unmatched.getCell(0).getCellType());assertEquals(java.time.LocalDate.of(2026,9,11),unmatched.getCell(0).getLocalDateTimeCellValue().toLocalDate());assertEquals("100",unmatched.getCell(6).getStringCellValue());
+            assertEquals(36,unmatched.getHeightInPoints());assertTrue(unmatched.getZeroHeight());assertEquals(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_BLUE.getIndex(),unmatched.getCell(5).getCellStyle().getFillForegroundColor());assertEquals("https://example.com/unmatched",unmatched.getCell(5).getHyperlink().getAddress());assertEquals(4,unmatched.getCell(5).getHyperlink().getFirstRow());assertEquals(4,unmatched.getCell(5).getHyperlink().getLastRow());
+            assertEquals("Keep this author's note",unmatched.getCell(5).getCellComment().getString().getString());assertEquals("Reviewer",unmatched.getCell(5).getCellComment().getAuthor());assertEquals(4,unmatched.getCell(5).getCellComment().getRow());assertNull(sheet.getRow(2).getCell(5).getCellComment());
+            assertEquals("G5*2+$G$2+G$3",unmatched.getCell(10).getCellFormula());assertEquals("G3*2",named(sheet,"Existing").getCell(10).getCellFormula());assertEquals(200,named(sheet,"Existing").getCell(6).getNumericCellValue());
+            assertEquals("Date of activity",sheet.getRow(0).getCell(0).getStringCellValue());assertEquals("Custom formula",sheet.getRow(0).getCell(10).getStringCellValue());assertEquals(4,sheet.getTables().getFirst().getArea().getLastCell().getRow());assertEquals("Unchanged model",book.getSheet("DA metric model 2026").getRow(0).getCell(0).getStringCellValue());assertEquals("1+2",book.getSheet("DA metric model 2026").getRow(0).getCell(1).getCellFormula());assertEquals("'DA metric model 2026'!$A$1",book.getName("ImportantRange").getRefersToFormula());
+        }
+        assertArrayEquals(preserved,original);
+    }
+
+    @Test void sortLeavesUndatedNotesAndBlankRowSlotsInPlaceWithoutDeletingRows() throws Exception {
+        byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            var sheet=book.getSheet("September inputs");var note=sheet.createRow(3);note.createCell(3).setCellValue("Undated reviewer note");note.createCell(10).setCellFormula("SUM(G2:G3)");sheet.createRow(4).setHeightInPoints(22);book.write(out);original=out.toByteArray();
+        }
+        var result=writer.merge(original,data(dated("early","Early","2026-08-01")),"2026-09","COMPLETED","sort-run");
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(result.bytes()))){
+            var sheet=book.getSheet("September inputs");assertEquals(5,sheet.getLastRowNum());assertEquals("Early",sheet.getRow(1).getCell(3).getStringCellValue());assertEquals("Existing",sheet.getRow(2).getCell(3).getStringCellValue());assertEquals("Unmatched",sheet.getRow(5).getCell(3).getStringCellValue());assertEquals("Undated reviewer note",sheet.getRow(3).getCell(3).getStringCellValue());assertEquals("SUM(G2:G3)",sheet.getRow(3).getCell(10).getCellFormula());assertEquals(22,sheet.getRow(4).getHeightInPoints());assertEquals(0,sheet.getRow(4).getPhysicalNumberOfCells());
+        }
+    }
+
+    @Test void sortingDoesNotSilentlyDamageVerticalMergedCellsOrArrayFormulas() throws Exception {
+        for(boolean array:List.of(false,true)){
+            byte[] original;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(fixture(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                var sheet=book.getSheet("September inputs");if(array)sheet.setArrayFormula("G2:G3*2",new CellRangeAddress(1,2,10,10));else sheet.addMergedRegion(new CellRangeAddress(1,2,5,5));book.write(out);original=out.toByteArray();
+            }
+            byte[] preserved=original.clone();var error=assertThrows(BadRequestException.class,()->writer.merge(original,data(dated("early","Early","2026-08-01")),"2026-09","COMPLETED","sort-run"));assertTrue(error.getMessage().toLowerCase(Locale.ROOT).contains(array?"array":"merged"),error.getMessage());assertArrayEquals(preserved,original);
+        }
     }
 
 }
