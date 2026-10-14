@@ -91,7 +91,7 @@ The helper requires **Google Chrome desktop**, Node.js 22+ with npm, and a local
 2. **macOS:** open the downloaded `.dmg`, move Chrome into **Applications**, then launch it once. **Windows:** run the downloaded installer, finish installation, then launch Chrome once.
 3. Return to Terminal on macOS or PowerShell on Windows, open the project directory, install the helper dependencies below, and paste the one-line command shown in the app.
 
-Without Chrome installed, the helper stops before opening the app or provider sign-in page and prints installation links. It launches a separate Chrome window with an isolated browser session; your existing Chrome tabs and sign-ins are not reused. Installing Chromium for tests does not satisfy this helper's Chrome requirement.
+Without Chrome installed, the helper stops before opening the app or provider sign-in page and prints installation links. It launches a separate Chrome window; your existing Chrome tabs and sign-ins are not reused. The SharePoint, LinkedIn and DZone helpers share a dedicated local OpenShift app session for the same Route. Installing Chromium for tests does not satisfy this helper's Chrome requirement.
 
 From your **local checkout**, install the helper's dependency once:
 
@@ -108,9 +108,11 @@ node scripts/connect-browser-session.mjs \
 
 For SharePoint, the displayed command also includes `--url 'YOUR_WORKBOOK_LINK'`.
 
-1. The helper opens a dedicated local Chrome window. Sign in to the Impact Hours Route, then press Enter in its terminal.
-2. Complete IBM SSO/MFA or LinkedIn sign-in in the next tab, then press Enter to connect it.
-3. The helper sends only that provider's browser storage over HTTPS. OpenShift cookies and unrelated account state are excluded. It stores no session file on your computer and closes its browser when finished.
+1. The helper opens a dedicated local Chrome window. On first use, sign in to the Impact Hours Route, then press Enter in its terminal. Subsequent SharePoint, LinkedIn and DZone helper commands reuse that verified OpenShift session and skip this prompt while it remains valid. An expired or rejected app session prompts for sign-in again.
+2. Complete IBM SSO/MFA or LinkedIn sign-in in the separate provider window, then press Enter to connect it.
+3. The helper sends only that provider's browser storage over HTTPS. OpenShift cookies and unrelated account state are excluded. Provider sessions use separate temporary browser contexts. Only the Route's app authentication is cached locally in `~/.impact-hours/helper-app-sessions/`, with owner-only file permissions on macOS/Linux; the cache is scoped separately to each Route and never uploaded. The browser closes when finished.
+
+To connect as a different OpenShift user, append `--forget-app-session` to either helper command. This removes that Route's local app session before opening Chrome and does not reset the app's runs or saved provider connections. The server checks app access on every helper invocation; cached authentication does not grant access after it is revoked. Local dev Connect buttons are unchanged.
 4. The pod verifies access before saving the session to the PVC. Return to the app; connection checks refresh automatically, or click **Check connection**.
 
 Passwords are entered directly on provider pages and never sent to the app. Provider sessions are sensitive: they stay in the guarded workspace, are not returned by APIs and are not packaged into images. IBM organizational policy or LinkedIn verification can reject a transferred session. Completing LinkedIn sign-in does not grant event analytics permissions your account lacks.

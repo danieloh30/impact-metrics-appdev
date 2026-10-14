@@ -4,16 +4,16 @@ import {stdin,stdout} from 'node:process';
 import {fileURLToPath} from 'node:url';
 import {appOrigin,launchSignInBrowser} from './connect-browser-session.mjs';
 import {pendingArticles,readArticle,batchFor} from './dzone-local-collection.mjs';
+import {connectAppSession} from './helper-app-session.mjs';
 
 async function main(){
  const values={},args=process.argv.slice(2);
- for(let n=0;n<args.length;n+=2){if(!['--app','--run'].includes(args[n])||!args[n+1])throw new Error('Use: node scripts/collect-dzone-local.mjs --app HTTPS_ROUTE --run RUN_ID');values[args[n].slice(2)]=args[n+1];}
+ for(let n=0;n<args.length;n++){if(args[n]==='--forget-app-session'){values.forget=true;continue;}if(!['--app','--run'].includes(args[n])||!args[n+1])throw new Error('Use: node scripts/collect-dzone-local.mjs --app HTTPS_ROUTE --run RUN_ID [--forget-app-session]');values[args[n].slice(2)]=args[++n];}
  const origin=appOrigin(values.app),id=values.run;
  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id??''))throw new Error('Use the saved run ID shown in the app helper command.');
  const terminal=createInterface({input:stdin,output:stdout});let browser;
  try{
-  browser=await launchSignInBrowser();const appContext=await browser.newContext(),app=await appContext.newPage();
-  await app.goto(origin,{waitUntil:'domcontentloaded'});await terminal.question('Sign in to the OpenShift app, then press Enter here: ');
+  browser=await launchSignInBrowser();const {context:appContext}=await connectAppSession(browser,origin,terminal,{forget:values.forget});
   const config=await appContext.request.get(origin+'/api/config');
   if(!config.ok()||!(await config.json().catch(()=>({}))).dzoneLocalCollection)throw new Error('App needs the OpenShift local DZone feature enabled. Pull and redeploy the latest code before running this helper.');
   async function current(){const response=await appContext.request.get(origin+'/api/runs/'+id);if(!response.ok())throw new Error('App run could not be read. Check OpenShift access and the selected run.');return (await response.json()).run;}

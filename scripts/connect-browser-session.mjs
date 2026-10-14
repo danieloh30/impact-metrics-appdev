@@ -4,6 +4,7 @@ import {createInterface} from 'node:readline/promises';
 import {stdin,stdout} from 'node:process';
 import {fileURLToPath} from 'node:url';
 import {verifyLocalSharePointDownload} from './sharepoint-local-download.mjs';
+import {connectAppSession} from './helper-app-session.mjs';
 
 export function appOrigin(value) {
  const url=new URL(value);
@@ -37,28 +38,23 @@ export function requireSharePointTransferSupport(session) {
 
 async function main() {
  const args=process.argv.slice(2),values={};
- for(let index=0;index<args.length;index+=2){if(!['--app','--provider','--url'].includes(args[index])||!args[index+1])throw new Error('Usage: node scripts/connect-browser-session.mjs --app HTTPS_ROUTE --provider sharepoint|linkedin [--url WORKBOOK_URL]');values[args[index].slice(2)]=args[index+1];}
+ for(let index=0;index<args.length;index++){if(args[index]==='--forget-app-session'){values.forget=true;continue;}if(!['--app','--provider','--url'].includes(args[index])||!args[index+1])throw new Error('Usage: node scripts/connect-browser-session.mjs --app HTTPS_ROUTE --provider sharepoint|linkedin [--url WORKBOOK_URL] [--forget-app-session]');values[args[index].slice(2)]=args[++index];}
  const origin=appOrigin(values.app),provider=values.provider,target=signInUrl(provider,values.url);
  const terminal=createInterface({input:stdin,output:stdout});let browser;
  try {
   browser=await launchSignInBrowser();
-  const context=await browser.newContext();const app=await context.newPage();
-  await app.goto(origin,{waitUntil:'domcontentloaded'});
-  console.log('Sign in to the Impact Hours app in the opened browser (OpenShift sign-in).');
-  await terminal.question('When the app is visible, press Enter here: ');
-  const config=await context.request.get(origin+'/api/config');
-  if(!config.ok()||!(await config.json().catch(()=>({}))).phases)throw new Error('App sign-in is incomplete. Sign in to this Route and run the helper again.');
+  const {context}=await connectAppSession(browser,origin,terminal,{forget:values.forget});
   if(provider==='sharepoint'){
    const support=await context.request.get(origin+'/api/sharepoint/session');
    if(!support.ok())throw new Error('App SharePoint connection status could not be read. Check app access before retrying.');
    requireSharePointTransferSupport(await support.json());
   }
-  const providerPage=await context.newPage();
+  const providerContext=await browser.newContext(),providerPage=await providerContext.newPage();
   // Direct Excel links can start downloads after IBM sign-in; cookies still persist.
   await providerPage.goto(target,{waitUntil:'domcontentloaded',timeout:60_000}).catch(()=>{});
-  console.log(provider==='sharepoint'?'Complete IBM SSO/MFA in the new tab and wait until the workbook opens or its Excel download starts.':'Complete LinkedIn sign-in in the new tab.');
+  console.log(provider==='sharepoint'?'Complete IBM SSO/MFA in the separate provider window and wait until the workbook opens or its Excel download starts.':'Complete LinkedIn sign-in in the separate provider window.');
   await terminal.question(provider==='sharepoint'?'When the workbook is available, press Enter to verify and connect this session: ':'When signed in, press Enter to connect this session to your app: ');
-  let state=providerState(await context.storageState({indexedDB:true}),provider);
+  let state=providerState(await providerContext.storageState({indexedDB:true}),provider);
   const required=provider==='sharepoint'?'FedAuth':'li_at';
   if(!state.cookies.some(cookie=>cookie.name===required&&cookie.value))throw new Error('Provider sign-in is incomplete. Run the helper again after completing sign-in.');
   if(provider==='sharepoint'){

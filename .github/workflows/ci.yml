@@ -63,6 +63,7 @@ jobs:
           node scripts/test-deployment-resources.mjs
           node scripts/test-secure-route.mjs
           node scripts/test-browser-session-helper.mjs
+          node scripts/test-helper-app-session.mjs
           node scripts/test-sharepoint-local-download.mjs
           node scripts/test-dzone-local-collection.mjs
       - name: Generate and validate deployment resources without deploying
