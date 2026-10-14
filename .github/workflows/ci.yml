@@ -63,6 +63,7 @@ jobs:
           node scripts/test-deployment-resources.mjs
           node scripts/test-secure-route.mjs
           node scripts/test-browser-session-helper.mjs
+          node scripts/test-sharepoint-local-download.mjs
       - name: Generate and validate deployment resources without deploying
         run: ./deploy-openshift.sh --generate --image-tag ci-validation
       - name: Deployment manifest regression checks

@@ -39,7 +39,7 @@ public class SharePointCollector {
     public void inspectionStage(String stage){downloadStage=stage;}
     public record Workbook(byte[] bytes,String filename,String sourceUrl) {}
     @jakarta.annotation.PreDestroy void close(){browserWorker.shutdownNow();}
-    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost,"downloadStage",downloadStage,"loginMode",loginMode);}
+    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost,"downloadStage",downloadStage,"loginMode",loginMode,"transferVersion",2);}
 
     public URI fileUri(String value) {
         try {
@@ -122,7 +122,7 @@ public class SharePointCollector {
     static String verificationFailure(Exception failure) {
         if(failure instanceof WebApplicationException web)return switch(web.getResponse().getStatus()) {
             case 400 -> "SharePoint sign-in belongs to a different workbook host. Rerun the helper with this workbook's link and complete IBM sign-in until the workbook opens.";
-            case 401 -> "SharePoint rejected the transferred sign-in (HTTP 401). Rerun the helper and wait until the workbook opens before pressing Enter. If access works on your computer but keeps failing on the pod, ask your IBM administrator whether sessions can be used from the cluster.";
+            case 401 -> "SharePoint rejected the transferred sign-in from the pod (HTTP 401). Check the helper's local download result. If it passed locally, investigate server session compatibility and ask your IBM administrator whether cluster access is permitted; repeating the same sign-in alone does not establish access from the pod.";
             case 403 -> "SharePoint denied workbook access from the pod (HTTP 403). Check your IBM account's download permission. If the workbook downloads on your computer, ask your IBM administrator whether organizational device or network policy permits access from the cluster. Repeating sign-in alone may not resolve this.";
             case 404 -> "SharePoint could not find the workbook (HTTP 404). Check the workbook link, then rerun the helper with the corrected link.";
             case 413 -> "SharePoint sign-in reached the workbook, but it exceeds the app's workbook size limit. Check the workbook size limit before retrying.";

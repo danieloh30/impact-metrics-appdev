@@ -17,6 +17,14 @@ class BrowserSessionStateTest {
     @Test void rejectsMissingProviderAuthentication() {assertThrows(BadRequestException.class,()->filter(cookie("app.example.com","FedAuth","-1"),""));}
     @Test void rejectsExpiredAuthentication() {assertThrows(BadRequestException.class,()->filter(cookie("ibm.sharepoint.com","FedAuth","1"),""));}
     @Test void rejectsSuperdomainsAndSuffixImpersonation() {for(String domain:Set.of("com","sharepoint.com","evil-ibm.sharepoint.com","ibm.sharepoint.com.evil.com"))assertThrows(BadRequestException.class,()->filter(cookie(domain,"FedAuth","-1"),""));}
+    @Test void keepsOnlyNamedSharePointRootRefreshCookieAlongsideTenantAuthentication() throws Exception {
+        var result=mapper.readTree(filter(cookie("ibm.sharepoint.com","FedAuth","-1")+","+cookie(".sharepoint.com","rtFa","-1")+","+cookie(".sharepoint.com","unrelated","-1")+","+cookie(".sharepoint.com","FedAuth","-1")+","+cookie("sharepoint.com.evil.com","rtFa","-1"),"{\"origin\":\"https://sharepoint.com\"}"));
+        assertEquals(2,result.path("cookies").size());assertEquals("rtFa",result.path("cookies").get(1).path("name").asText());assertEquals(0,result.path("origins").size());
+        assertThrows(BadRequestException.class,()->filter(cookie(".sharepoint.com","rtFa","-1"),""),"Root refresh cookie alone is not IBM-host authentication");
+    }
+    @Test void expiredRootRefreshCookieIsNotTransferred() throws Exception {
+        assertEquals(1,mapper.readTree(filter(cookie("ibm.sharepoint.com","FedAuth","-1")+","+cookie(".sharepoint.com","rtFa","1"),"")).path("cookies").size());
+    }
     @Test void rejectsInvalidShapesAndOversizedState() throws Exception {
         for(String json:Set.of("{}","null","{\"cookies\":{},\"origins\":[]}"))assertThrows(BadRequestException.class,()->BrowserSessionState.filter(mapper,mapper.readTree(json),Set.of("linkedin.com"),"li_at"));
         var huge=mapper.createObjectNode();huge.putArray("cookies");huge.putArray("origins");huge.put("extra","x".repeat(2_000_001));assertThrows(BadRequestException.class,()->BrowserSessionState.filter(mapper,huge,Set.of("linkedin.com"),"li_at"));

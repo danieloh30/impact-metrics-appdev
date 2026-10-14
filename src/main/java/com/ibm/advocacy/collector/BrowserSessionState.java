@@ -18,12 +18,15 @@ public final class BrowserSessionState {
         boolean authenticated=false;
         for(JsonNode cookie:state.path("cookies")) {
             String domain=cookie.path("domain").asText("").replaceFirst("^\\.","");
-            if(!hosts.contains(domain))continue;
+            // SharePoint uses one root rtFa cookie for session continuity across sites.
+            // Keep only this named root cookie; IBM-host FedAuth is still mandatory.
+            boolean rootRefresh=requiredCookie.equals("FedAuth")&&hosts.stream().anyMatch(host->host.endsWith(".sharepoint.com"))&&domain.equals("sharepoint.com")&&cookie.path("name").asText().equals("rtFa")&&cookie.path("path").asText().equals("/");
+            if(!hosts.contains(domain)&&!rootRefresh)continue;
             if(!cookie.path("name").isTextual()||!cookie.path("value").isTextual()||!cookie.path("path").asText("").startsWith("/"))throw new BadRequestException("Invalid provider cookie");
             double expires=cookie.path("expires").asDouble(-1);
             if(expires>0&&expires<=Instant.now().getEpochSecond())continue;
             cookies.add(cookie.deepCopy());
-            if(cookie.path("name").asText().equals(requiredCookie)&&!cookie.path("value").asText().isBlank())authenticated=true;
+            if(hosts.contains(domain)&&cookie.path("name").asText().equals(requiredCookie)&&!cookie.path("value").asText().isBlank())authenticated=true;
         }
         for(JsonNode origin:state.path("origins")) {
             try {URI uri=URI.create(origin.path("origin").asText());

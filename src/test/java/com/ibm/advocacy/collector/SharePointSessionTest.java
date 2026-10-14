@@ -70,4 +70,15 @@ class SharePointSessionTest {
             }
         }
     }
+    @Test void transferredStateKeepsRootRefreshCookieWithoutTreatingItAsTenantAuthentication() throws Exception {
+        try(Playwright playwright=Playwright.create();Browser chrome=collector.downloadBrowser(playwright);BrowserContext source=chrome.newContext()) {
+            source.addCookies(List.of(cookie("FedAuth","synthetic-tenant","ibm.sharepoint.com"),cookie("rtFa","synthetic-refresh",".sharepoint.com"),cookie("unrelated","synthetic-private",".sharepoint.com")));
+            var mapper=new com.fasterxml.jackson.databind.ObjectMapper();
+            String filtered=BrowserSessionState.filter(mapper,mapper.readTree(source.storageState()),java.util.Set.of("ibm.sharepoint.com"),"FedAuth");
+            try(BrowserContext restored=chrome.newContext(new Browser.NewContextOptions().setStorageState(filtered))) {
+                assertTrue(collector.authenticated(restored,"ibm.sharepoint.com"));assertEquals(2,restored.cookies().size());
+                assertTrue(restored.cookies().stream().anyMatch(c->c.name.equals("rtFa")&&c.domain.equals(".sharepoint.com")));
+            }
+        }
+    }
 }

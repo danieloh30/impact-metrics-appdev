@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {appOrigin,providerState,signInUrl,launchSignInBrowser,helperErrorMessage} from './connect-browser-session.mjs';
+import {appOrigin,providerState,signInUrl,launchSignInBrowser,helperErrorMessage,requireSharePointTransferSupport} from './connect-browser-session.mjs';
 assert.equal(appOrigin('https://app.example.com/'),'https://app.example.com');
 assert.equal(appOrigin('http://127.0.0.1:8097'),'http://127.0.0.1:8097');
 for(const url of ['http://app.example.com','https://user:pass@app.example.com','https://app.example.com/path','https://app.example.com/?secret=x'])assert.throws(()=>appOrigin(url));
@@ -18,4 +18,10 @@ await assert.rejects(launchSignInBrowser({launch:async()=>{throw new Error("Chro
 const denied='SharePoint denied workbook access from the pod (HTTP 403). Check your IBM account download permission.';
 assert.equal(helperErrorMessage(new Error(denied)),denied,'Safe server verification reason must reach the terminal');
 assert(!helperErrorMessage(new Error('raw synthetic private browser error')).includes('synthetic private'));
+const continuity={cookies:[{domain:'ibm.sharepoint.com',name:'FedAuth',path:'/',value:'synthetic'},{domain:'.sharepoint.com',name:'rtFa',path:'/',value:'synthetic'},{domain:'.sharepoint.com',name:'FedAuth',path:'/',value:'untrusted'},{domain:'.sharepoint.com',name:'other',path:'/',value:'untrusted'},{domain:'sharepoint.com.evil.com',name:'rtFa',path:'/',value:'untrusted'}],origins:[{origin:'https://sharepoint.com',localStorage:[]}]};
+assert.deepEqual(providerState(continuity,'sharepoint').cookies.map(cookie=>cookie.name),['FedAuth','rtFa']);assert.equal(providerState(continuity,'sharepoint').origins.length,0);
+assert.equal(providerState(continuity,'linkedin').cookies.length,0,'SharePoint root cookie must not enter LinkedIn state');
+assert.throws(()=>requireSharePointTransferSupport({loginMode:'LOCAL_HELPER'}),/redeploy.*no IBM session has been sent/);
+assert.throws(()=>requireSharePointTransferSupport({loginMode:'LOCAL_BROWSER',transferVersion:2}),/Use Connect SharePoint in the app/);
+assert.doesNotThrow(()=>requireSharePointTransferSupport({loginMode:'LOCAL_HELPER',transferVersion:2}));
 console.log('Local helper: URL validation, account-state isolation, Chrome installation guidance and safe server verification errors passed');
