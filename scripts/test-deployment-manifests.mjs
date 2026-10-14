@@ -25,6 +25,7 @@ try {
  rejects(items=>{items.push({apiVersion:'route.openshift.io/v1',kind:'Route',metadata:{name:'unintended-public-access'}});},/Only the protected app Route is allowed/);
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.securityContext.runAsUser=1001;},/OpenShift must assign its namespace UID/);
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0].env.find(variable=>variable.name==='METRICS_RUNTIME_ROOT').value='/data/metrics';},/Runtime workspace must use the guarded runtimes subdirectory/);
+ rejects(items=>{const proxy=items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='oauth-proxy');proxy.args=proxy.args.filter(arg=>arg!=='--pass-host-header=false');},/OAuth proxy must use the loopback upstream Host/);
  for(const probe of ['readinessProbe','startupProbe'])rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers[0][probe].exec.command=['curl','http://127.0.0.1:8097/api/config'];},/Readiness must validate a stateful API/);
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers=items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.filter(item=>item.name!=='oauth-proxy');},/OAuth proxy is required/);
  rejects(items=>{items.find(item=>item.kind==='Service').spec.ports[0].targetPort=8097;},/Only the authenticated proxy/);

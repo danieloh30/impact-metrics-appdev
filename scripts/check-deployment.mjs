@@ -33,6 +33,7 @@ for(const target of ['openshift','kubernetes']){
   const proxy=pod.containers.find(item=>item.name==='oauth-proxy');assert(proxy,'OAuth proxy is required');
   assert(container.env.some(item=>item.name==='QUARKUS_HTTP_HOST'&&item.value==='127.0.0.1'),'App must bind pod loopback to prevent proxy bypass');
   assert(proxy.args.includes('--provider=openshift'));assert(proxy.args.some(arg=>arg.startsWith('--openshift-sar=')&&arg.includes('impact-hours-access')),'Workspace authorization is required');
+  assert(proxy.args.includes('--pass-host-header=false'),'OAuth proxy must use the loopback upstream Host');
   assert(!proxy.args.some(arg=>arg.startsWith('--skip-auth')||arg.startsWith('--openshift-delegate-urls')),'Every app path requires browser OAuth authentication');
   assert.equal(pod.automountServiceAccountToken,false,'App must not receive cluster credentials');
   assert(!container.volumeMounts.some(mount=>mount.mountPath.includes('serviceaccount')));

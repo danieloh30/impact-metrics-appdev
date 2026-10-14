@@ -36,7 +36,9 @@ export function secureRoute(manifest,namespace,owner,proxyImage) {
  const probe={httpGet:{path:'/oauth/healthz',port:8443,scheme:'HTTPS'},initialDelaySeconds:5,periodSeconds:10};
  app.spec.template.spec.containers.push({name:'oauth-proxy',image:proxyImage,imagePullPolicy:'IfNotPresent',ports:[{name:'oauth',containerPort:8443}],args:[
   '--https-address=:8443','--http-address=','--provider=openshift','--openshift-service-account=impact-hours-route',
-  '--upstream=http://127.0.0.1:8097','--upstream-timeout=180s','--email-domain=*',
+  // Quarkus 3.40 validates Host when bound to loopback. Use the fixed upstream
+  // authority internally; OAuth redirects still use the public request host.
+  '--upstream=http://127.0.0.1:8097','--pass-host-header=false','--upstream-timeout=180s','--email-domain=*',
   '--openshift-sar='+JSON.stringify({namespace,resource:'configmaps',resourceName:'impact-hours-access',verb:'get'}),
   '--tls-cert=/etc/oauth/tls/tls.crt','--tls-key=/etc/oauth/tls/tls.key','--cookie-secret-file=/etc/oauth/cookie/cookie-secret',
   '--cookie-secure=true','--cookie-samesite=lax','--pass-access-token=false','--pass-basic-auth=false','--pass-user-headers=false','--request-logging=false',

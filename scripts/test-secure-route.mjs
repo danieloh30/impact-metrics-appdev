@@ -9,6 +9,8 @@ assert(pod.containers[0].env.some(item=>item.name==='QUARKUS_HTTP_HOST'&&item.va
 assert.equal(pod.containers[0].readinessProbe.exec.command.at(-1),'http://127.0.0.1:8097/api/runs');
 for(const probe of ['readinessProbe','startupProbe','livenessProbe'])assert.equal(pod.containers[0][probe].httpGet,null,'Migration must explicitly clear the existing HTTP probe handler');
 assert(proxy.args.includes('--cookie-secure=true'));assert(proxy.args.includes('--pass-access-token=false'));
+assert(proxy.args.includes('--pass-host-header=false'),'Public Route Host must not bypass the app loopback Host validation');
+assert(proxy.args.includes('--upstream=http://127.0.0.1:8097'));
 const review=JSON.parse(proxy.args.find(arg=>arg.startsWith('--openshift-sar=')).split('=',2)[1]);assert.equal(review.namespace,'project');assert.equal(review.resourceName,'impact-hours-access');
 assert(!proxy.args.some(arg=>arg.startsWith('--skip-auth')||arg.startsWith('--openshift-delegate-urls')));
 assert.equal(result.find(item=>item.kind==='Route').spec.tls.termination,'reencrypt');

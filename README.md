@@ -112,7 +112,7 @@ Open the app through an **HTTPS OpenShift Route**, protected by OpenShift sign-i
 
 The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates the in-cluster Docker build and workload. Following the [reference deployment pattern](https://github.com/danieloh30/stateless-mcp-quarkus/blob/main/deploy-openshift.sh), the script streams only the packaged app with `oc start-build`, waits for the image, and deploys its immutable digest. A failed build leaves the running StatefulSet unchanged.
 
-One replica keeps run history, source snapshots, saved provider sessions and chart history on the existing `impact-hours-data` PVC. The proxy exposes the app through a re-encrypted Route and checks project workspace permissions; no cluster-wide OAuthClient or auth-delegator binding is needed. The image supports arbitrary non-root UIDs and a read-only root filesystem.
+One replica keeps run history, source snapshots, saved provider sessions and chart history on the existing `impact-hours-data` PVC. The proxy exposes the app through a re-encrypted Route, checks project workspace permissions, and sends the loopback upstream Host to Quarkus with `--pass-host-header=false`; no cluster-wide OAuthClient or auth-delegator binding is needed. The image supports arbitrary non-root UIDs and a read-only root filesystem.
 
 > **Project name:** `impact-hours` is the example project. Choose any project your account can access. On Developer Sandbox, use your assigned project (check with `oc project -q`). For an existing deployment, keep its original namespace when updating it.
 
