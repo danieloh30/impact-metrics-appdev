@@ -40,7 +40,7 @@ Turn workbook activities into traceable monthly impact hours. Prepare the source
 
     ---
 
-    Deploy a persistent workspace with a private sign-in desktop, then manage sessions, recovery, and upgrades.
+    Deploy a persistent workspace with an HTTPS Route and local account sign-in, then manage sessions, recovery, and upgrades.
 
     [Open the deployment guide →](deploy/openshift.md)
 

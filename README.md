@@ -73,7 +73,7 @@ The reporting examples below use representative sample data. The completion scre
 
 ### 1. Connect your SharePoint workbooks
 
-All three workbook URLs remain editable while SharePoint sign-in is in progress. Edits apply to the next workbook read and invalidate the corresponding saved input selection; they do not start sign-in or processing. Inputs are locked only during workbook reads and preparation. Complete IBM sign-in in the connected browser (the private sign-in desktop on OpenShift) before reading workbooks.
+All three workbook URLs remain editable while SharePoint sign-in is in progress. Edits apply to the next workbook read and invalidate the corresponding saved input selection; they do not start sign-in or processing. Inputs are locked only during workbook reads and preparation. Complete IBM sign-in in the connected browser (the local sign-in helper on OpenShift) before reading workbooks.
 
 The runtime workspace is not a Quarkus dev-mode resource directory. Maven copies only `runtimes/RUN.md` and `runtimes/AGENTS.md` into packaged instructions during `generate-resources`; browser profiles, transient Chromium `SingletonCookie` links, uploads and run data stay outside resource scanning. If upgrading from the previous resource configuration, restart dev mode once so it reloads the Maven resource model. Keep the saved sessions and history.
 
@@ -108,28 +108,26 @@ If reporting items need attention or publication is still pending, follow the mo
 
 ## Deploy a persistent workspace
 
-The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates OpenShift and Kubernetes resources. The `openshift` profile uses an in-cluster Docker build with Java 25, Chromium and a private sign-in desktop. One StatefulSet replica mounts the `impact-hours-data` PVC so run history, sign-in sessions and chart history survive replacement. The image supports arbitrary non-root OpenShift UIDs and a read-only root filesystem. No public Route is created.
+Open the app through an **HTTPS OpenShift Route**, protected by OpenShift sign-in. IBM SSO and LinkedIn use a dedicated **local browser helper**; the pod then collects metrics headlessly. No app tunnel or VNC desktop is required. Local dev-mode browser sign-in stays unchanged.
 
-Running the script without an action flag defaults to **generation only**. Use `--deploy` to create the workspace. On Developer Sandbox, pass your assigned existing project with `--namespace "$(oc project -q)"`. The script finds the SDKMAN/Homebrew JDK like `dev.sh` and validates Java 25+ before packaging or changing cluster resources.
+The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates the in-cluster Docker build and workload. Following the [reference deployment pattern](https://github.com/danieloh30/stateless-mcp-quarkus/blob/main/deploy-openshift.sh), the script streams only the packaged app with `oc start-build`, waits for the image, and deploys its immutable digest. A failed build leaves the running StatefulSet unchanged.
 
-The OpenShift profile explicitly selects the internal image registry so the Docker build output and deployed Git-tagged image stay aligned. Manifest validation rejects a mismatched build/container tag before deploying.
-
-The PVC mounts at `/data/metrics`, while `METRICS_RUNTIME_ROOT` points to its `/data/metrics/runtimes` subdirectory. The workspace path guard remains enabled. Startup/readiness probes check `/api/runs`; liveness checks `/api/config`. Deployment validation rejects an invalid workspace path or a readiness probe that checks only static configuration.
+One replica keeps run history, source snapshots, saved provider sessions and chart history on the existing `impact-hours-data` PVC. The proxy exposes the app through a re-encrypted Route and checks project workspace permissions; no cluster-wide OAuthClient or auth-delegator binding is needed. The image supports arbitrary non-root UIDs and a read-only root filesystem.
 
 ```bash
-# Build and validate manifests locally; no cluster changes.
-./deploy-openshift.sh --generate
+# Package and validate only (default); no cluster changes.
+./deploy-openshift.sh --generate --namespace doh-dev
 
-# After oc login, create storage, build the image and deploy.
-./deploy-openshift.sh --deploy --namespace impact-metrics
+# After oc login, build and deploy; rerun this command to apply updates.
+./deploy-openshift.sh --deploy --namespace doh-dev
 
-# Private UI and sign-in desktop on localhost, using oc authentication.
-./deploy-openshift.sh --connect --namespace impact-metrics
+# Print the HTTPS app URL; no persistent terminal/tunnel needed.
+./deploy-openshift.sh --url --namespace doh-dev
 ```
 
-Open `http://127.0.0.1:8097` for the app and `http://127.0.0.1:6080/vnc.html` for interactive SharePoint/LinkedIn sign-in. The desktop service binds pod loopback and is not exposed by a Service. The supplied ingress NetworkPolicy blocks network access to the workspace; the approved `oc port-forward` tunnel remains available. Each instance represents one reporting workspace, not a multi-user service. See the [OpenShift guide](docs/site/deploy/openshift.md) for prerequisites, storage and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for external image builds and cluster-specific volume permissions.
+Open the printed Route and sign in to OpenShift. The Connect buttons show the local helper command for IBM/LinkedIn. Run `npm ci --prefix src/main/webui` once in your local checkout, copy that command, and complete the provider sign-in in its dedicated Chrome window. The pod verifies access before saving the session; passwords stay on provider pages. OpenShift login cookies are excluded from provider transfer. See the [OpenShift guide](docs/site/deploy/openshift.md) for the complete flow, permissions and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for other clusters.
 
-Deployment verification includes generated-manifest checks, mocked CLI regression tests, and a local container smoke test covering arbitrary UID, read-only root, HTTP serving and headed/headless Chromium. A live cluster deployment is a separate operation.
+Deployment checks cover build ordering, immutable image pinning, Route authentication, credential isolation, provider session validation, storage, probes and packaged instructions. The obsolete VNC stack and unused JVM/native Dockerfile templates have been removed.
 
 To build the documentation locally:
 
@@ -205,6 +203,8 @@ The shared **Connect SharePoint** control normally opens AvocadoBot in a separat
 Each read has its own progress, error, and ready state; failure or link editing invalidates only that workbook's snapshot. Preparation requires both valid independent snapshots. The cache holds five snapshots for 30 minutes; consumed/expired tokens return HTTP 410 and require rereading. Original bytes are stored as `rawdata/original.xlsx` and `rawdata/trailing-original.xlsx` with separate filenames, canonical source URLs without sharing queries, and SHA-256 hashes. All private data stays in ignored runtimes storage. CSVs are generated only for requested downloads.
 
 The indeterminate progress UI shows actual download/validation/sheet-inspection stages and elapsed time. It does not invent a percentage. HTTP 401 requires reconnecting; HTTP 403, missing files, invalid workbooks and timeouts have specific errors. Chrome is required locally; `METRICS_SHAREPOINT_BROWSER_CHANNEL`, `METRICS_SHAREPOINT_BROWSER_EXECUTABLE`, and `METRICS_SHAREPOINT_ENABLED` configure the integration. Reset preserves saved sessions. Passwords/cookies are never sent to model agents.
+
+The OpenShift profile selects `metrics.browser-login-mode=LOCAL_HELPER`. `POST /api/browser-sessions/{sharepoint|linkedin}` accepts the helper’s provider storage state only behind the authenticated Route, returns verification status without session values, and is unavailable in local-browser mode.
 
 Endpoints: `GET/POST /api/sharepoint/session`; `POST /api/workbooks/from-sharepoint` with JSON `url`; `POST /api/runs/from-sharepoint` with multipart `sourceToken`, `historySourceToken`, `month` and `currentSheet`. Historical sheet selection is server-derived. `GET /api/runs` lists saved runs; POST CSV import, `/api/runs/from-runtimes`, `/api/runs/from-workbook`, and `/api/workbooks/inspect` have been removed. Input/result download endpoints remain available, including audit snapshots named AvocadoBot 2.csv and trailing_90-day.csv. Existing runs preserve their frozen instructions; create a new run for the two-source contract.
 

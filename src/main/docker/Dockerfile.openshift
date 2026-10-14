@@ -4,13 +4,13 @@ FROM eclipse-temurin:25-jre-noble
 
 USER 0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    unzip xvfb x11vnc novnc websockify openbox x11-utils ca-certificates curl \
+    unzip ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY target/quarkus-app/lib/ /deployments/lib/
-COPY target/quarkus-app/*.jar /deployments/
-COPY target/quarkus-app/app/ /deployments/app/
-COPY target/quarkus-app/quarkus/ /deployments/quarkus/
+COPY lib/ /deployments/lib/
+COPY *.jar /deployments/
+COPY app/ /deployments/app/
+COPY quarkus/ /deployments/quarkus/
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/metrics-browsers PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN java -cp '/deployments/lib/main/*' com.microsoft.playwright.CLI install --with-deps chromium \
@@ -27,13 +27,13 @@ RUN java -cp '/deployments/lib/main/*' com.microsoft.playwright.CLI install --wi
     && chmod 755 /opt/metrics-start.sh \
     && chgrp -R 0 /deployments /opt/metrics-browsers /opt/metrics-instructions /data \
     && chmod -R g=u /deployments /opt/metrics-browsers /opt/metrics-instructions /data \
+    && apt-get purge -y xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 ENV QUARKUS_PROFILE=openshift \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     METRICS_RUNTIME_ROOT=/data/metrics/runtimes \
-    HOME=/data/metrics/.home \
-    DISPLAY=:99
+    HOME=/data/metrics/.home
 
 WORKDIR /deployments
 EXPOSE 8097

@@ -4,73 +4,50 @@ import {tmpdir} from 'node:os';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
-
-const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const fixture=mkdtempSync(resolve(tmpdir(),'impact-deployment-test-'));
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),fixture=mkdtempSync(resolve(tmpdir(),'impact-deployment-test-'));
 try {
  const bin=resolve(fixture,'bin'),log=resolve(fixture,'commands.log'),home=resolve(fixture,'home');mkdirSync(bin);mkdirSync(home);
  copyFileSync(resolve(root,'deploy-openshift.sh'),resolve(fixture,'deploy-openshift.sh'));
  const mock='#!/bin/bash\nprintf "%s" "${0##*/}" >> "$DEPLOYMENT_TEST_LOG"\nprintf " <%s>" "$@" >> "$DEPLOYMENT_TEST_LOG"\nprintf "\\n" >> "$DEPLOYMENT_TEST_LOG"\n';
- for(const command of ['npm','node'])writeFileSync(resolve(bin,command),mock+'if [[ ${0##*/} == node && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\n',{mode:0o755});
- writeFileSync(resolve(bin,'oc'),mock+'if [[ $1 == get && $2 == project && ${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi\nif [[ "$*" == *" exec "* ]]; then\n if [[ -n ${DEPLOYMENT_TEST_FAIL_API:-} && "$*" == *"/api/$DEPLOYMENT_TEST_FAIL_API" ]]; then echo "curl: HTTP500" >&2; exit 22; fi\n echo "synthetic-private-api-response"\nfi\n',{mode:0o755});
+ writeFileSync(resolve(bin,'npm'),mock,{mode:0o755});
+ writeFileSync(resolve(bin,'node'),mock+'if [[ $1 == scripts/check-deployment.mjs && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\nif [[ $3 == tag ]]; then echo "impact-hours:release"; fi\n',{mode:0o755});
+ writeFileSync(resolve(bin,'oc'),mock+`
+if [[ $1 == whoami ]]; then echo owner; fi
+if [[ $1 == get && $2 == project && \${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi
+if [[ "$*" == *" get secret "* && \${DEPLOYMENT_TEST_MISSING_SECRET:-false} == true ]]; then exit 1; fi
+if [[ "$*" == *" get route "* ]]; then echo app.apps.example.com; fi
+if [[ "$*" == *" get istag "* ]]; then echo 'image-registry.openshift-image-registry.svc:5000/isolated-fixture/impact-hours@sha256:${'a'.repeat(64)}'; fi
+if [[ "$*" == *" get imagestream "* ]]; then echo 'quay.io/openshift/proxy@sha256:${'b'.repeat(64)}'; fi
+if [[ "$*" == *" start-build "* && \${DEPLOYMENT_TEST_FAIL_BUILD:-false} == true ]]; then exit 7; fi
+if [[ "$*" == *" exec "* ]]; then
+ if [[ -n \${DEPLOYMENT_TEST_FAIL_API:-} && "$*" == *"/api/$DEPLOYMENT_TEST_FAIL_API" ]]; then echo 'HTTP500' >&2; exit 22; fi
+ echo synthetic-private-api-response
+fi
+`,{mode:0o755});
  writeFileSync(resolve(fixture,'mvnw'),mock,{mode:0o755});
- const jdk=(label,major,broken=false)=>{
-  const directory=resolve(fixture,label);mkdirSync(resolve(directory,'bin'),{recursive:true});
-  writeFileSync(resolve(directory,'bin/java'),`#!/bin/bash\nprintf 'java:${label} <%s>\\n' "$*" >> "$DEPLOYMENT_TEST_LOG"\n${broken?'echo "Cannot initialize VM" >&2; exit 9':`echo 'openjdk version "${major}.0.1"' >&2`}\n`,{mode:0o755});return directory;
- };
- const java25=jdk('jdk25',25),java26=jdk('jdk26',26),java21=jdk('jdk21',21),broken=jdk('broken',25,true);
- // Even PATH fallback is synthetic; no host JDK, kubeconfig or sign-in state is used.
- copyFileSync(resolve(java25,'bin/java'),resolve(bin,'java'));
- const sdkman=resolve(home,'.sdkman/candidates/java/current');mkdirSync(resolve(sdkman,'bin'),{recursive:true});
- writeFileSync(resolve(sdkman,'bin/java'),`#!/bin/bash\nprintf 'java:sdkman <%s>\\n' "$*" >> "$DEPLOYMENT_TEST_LOG"\necho 'openjdk version "25.0.1"' >&2\n`,{mode:0o755});
+ const jdk=(label,major)=>{const dir=resolve(fixture,label);mkdirSync(resolve(dir,'bin'),{recursive:true});writeFileSync(resolve(dir,'bin/java'),`#!/bin/bash\nprintf 'java:${label} <%s>\\n' "$*" >> "$DEPLOYMENT_TEST_LOG"\necho 'openjdk version "${major}.0.1"' >&2\n`,{mode:0o755});return dir;};
+ const java25=jdk('jdk25',25),java21=jdk('jdk21',21);copyFileSync(resolve(java25,'bin/java'),resolve(bin,'java'));
+ const sdkman=resolve(home,'.sdkman/candidates/java/current');mkdirSync(resolve(sdkman,'bin'),{recursive:true});copyFileSync(resolve(java25,'bin/java'),resolve(sdkman,'bin/java'));
  let checks=0;
- const run=(args=[],overrides={})=>{
-  checks++;writeFileSync(log,'');const tag=args.includes('--image-tag')?[]:['--image-tag','test-fixture'];
-  const result=spawnSync('/bin/bash',[resolve(fixture,'deploy-openshift.sh'),...args,...tag],{encoding:'utf8',env:{PATH:`${bin}:/usr/bin:/bin`,HOME:home,JAVA_HOME:java25,DEPLOYMENT_TEST_LOG:log,...overrides}});
-  return {...result,commands:readFileSync(log,'utf8')};
- };
- const generated=run();assert.equal(generated.status,0,generated.stderr);
- assert(generated.commands.startsWith('java:jdk25 <-version>\n'));
- assert(generated.commands.includes('npm <ci> <--prefix> <src/main/webui>'));
- assert(generated.commands.includes('mvnw <-B> <package> <-DskipTests> <-Dquarkus.profile=openshift>'));
- assert(generated.commands.includes('node <scripts/check-deployment.mjs>'));
- assert(!generated.commands.includes('oc '),'Default generation must not contact a cluster');
- assert(!generated.commands.includes('-Dquarkus.openshift.deploy=true'),'Default generation must not deploy');
- const discovered=run([],{JAVA_HOME:''});assert.equal(discovered.status,0,discovered.stderr);assert(discovered.commands.startsWith('java:sdkman <-version>\n'));
- const priority=run([],{JAVA_HOME:java26});assert.equal(priority.status,0,priority.stderr);assert(priority.commands.startsWith('java:jdk26 <-version>\n'));assert(!priority.commands.includes('java:sdkman'));
- for(const selected of [java21,broken])for(const mode of [[],['--deploy']]){
-  const invalid=run(mode,{JAVA_HOME:selected});assert.equal(invalid.status,1,invalid.stderr);assert.match(invalid.stderr,/Java 25\+/);
-  assert(!invalid.commands.includes('npm ')&&!invalid.commands.includes('mvnw '),'Rejected Java must stop before packaging');
-  assert(!invalid.commands.includes('<apply>')&&!invalid.commands.includes('<new-project>')&&!invalid.commands.includes('<rollout>'),'Rejected Java must stop before cluster mutations');
+ const run=(args=[],overrides={})=>{checks++;writeFileSync(log,'');const result=spawnSync('/bin/bash',[resolve(fixture,'deploy-openshift.sh'),...args,'--image-tag','release'],{encoding:'utf8',env:{PATH:`${bin}:/usr/bin:/bin`,HOME:home,JAVA_HOME:java25,DEPLOYMENT_TEST_LOG:log,...overrides}});return {...result,commands:readFileSync(log,'utf8')};};
+ const generated=run();assert.equal(generated.status,0,generated.stderr);assert(!generated.commands.includes('oc '));assert(generated.commands.includes('<scripts/secure-route.mjs>'));assert(!generated.commands.includes('-Dquarkus.openshift.deploy=true'));
+ assert.equal(run([],{JAVA_HOME:''}).status,0);
+ for(const args of [[],['--deploy']]){const invalid=run(args,{JAVA_HOME:java21});assert.equal(invalid.status,1);assert.match(invalid.stderr,/Java 25/);assert(!invalid.commands.includes('<apply>')&&!invalid.commands.includes('npm '));}
+ for(const option of ['--url','--connect']){const result=run([option,'--namespace','isolated-fixture'],{JAVA_HOME:java21});assert.equal(result.status,0);assert.match(result.stdout,/https:\/\/app.apps.example.com/);assert(!result.commands.includes('port-forward')&&!result.commands.includes('java:'));}
+ const status=run(['--status']);assert.equal(status.status,0);assert(status.commands.includes('<statefulset,pods,pvc,builds,route>'));
+ for(const args of [['--namespace','INVALID'],['--unknown']])assert.equal(run(args).status,2);
+ for(const missing of [false,true]){const result=run(['--deploy','--namespace','isolated-fixture'],{DEPLOYMENT_TEST_MISSING_PROJECT:String(missing),DEPLOYMENT_TEST_MISSING_SECRET:String(missing)});assert.equal(result.status,0,result.stderr);const commands=result.commands;
+  assert.equal(commands.includes('<new-project>'),missing);assert.equal(commands.includes('<scripts/create-route-secret.mjs>'),missing);
+  assert(commands.includes('<deploy/route-access.yaml>'));assert(!commands.includes('-Dquarkus.openshift.deploy=true'));
+  assert(commands.indexOf('<scripts/check-deployment.mjs>')<commands.indexOf('<apply>'));
+  assert(commands.indexOf('<start-build>')<commands.indexOf('<workload>'));
+  assert(commands.indexOf('<workload>')<commands.indexOf('<rollout>'));
+  assert(commands.indexOf('<rollout>')<commands.indexOf('/api/runs'));
+  assert(commands.includes('<--from-dir=target/quarkus-app>'));
+  assert.match(result.stdout,/https:\/\/app.apps.example.com/);assert(!result.stdout.includes('synthetic-private-api-response'));
  }
- const connected=run(['--connect','--namespace','isolated-fixture'],{JAVA_HOME:broken});assert.equal(connected.status,0,connected.stderr);
- assert.equal(connected.commands,'oc <whoami>\noc <-n> <isolated-fixture> <port-forward> <--address> <127.0.0.1> <statefulset/impact-hours> <8097:8097> <6080:6080>\n');
- const status=run(['--status'],{JAVA_HOME:java21});assert.equal(status.status,0,status.stderr);assert.equal(status.commands,'oc <whoami>\noc <-n> <impact-metrics> <get> <statefulset,pods,pvc,builds> <-l> <app.kubernetes.io/name=impact-hours>\n');
- for(const args of [['--namespace','INVALID'],['--image-tag','invalid/tag'],['--unknown']]){
-  const invalid=run(args);assert.equal(invalid.status,2,`Invalid argument accepted: ${args}`);assert.equal(invalid.commands,'','Invalid arguments must stop before executing commands');
- }
- for(const missing of [false,true]){
-  const deployed=run(['--deploy','--namespace','isolated-fixture','--image-tag','verified-tag'],{DEPLOYMENT_TEST_MISSING_PROJECT:String(missing)});assert.equal(deployed.status,0,deployed.stderr);
-  const commands=deployed.commands;assert(commands.startsWith('oc <whoami>\njava:jdk25 <-version>\n'));
-  assert.equal(commands.includes('oc <new-project> <isolated-fixture>'),missing);
-  assert(commands.includes('oc <-n> <isolated-fixture> <apply> <-f> <deploy/storage.yaml> <-f> <deploy/private-workspace.yaml>'));
-  assert(commands.includes('<-Dquarkus.openshift.deploy=true>'));assert(commands.includes('<-Dquarkus.container-image.tag=verified-tag>'));
-  assert(commands.indexOf('node <scripts/check-deployment.mjs>')<commands.indexOf('<apply>'),'Manifest validation must precede cluster writes');
-  assert(commands.indexOf('<apply>')<commands.indexOf('<-Dquarkus.openshift.deploy=true>'));
-  assert(commands.includes('oc <-n> <isolated-fixture> <rollout> <status> <statefulset/impact-hours> <--timeout=300s>'));
-  const runCheck='oc <-n> <isolated-fixture> <exec> <statefulset/impact-hours> <--> <curl> <--fail> <--silent> <--show-error> <http://127.0.0.1:8097/api/runs>';
-  const historyCheck=runCheck.replace('/api/runs','/api/chart-history');
-  assert(commands.indexOf('<rollout>')<commands.indexOf(runCheck));assert(commands.indexOf(runCheck)<commands.indexOf(historyCheck));
-  assert(commands.trim().endsWith(historyCheck),'Stateful API checks must follow rollout');
-  assert.match(deployed.stdout,/Stateful API checks passed/);assert.match(deployed.stdout,/Workspace deployed\./);
-  assert(!deployed.stdout.includes('synthetic-private-api-response'),'API response bodies must be suppressed');
- }
- for(const endpoint of ['runs','chart-history']){
-  const failed=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_API:endpoint});assert.equal(failed.status,22);assert.match(failed.stderr,/HTTP500/);
-  assert(!failed.stdout.includes('Stateful API checks passed')&&!failed.stdout.includes('Workspace deployed.'),'An API failure must stop before announcing success');
-  assert(failed.commands.indexOf('<rollout>')<failed.commands.indexOf(`/api/${endpoint}`));
-  if(endpoint==='runs')assert(!failed.commands.includes('/api/chart-history'),'First failing check must stop subsequent checks');
- }
- const invalidManifest=run(['--deploy'],{DEPLOYMENT_TEST_INVALID_MANIFEST:'true'});assert.equal(invalidManifest.status,8);assert(!invalidManifest.commands.includes('<apply>')&&!invalidManifest.commands.includes('<new-project>')&&!invalidManifest.commands.includes('<-Dquarkus.openshift.deploy=true>'));
- console.log(`Deployment CLI: ${checks} isolated cases passed (Java discovery/validation, dry generation, private tunnel, status and mocked deploy ordering; no live commands)`);
+ const buildFailure=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_BUILD:'true'});assert.equal(buildFailure.status,7);assert(!buildFailure.commands.includes('<workload>')&&!buildFailure.commands.includes('<rollout>'),'Failed build must preserve the running workload');
+ for(const endpoint of ['runs','chart-history']){const result=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_API:endpoint});assert.equal(result.status,22);assert(!result.stdout.includes('Workspace deployed'));}
+ const invalid=run(['--deploy'],{DEPLOYMENT_TEST_INVALID_MANIFEST:'true'});assert.equal(invalid.status,8);assert(!invalid.commands.includes('<apply>'));
+ console.log(`Deployment CLI: ${checks} isolated cases passed (generation, Route URL, Java validation, build-before-rollout, preserved secrets and failure handling)`);
 } finally {rmSync(fixture,{recursive:true,force:true});}

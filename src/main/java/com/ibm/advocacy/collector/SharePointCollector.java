@@ -27,14 +27,19 @@ public class SharePointCollector {
     private boolean allowed(String host){return host!=null&&(allowedHost.equalsIgnoreCase(host)||siteHost.equalsIgnoreCase(host));}
     @ConfigProperty(name="metrics.sharepoint.browser-channel",defaultValue="chrome") String channel;
     @ConfigProperty(name="metrics.sharepoint.browser-executable",defaultValue="") Optional<String> executable;
+    @ConfigProperty(name="metrics.browser-login-mode",defaultValue="LOCAL_BROWSER") String loginMode="LOCAL_BROWSER";
+    @Inject com.fasterxml.jackson.databind.ObjectMapper mapper;
     private final ExecutorService browserWorker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy=new AtomicBoolean();
     private volatile String status="NOT_CONNECTED",message="Connect SharePoint to sign in with your IBM account.";
     private volatile String downloadStage="IDLE";
+    @jakarta.annotation.PostConstruct void restore() throws Exception {
+        if("LOCAL_HELPER".equals(loginMode)&&Files.isRegularFile(workspace.path(".sessions/sharepoint-auth.json"))){status="CONNECTED";message="Saved SharePoint session restored. Workbook requests check that access is still valid.";}
+    }
     public void inspectionStage(String stage){downloadStage=stage;}
     public record Workbook(byte[] bytes,String filename,String sourceUrl) {}
     @jakarta.annotation.PreDestroy void close(){browserWorker.shutdownNow();}
-    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost,"downloadStage",downloadStage);}
+    public Map<String,Object> session(){return Map.of("enabled",enabled,"busy",busy.get(),"status",status,"message",message,"host",allowedHost,"downloadStage",downloadStage,"loginMode",loginMode);}
 
     public URI fileUri(String value) {
         try {
@@ -80,6 +85,7 @@ public class SharePointCollector {
     }
     public Map<String,Object> connect(String url) {
         URI file=fileUri(url);if(!enabled)throw new BadRequestException("SharePoint import is disabled");
+        if("LOCAL_HELPER".equals(loginMode)){message="Use the local sign-in helper on your computer, then check the connection here.";return session();}
         if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint browser is busy. Finish sign-in or wait for the import.",409);
         status="CONNECTING";message="Sign in in the SharePoint browser window, including IBM SSO/MFA if requested.";
         browserWorker.submit(()->{
@@ -94,6 +100,20 @@ public class SharePointCollector {
                 status="NOT_CONNECTED";message="Sign-in timed out. Connect again.";
             }catch(Exception e){status="NOT_CONNECTED";message="Browser sign-in could not finish. Check Chrome installation, IBM access, and sign-in requirements, then reconnect.";}
             finally{busy.set(false);}
+        });return session();
+    }
+    public Map<String,Object> importSession(String url,com.fasterxml.jackson.databind.JsonNode state) {
+        URI file=fileUri(url);if(!enabled||!"LOCAL_HELPER".equals(loginMode))throw new BadRequestException("Remote browser sign-in is not enabled");
+        String filtered=BrowserSessionState.filter(mapper,state,Set.of(allowedHost,siteHost),"FedAuth");
+        if(!busy.compareAndSet(false,true))throw new ClientErrorException("SharePoint is busy. Wait for the current request.",409);
+        status="CONNECTING";message="Verifying the local sign-in in the server browser…";
+        browserWorker.submit(()->{
+            try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=chrome.newContext(new Browser.NewContextOptions().setStorageState(filtered))) {
+                if(!authenticated(browser,file.getHost()))throw new BadRequestException("Sign in to this workbook's SharePoint host");
+                requestWorkbook(browser,workbookApiUri(file));saveSession(browser);
+                status="CONNECTED";message="SharePoint session verified. You can read and publish workbooks.";
+            }catch(Exception e){status="NOT_CONNECTED";message="The server could not verify the transferred SharePoint session. Run the helper again or upload the workbook locally.";}
+            finally{busy.set(false);downloadStage="IDLE";}
         });return session();
     }
     /** Uses the browser cookie jar but reads the response instead of waiting for a download event. */

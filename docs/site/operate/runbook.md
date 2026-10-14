@@ -73,4 +73,4 @@ oc -n impact-metrics describe pod impact-hours-0
 oc -n impact-metrics logs statefulset/impact-hours
 ```
 
-For pending storage, inspect the PVC and storage-class binding mode. For pod startup failures, inspect image pulls, resource limits and volume permissions. The browser desktop uses `/tmp`; preserve its writable emptyDir even when the image root is read-only.
+For pending storage, inspect the PVC and storage-class binding mode. For pod startup failures, inspect image pulls, resource limits and volume permissions. Headless Chromium uses `/tmp`; preserve its writable emptyDir even when the image root is read-only.

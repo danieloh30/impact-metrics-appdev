@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {resources} from './deployment-resources.mjs';
+const app={kind:'StatefulSet',metadata:{name:'impact-hours',annotations:{'image.openshift.io/triggers':'mutable-trigger',other:'kept'}},spec:{template:{spec:{containers:[{name:'impact-hours',image:'mutable-tag'},{name:'proxy',image:'proxy-image'}]}}}};
+const build={kind:'BuildConfig',metadata:{name:'impact-hours'},spec:{output:{to:{kind:'ImageStreamTag',name:'impact-hours:release'}}}};
+const manifest={items:[app,build,{kind:'Service',metadata:{name:'impact-hours'}}]};
+const image='image-registry.openshift-image-registry.svc:5000/project/impact-hours@sha256:'+'a'.repeat(64);
+assert.equal(resources(manifest,'tag'),'impact-hours:release');
+assert.deepEqual(resources(manifest,'prerequisites').items.map(item=>item.kind),['BuildConfig','Service']);
+const deployed=resources(manifest,'workload',image).items;
+assert.equal(deployed.length,1);assert.equal(deployed[0].spec.template.spec.containers[0].image,image);
+assert.equal(deployed[0].spec.template.spec.containers[1].image,'proxy-image');
+assert.deepEqual(deployed[0].metadata.annotations,{other:'kept'});
+assert.equal(app.spec.template.spec.containers[0].image,'mutable-tag','Source manifests stay unchanged');
+for(const invalid of ['mutable:tag','registry.example.com/project/impact-hours@sha256:'+'a'.repeat(64),image.replace('impact-hours@','other-app@'),''])assert.throws(()=>resources(manifest,'workload',invalid),/immutable/);
+assert.throws(()=>resources([],'tag'),/Expected/);
+assert.throws(()=>resources([app,{...build,spec:{output:{to:{kind:'ImageStreamTag',name:'other:tag'}}}}],'tag'),/Invalid/);
+console.log('Build prerequisites, immutable image pinning and invalid-image rejection passed');

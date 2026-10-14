@@ -20,20 +20,33 @@ for(const target of ['openshift','kubernetes']){
  for(const path of ['/tmp','/dev/shm'])assert(container.volumeMounts.some(item=>item.mountPath===path));
  assert(container.env.some(item=>item.name==='QUARKUS_PROFILE'&&item.value==='openshift'));
  assert(container.env.some(item=>item.name==='METRICS_RUNTIME_ROOT'&&item.value==='/data/metrics/runtimes'),'Runtime workspace must use the guarded runtimes subdirectory');
- for(const probe of ['readinessProbe','startupProbe'])assert.equal(container[probe]?.httpGet?.path,'/api/runs','Readiness must validate a stateful API');
- assert.equal(container.livenessProbe?.httpGet?.path,'/api/config');
+ for(const probe of ['readinessProbe','startupProbe'])assert.equal(target==='openshift'?container[probe]?.exec?.command?.at(-1):container[probe]?.httpGet?.path,target==='openshift'?'http://127.0.0.1:8097/api/runs':'/api/runs','Readiness must validate a stateful API');
+ assert.equal(target==='openshift'?container.livenessProbe?.exec?.command?.at(-1):container.livenessProbe?.httpGet?.path,target==='openshift'?'http://127.0.0.1:8097/api/config':'/api/config');
  assert(container.resources?.limits?.memory,'Container memory limit is required');
  const service=items.find(item=>item.kind==='Service'&&item.metadata.name==='impact-hours');
- assert(service);assert(service.spec.ports.every(port=>['http',8097].includes(port.targetPort)),'Only the app HTTP port belongs in the Service');
- assert(!items.some(item=>['Route','Ingress'].includes(item.kind)),'Workspace access uses the authenticated port-forward');
+ assert(service);assert(service.spec.ports.every(port=>target==='openshift'?port.targetPort==='oauth':['http',8097].includes(port.targetPort)),'Only the authenticated proxy belongs in the OpenShift Service');
+ if(target==='kubernetes')assert(!items.some(item=>['Route','Ingress'].includes(item.kind)),'Kubernetes requires its own authenticated gateway');
  if(target==='openshift'){
+  const route=items.find(item=>item.kind==='Route'&&item.metadata.name==='impact-hours');
+  assert.equal(route?.spec.tls?.termination,'reencrypt');assert.equal(route.spec.tls.insecureEdgeTerminationPolicy,'Redirect');assert.equal(route.spec.port.targetPort,'oauth');
+  assert.equal(items.filter(item=>item.kind==='Route').length,1,'Only the protected app Route is allowed');
+  const proxy=pod.containers.find(item=>item.name==='oauth-proxy');assert(proxy,'OAuth proxy is required');
+  assert(container.env.some(item=>item.name==='QUARKUS_HTTP_HOST'&&item.value==='127.0.0.1'),'App must bind pod loopback to prevent proxy bypass');
+  assert(proxy.args.includes('--provider=openshift'));assert(proxy.args.some(arg=>arg.startsWith('--openshift-sar=')&&arg.includes('impact-hours-access')),'Workspace authorization is required');
+  assert(!proxy.args.some(arg=>arg.startsWith('--skip-auth')||arg.startsWith('--openshift-delegate-urls')),'Every app path requires browser OAuth authentication');
+  assert.equal(pod.automountServiceAccountToken,false,'App must not receive cluster credentials');
+  assert(!container.volumeMounts.some(mount=>mount.mountPath.includes('serviceaccount')));
+  assert(pod.volumes.some(volume=>volume.secret?.secretName==='impact-hours-route-cookie'));
+  assert(items.some(item=>item.kind==='RoleBinding'&&item.metadata.name==='impact-hours-access'));
   const build=items.find(item=>item.kind==='BuildConfig'&&(item.spec.strategy?.type==='Docker'||item.spec.strategy?.dockerStrategy));
   assert(build,'OpenShift Docker BuildConfig is required');
+  assert(build.spec.source?.dockerfile?.includes('COPY lib/ /deployments/lib/'),'Dockerfile must match the packaged binary build context');
+  assert(!build.spec.source.dockerfile.includes('COPY target/'),'Repository paths must not be used in the packaged build context');
   assert.equal(build.spec.output.to.kind,'ImageStreamTag');
   assert.equal(build.spec.output.to.name,container.image.split('/').at(-1),'Build output tag must match the deployed container image');
   assert(container.image.startsWith('image-registry.openshift-image-registry.svc:5000/'),'OpenShift app must use its internal registry');
  }
- console.log(`${target}: stateful workspace, probes, private access and persistent storage validated`);
+ console.log(`${target}: stateful workspace, probes, protected access and persistent storage validated`);
 }
 const archives=readdirSync(resolve(root,'target/quarkus-app/app')).filter(name=>name.endsWith('.jar'));
 assert.equal(archives.length,1,'Expected one application archive');
@@ -42,5 +55,5 @@ const archiveEntries=execFileSync('unzip',['-Z1',jar]).toString().split('\n').fi
 assert.deepEqual(archiveEntries.filter(name=>name.startsWith('metrics-instructions/')&&!name.endsWith('/')).sort(),['metrics-instructions/AGENTS.md','metrics-instructions/RUN.md'],'Only canonical instructions may be packaged');
 assert(!archiveEntries.some(name=>/(^|\/)(runtimes|\.sessions|\.uploads|runs)\//.test(name)),'Runtime profiles and run data must never be packaged');
 for(const name of ['RUN.md','AGENTS.md'])assert.equal(execFileSync('unzip',['-p',jar,`metrics-instructions/${name}`]).toString(),readFileSync(resolve(root,'runtimes',name),'utf8'));
-assert(execFileSync('unzip',['-p',jar,'metrics-container/start-container.sh']).toString().includes('127.0.0.1:6080'));
-console.log('Packaged instructions and private desktop entrypoint validated');
+const entrypoint=execFileSync('unzip',['-p',jar,'metrics-container/start-container.sh']).toString();assert(entrypoint.includes('exec java'));assert(!/Xvfb|x11vnc|websockify|6080/.test(entrypoint),'Remote desktop processes must not be packaged');
+console.log('Packaged instructions and headless container entrypoint validated');

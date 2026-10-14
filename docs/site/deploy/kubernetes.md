@@ -14,7 +14,7 @@ npm ci --prefix src/main/webui
   -Dquarkus.container-image.image=registry.example.internal/team/impact-hours:reviewed-tag
 
 podman build -f src/main/docker/Dockerfile.openshift \
-  -t registry.example.internal/team/impact-hours:reviewed-tag .
+  -t registry.example.internal/team/impact-hours:reviewed-tag target/quarkus-app
 podman push registry.example.internal/team/impact-hours:reviewed-tag
 ```
 
@@ -25,7 +25,7 @@ The `openshift` runtime profile supplies the browser and storage settings for bo
 ```bash
 kubectl create namespace impact-metrics --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n impact-metrics apply -f deploy/storage.yaml \
-  -f deploy/private-workspace.yaml \
+  -f deploy/workspace-isolation.yaml \
   -f target/kubernetes/kubernetes.yml
 kubectl -n impact-metrics rollout status statefulset/impact-hours
 ```
@@ -34,21 +34,21 @@ Configure an image pull secret if required by the registry. The claim uses your 
 
 The pod runs as a non-root user. On platforms without OpenShift's namespace UID/group assignment, configure a pod UID and volume group accepted by your storage provider and security policy. The image's default user is `1001:0`; the persistent volume must be writable by the pod's runtime identity. Keep the read-only root filesystem and writable `/tmp` and `/dev/shm` volumes.
 
-## Open the app and desktop
+## Access and account sign-in
 
 ```bash
 kubectl -n impact-metrics port-forward --address 127.0.0.1 \
-  statefulset/impact-hours 8097:8097 6080:6080
+  statefulset/impact-hours 8097:8097
 ```
 
-Use the same app and sign-in desktop URLs as in the [OpenShift guide](openshift.md#3-open-the-app-and-sign-in-desktop). The private NetworkPolicy requires a cluster network plugin that enforces NetworkPolicy. Keep one replica for each workspace.
+Open `http://127.0.0.1:8097`. The app uses the same [local account helper](openshift.md#3-connect-ibm-and-linkedin-from-your-computer); it accepts this loopback URL. The image contains no remote desktop. For tunnel-free access on Kubernetes, provide an authenticated HTTPS gateway and a matching ingress NetworkPolicy before exposing the Service. OpenShift OAuth resources are added only by the OpenShift script. The private NetworkPolicy requires a cluster network plugin that enforces NetworkPolicy. Keep one replica for each workspace.
 
 ## Platform boundary
 
 | Shared between platforms | OpenShift-specific |
 |---|---|
 | Packaged Quarkus app and web UI | Binary Docker build inside the cluster |
-| Chromium and private desktop | BuildConfig and ImageStream |
+| Headless Chromium and local account helper | BuildConfig and ImageStream |
 | StatefulSet, PVC and probes | Namespace UID/SCC assignment |
 | Runtime state and sessions | `oc` project and rollout commands |
 

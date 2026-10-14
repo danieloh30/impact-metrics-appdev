@@ -21,13 +21,20 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class LinkedInCollector {
     @ConfigProperty(name="metrics.linkedin.enabled") boolean enabled;
     @Inject RuntimeWorkspace workspace;
+    @Inject com.fasterxml.jackson.databind.ObjectMapper mapper;
+    @ConfigProperty(name="metrics.browser-login-mode",defaultValue="LOCAL_BROWSER") String loginMode="LOCAL_BROWSER";
+    @ConfigProperty(name="metrics.linkedin.browser-executable",defaultValue="") Optional<String> executable;
     private final ExecutorService loginWorker=Executors.newSingleThreadExecutor();
     private final AtomicBoolean connecting=new AtomicBoolean();
     private volatile String sessionMessage="Not connected";
+    @jakarta.annotation.PostConstruct void restore() throws Exception {
+        if("LOCAL_HELPER".equals(loginMode)&&java.nio.file.Files.isRegularFile(workspace.path(".sessions/linkedin-auth.json")))sessionMessage="Connected. Saved session restored; collection checks that access is still valid.";
+    }
     @jakarta.annotation.PreDestroy void close() { loginWorker.shutdownNow(); }
-    public Map<String,Object> session() { return Map.of("enabled",enabled,"connecting",connecting.get(),"message",sessionMessage); }
+    public Map<String,Object> session() { return Map.of("enabled",enabled,"connecting",connecting.get(),"message",sessionMessage,"loginMode",loginMode); }
     public Map<String,Object> connect() {
         if(!enabled)throw new jakarta.ws.rs.BadRequestException("LinkedIn browser collection is disabled in configuration");
+        if("LOCAL_HELPER".equals(loginMode)){sessionMessage="Use the local sign-in helper on your computer, then check the connection here.";return session();}
         if(!connecting.compareAndSet(false,true))throw new jakarta.ws.rs.ClientErrorException("A LinkedIn connection window is already open",409);
         sessionMessage="Sign in using the LinkedIn browser window";
         loginWorker.submit(()-> {
@@ -36,7 +43,7 @@ public class LinkedInCollector {
                     Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();page.navigate("https://www.linkedin.com/login");
                     long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
                     while(System.nanoTime()<deadline&&!Thread.currentThread().isInterrupted()) {
-                        if(page.url().startsWith("https://www.linkedin.com/feed")||page.url().startsWith("https://www.linkedin.com/company")) { sessionMessage="Connected. Retry the pending phase to collect fresh LinkedIn metrics.";return; }
+                        if(page.url().startsWith("https://www.linkedin.com/feed")||page.url().startsWith("https://www.linkedin.com/company")) { workspace.bytes(workspace.path(".sessions/linkedin-auth.json"),browser.storageState().getBytes(java.nio.charset.StandardCharsets.UTF_8));sessionMessage="Connected. Retry the pending phase to collect fresh LinkedIn metrics.";return; }
                         page.waitForTimeout(1000);
                     }
                     sessionMessage="Sign-in timed out. Connect again or enter measurements manually.";
@@ -46,11 +53,32 @@ public class LinkedInCollector {
         });
         return session();
     }
+    private Browser launch(Playwright playwright) {
+        var options=new BrowserType.LaunchOptions().setHeadless(true);
+        executable.filter(value->!value.isBlank()).ifPresent(value->options.setExecutablePath(java.nio.file.Path.of(value)));
+        return playwright.chromium().launch(options);
+    }
+    public Map<String,Object> importSession(com.fasterxml.jackson.databind.JsonNode state) {
+        if(!enabled||!"LOCAL_HELPER".equals(loginMode))throw new jakarta.ws.rs.BadRequestException("Remote browser sign-in is not enabled");
+        String filtered=BrowserSessionState.filter(mapper,state,Set.of("linkedin.com","www.linkedin.com"),"li_at");
+        if(!connecting.compareAndSet(false,true))throw new jakarta.ws.rs.ClientErrorException("LinkedIn is busy",409);
+        sessionMessage="Verifying the local sign-in in the server browser…";
+        loginWorker.submit(()->{synchronized(this){
+            try(Playwright playwright=Playwright.create();Browser chrome=launch(playwright);BrowserContext browser=chrome.newContext(new Browser.NewContextOptions().setStorageState(filtered))) {
+                Page page=browser.newPage();var response=page.navigate("https://www.linkedin.com/feed/",new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30_000));
+                if(response==null||!response.ok()||!page.url().startsWith("https://www.linkedin.com/feed"))throw new IOException("Sign-in rejected");
+                workspace.bytes(workspace.path(".sessions/linkedin-auth.json"),browser.storageState().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                sessionMessage="Connected. Retry pending collection to collect fresh LinkedIn metrics.";
+            }catch(Exception e){sessionMessage="The server could not verify the transferred LinkedIn session. Run the helper again or enter measurements manually.";}
+            finally{connecting.set(false);}
+        }});return session();
+    }
     public synchronized Measurement collect(URI uri) throws Exception {
         if(!enabled)throw new IOException("LinkedIn needs an authenticated analytics session; enter a fresh "+MetricCollectors.type(uri.toString())+" measurement");
-        if(!java.nio.file.Files.exists(workspace.path(".sessions/linkedin")))throw new IOException("Connect LinkedIn first, or enter a verified "+MetricCollectors.type(uri.toString())+" measurement manually");
+        boolean saved=java.nio.file.Files.isRegularFile(workspace.path(".sessions/linkedin-auth.json"));
+        if(!saved&&!java.nio.file.Files.exists(workspace.path(".sessions/linkedin")))throw new IOException("Connect LinkedIn first, or enter a verified "+MetricCollectors.type(uri.toString())+" measurement manually");
         if(!uri.getPath().matches("/(events|posts|feed/update|pulse)/.*"))throw new IOException("Unsupported LinkedIn URL");
-        try(Playwright playwright=Playwright.create();BrowserContext browser=playwright.chromium().launchPersistentContext(workspace.path(".sessions/linkedin"),new BrowserType.LaunchPersistentContextOptions().setHeadless(true))) {
+        try(Playwright playwright=Playwright.create();Browser chrome=saved?launch(playwright):null;BrowserContext browser=saved?chrome.newContext(new Browser.NewContextOptions().setStorageStatePath(workspace.path(".sessions/linkedin-auth.json"))):playwright.chromium().launchPersistentContext(workspace.path(".sessions/linkedin"),new BrowserType.LaunchPersistentContextOptions().setHeadless(true))) {
             Page page=browser.pages().isEmpty()?browser.newPage():browser.pages().getFirst();
             page.setDefaultTimeout(10000);page.navigate(uri.toString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30000));
             if(page.url().contains("login")||page.url().contains("authwall")||page.url().contains("checkpoint"))throw new IOException("LinkedIn login required; authenticate using the provided session launcher");

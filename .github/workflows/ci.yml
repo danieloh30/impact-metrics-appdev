@@ -59,6 +59,9 @@ jobs:
         run: |
           node scripts/test-deployment.mjs
           node scripts/test-container-entrypoint.mjs
+          node scripts/test-deployment-resources.mjs
+          node scripts/test-secure-route.mjs
+          node scripts/test-browser-session-helper.mjs
       - name: Generate and validate deployment resources without deploying
         run: ./deploy-openshift.sh --generate --image-tag ci-validation
       - name: Deployment manifest regression checks

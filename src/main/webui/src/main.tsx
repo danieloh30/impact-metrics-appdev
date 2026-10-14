@@ -12,6 +12,7 @@ import '@fontsource/ibm-plex-sans/600.css';
 import './style.css';
 import {WorkbookImport,type ImportDefaults} from './WorkbookImport';
 import {NextAction,importStart,type NextStep} from './NextAction';
+import {LocalSignInHelp} from './LocalSignInHelp';
 import {ProcessStatus} from './ProcessStatus';
 
 type Artifact={name:string;version:number;phase:number;rows:number;sha256:string};
@@ -79,6 +80,7 @@ function App(){
  const [acknowledge,setAcknowledge]=useState(false),[selected,setSelected]=useState('');
  const [sourceInput,setSourceInput]=useState<TrailingInput|null>(null),[inputMode,setInputMode]=useState(false),[duration,setDuration]=useState('');
  const [manual,setManual]=useState<Issue|null>(null),[value,setValue]=useState(''),[evidence,setEvidence]=useState('');
+ const [linkedInMode,setLinkedInMode]=useState('LOCAL_BROWSER');
  const [connection,setConnection]=useState(''),[linkedInConnecting,setLinkedInConnecting]=useState(false);
  const [linkedInStartedAt,setLinkedInStartedAt]=useState(0),[linkedInElapsed,setLinkedInElapsed]=useState(0),[linkedInCheckError,setLinkedInCheckError]=useState('');
  const linkedInRequests=useRef(0);
@@ -149,18 +151,18 @@ useEffect(()=>{
  const linkedInPreparation=linkedInUpcomingCount>0&&!connection.startsWith('Connected.')&&linkedInSkipped!==linkedInPromptKey&&!importing;
  const linkedInAttention=linkedInIssues.length>0&&!acknowledge&&!run?.issues.some(issue=>issue.blocking)&&!importing;
  const linkedInConnected=connection.startsWith('Connected.');
- function receiveLinkedInSession(session:{message?:string;connecting?:boolean}){if(typeof session.message!=='string')return;setConnection(session.message);setLinkedInConnecting(session.connecting===true);setLinkedInStartedAt(start=>session.connecting?start||Date.now():0);setLinkedInCheckError('');}
- async function checkLinkedIn(){const request=++linkedInRequests.current;const session=await api<{message:string;connecting?:boolean}>('/linkedin/session');if(request===linkedInRequests.current)receiveLinkedInSession(session);}
- useEffect(()=>{let alive=true;const request=++linkedInRequests.current;api<{message:string;connecting?:boolean}>('/linkedin/session').then(session=>{if(alive&&request===linkedInRequests.current)receiveLinkedInSession(session);}).catch(()=>{});return()=>{alive=false;};},[]);
+ function receiveLinkedInSession(session:{message?:string;connecting?:boolean;loginMode?:string}){if(typeof session.message!=='string')return;setLinkedInMode(session.loginMode||'LOCAL_BROWSER');setConnection(session.message);setLinkedInConnecting(session.connecting===true);setLinkedInStartedAt(start=>session.connecting?start||Date.now():0);setLinkedInCheckError('');}
+ async function checkLinkedIn(){const request=++linkedInRequests.current;const session=await api<{message:string;connecting?:boolean;loginMode?:string}>('/linkedin/session');if(request===linkedInRequests.current)receiveLinkedInSession(session);}
+ useEffect(()=>{let alive=true;const request=++linkedInRequests.current;api<{message:string;connecting?:boolean;loginMode?:string}>('/linkedin/session').then(session=>{if(alive&&request===linkedInRequests.current)receiveLinkedInSession(session);}).catch(()=>{});return()=>{alive=false;};},[]);
  useEffect(()=>{
   if(!linkedInStartedAt){setLinkedInElapsed(0);return;}
   const update=()=>setLinkedInElapsed(Math.floor((Date.now()-linkedInStartedAt)/1000));update();const timer=window.setInterval(update,1000);return()=>clearInterval(timer);
  },[linkedInStartedAt]);
  useEffect(()=>{
-  if(!linkedInAttention&&!linkedInConnecting&&!linkedInPreparation)return;
-  let alive=true;const check=async()=>{const request=++linkedInRequests.current;try{const session=await api<{message:string;connecting?:boolean}>('/linkedin/session');if(alive&&request===linkedInRequests.current)receiveLinkedInSession(session);}catch{if(alive&&request===linkedInRequests.current)setLinkedInCheckError('Connection status could not be refreshed. Automatic checks will retry; you can also check the connection below.');}};
+  if(!linkedInAttention&&!linkedInConnecting&&!linkedInPreparation&&!(linkedInMode==='LOCAL_HELPER'&&!linkedInConnected))return;
+  let alive=true;const check=async()=>{const request=++linkedInRequests.current;try{const session=await api<{message:string;connecting?:boolean;loginMode?:string}>('/linkedin/session');if(alive&&request===linkedInRequests.current)receiveLinkedInSession(session);}catch{if(alive&&request===linkedInRequests.current)setLinkedInCheckError('Connection status could not be refreshed. Automatic checks will retry; you can also check the connection below.');}};
   void check();const timer=window.setInterval(check,2500);return()=>{alive=false;clearInterval(timer);};
- },[run?.id,run?.phase,linkedInAttention,linkedInConnecting,linkedInPreparation]);
+ },[run?.id,run?.phase,linkedInAttention,linkedInConnecting,linkedInPreparation,linkedInMode,linkedInConnected]);
 useEffect(()=>{
  if(!run||busy||error||manual||resetOpen||deleteTarget||importing)return;
  const ready=run.status==='READY',clean=run.status==='AWAITING_APPROVAL'&&run.issues.length===0;
@@ -233,12 +235,13 @@ useEffect(()=>{
     {linkedInUpcoming>0&&<><div className="eyebrow">BEFORE PHASE {linkedInUpcoming} · METRIC COLLECTION</div><h2>{linkedInUpcomingCount>0?"LinkedIn setup before collection":"LinkedIn source check"}</h2>{linkedInUpcomingCount===0?<p className="linkedin-no-sources" role="status"><strong>No LinkedIn URLs found in the selected {linkedInUpcoming===1?"current":"trailing"} input rows.</strong> Processing starts automatically; sign-in is optional for these inputs. To collect LinkedIn metrics, add the post or event URL to the workbook’s resource column and prepare a new run.</p>:<p>{linkedInUpcomingCount} {linkedInUpcoming===1?'current':'trailing'} activities need LinkedIn metrics. Sign in once before Phase 1 or Phase 4; the saved session is reused. Live events need account access to Video Views.</p>}</>}
     {!linkedInAttention&&!linkedInPreparation&&!linkedInConnecting&&linkedInUpcoming===0&&<p className="linkedin-context">LinkedIn is used in Phase 1 and Phase 4 for post reactions and Live event Video Views. Connect when the workflow highlights this section; other activity sources do not need it.</p>}
     {linkedInAttention&&<><div className="eyebrow">PHASE {run?.phase} · LINKEDIN COLLECTION</div><h2>{linkedInConnected?'LinkedIn is connected — retry collection':'LinkedIn metrics need your attention'}</h2><p>{linkedInIssues.length} unresolved {linkedInIssues.length===1?'activity':'activities'}. Posts use reactions; Live events use Video Views. Event analytics require access through your LinkedIn account.</p></>}
-    {linkedInConnecting&&<div className="linkedin-progress"><div role="status"><span className="spinner"/><strong>Waiting for LinkedIn sign-in</strong><span className="linkedin-elapsed">{linkedInElapsed}s elapsed</span></div><p>Complete sign-in in the LinkedIn browser window. This page checks automatically every few seconds and updates when the session is saved.</p><small>The sign-in window allows up to five minutes. If it closes or sign-in times out, connect again. Reloading this page resumes connection checks.</small>{linkedInElapsed>=60&&<p className="linkedin-help">Still waiting? Bring the LinkedIn window forward and finish any verification challenge. If you are already signed in, use Check LinkedIn connection.</p>}</div>}
-    <div className="import-actions"><button id="connect-linkedin" type="button" className={(linkedInAttention||linkedInPreparation)&&!linkedInConnected?'primary':'secondary'} disabled={busy||linkedInConnecting} onClick={()=>perform(async()=>{linkedInRequests.current++;const session=await api<{message:string;connecting?:boolean}>('/linkedin/session',post());linkedInRequests.current++;receiveLinkedInSession(session);})}>{linkedInConnecting?'LinkedIn sign-in in progress…':'Connect LinkedIn for metric collection'}</button>
+    {linkedInConnecting&&<div className="linkedin-progress"><div role="status"><span className="spinner"/><strong>{linkedInMode==='LOCAL_HELPER'?'Verifying LinkedIn access in the server':'Waiting for LinkedIn sign-in'}</strong><span className="linkedin-elapsed">{linkedInElapsed}s elapsed</span></div><p>{linkedInMode==='LOCAL_HELPER'?'The helper has transferred your session. Keep its terminal open until the server verifies access.':'Complete sign-in in the LinkedIn browser window. This page checks automatically every few seconds and updates when the session is saved.'}</p><small>{linkedInMode==='LOCAL_HELPER'?'This page checks automatically and updates when verification finishes. If access is rejected, run the helper again.':'The sign-in window allows up to five minutes. If it closes or sign-in times out, connect again. Reloading this page resumes connection checks.'}</small>{linkedInMode!=='LOCAL_HELPER'&&linkedInElapsed>=60&&<p className="linkedin-help">Still waiting? Bring the LinkedIn window forward and finish any verification challenge. If you are already signed in, use Check LinkedIn connection.</p>}</div>}
+    <div className="import-actions"><button id="connect-linkedin" type="button" className={(linkedInAttention||linkedInPreparation)&&!linkedInConnected?'primary':'secondary'} disabled={busy||linkedInConnecting} onClick={()=>perform(async()=>{linkedInRequests.current++;const session=await api<{message:string;connecting?:boolean;loginMode?:string}>('/linkedin/session',post());linkedInRequests.current++;receiveLinkedInSession(session);})}>{linkedInConnecting?'LinkedIn sign-in in progress…':'Connect LinkedIn for metric collection'}</button>
     {linkedInAttention&&linkedInConnected&&<button id="retry-linkedin" type="button" className="primary" disabled={busy} onClick={()=>void retryCollection()}>Retry LinkedIn metric collection</button>}
     {connection&&<button id="check-linkedin" type="button" className="text-button" disabled={busy} onClick={()=>perform(checkLinkedIn)}>Check LinkedIn connection</button>}</div>
     {linkedInPreparation&&<button id="skip-linkedin-preparation" className="text-button" type="button" disabled={busy||linkedInConnecting} onClick={()=>setLinkedInSkipped(linkedInPromptKey)}>Continue without LinkedIn — review missing metrics later</button>}
     {connection&&!linkedInConnecting&&<p role="status" className={linkedInConnected?'linkedin-success':''}>{linkedInConnected?'LinkedIn session saved. Prepared inputs start automatically; retry unresolved collection in an active review phase.':connection}</p>}
+    {linkedInMode==='LOCAL_HELPER'&&!linkedInConnected&&<LocalSignInHelp provider="linkedin"/>}
     {linkedInCheckError&&<p className="linkedin-help" role="status">{linkedInCheckError}</p>}
     {linkedInAttention&&!linkedInConnecting&&<p>Sign-in does not guarantee analytics access; you can still enter a verified measurement below or retain unresolved items for follow-up.</p>}
    </section>

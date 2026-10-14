@@ -42,7 +42,7 @@ A restart interrupts an active worker. On loading that run, the app offers retry
 
 ## Browser placement
 
-On a laptop, the sign-in browsers run locally. On a cluster, they run in the pod's private desktop. SharePoint storage state and LinkedIn browser profiles are kept with the workspace. Collection can run headlessly after authentication; DZone uses the supplied background settings and reports blocked collection as a review item.
+On a laptop, sign-in browsers run locally. On OpenShift, a protected HTTPS Route serves the app and a dedicated local helper transfers only the selected provider's session. The pod verifies and stores provider state in the persistent workspace. Collection can run headlessly after authentication; DZone uses the supplied background settings and reports blocked collection as a review item.
 
 ## State layout
 

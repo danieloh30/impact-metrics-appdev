@@ -1,139 +1,119 @@
-# Deploy on Red Hat OpenShift
+# Deploy on OpenShift
 
-The approved **Quarkus OpenShift extension** generates the cluster resources and builds the browser-capable image inside OpenShift. No local Docker daemon is needed for this path.
+Open Impact Hours through an **HTTPS Route** and sign in with your OpenShift account. IBM SSO and LinkedIn sign-in run in a dedicated Chrome window on your computer; the pod verifies the transferred session and collects metrics headlessly. No app tunnel or VNC desktop is required.
 
-## What gets deployed
-
-| Component | Configuration |
-|---|---|
-| Application | One `impact-hours` StatefulSet replica |
-| Runtime | Java 25, packaged Quarkus fast-jar and web UI |
-| Browsers | Bundled Playwright Chromium, Xvfb and a private noVNC desktop |
-| Data | `impact-hours-data`, 10 GiB ReadWriteOnce PVC |
-| App port | 8097 inside the pod |
-| Sign-in desktop | 6080 on pod loopback only |
-| Access | Authenticated `oc port-forward`; no public Route |
-| Probes | Startup/readiness via stateful `/api/runs`; liveness via `/api/config` |
-| Security | Arbitrary non-root UID, no privilege escalation, read-only root filesystem |
-
-Use one instance per reporting workspace. Runs, sessions and worker ownership are local to that instance. Independent workspaces need separate namespaces/PVCs rather than additional replicas.
+## Workspace architecture
 
 ```mermaid
 %%{init: {'look':'handDrawn','theme':'neutral','themeVariables': {'lineColor':'#4A4035'}}}%%
 flowchart LR
-  subgraph Workstation
-    U([Operator browser])
-    T([Authenticated oc tunnel])
-    U --> T
-  end
-  subgraph OpenShift
-    B([Binary Docker build]) --> I([ImageStream])
-    I --> A([Impact Hours StatefulSet])
-    A --> V[(Persistent workspace)]
-    T -->|8097| A
-    T -->|6080| D([Private browser desktop])
-    D --- A
-  end
-  A --> S([SharePoint and LinkedIn])
-  A --> P([Public metric sources])
+    U([Your browser]) -->|HTTPS Route| O([OpenShift OAuth proxy])
+    O -->|Authorized workspace access| A([Impact Hours<br/>Quarkus agents])
+    H([Local sign-in helper]) -->|HTTPS · provider session| O
+    H -->|IBM SSO / LinkedIn| S([Provider sign-in])
+    A -->|Headless collection| M([SharePoint / LinkedIn])
+    A --> P[(Persistent workspace<br/>runs · sessions · charts)]
 
-  style U fill:#D4E6F1,stroke:#2E6B8A
-  style T fill:#D4E6F1,stroke:#2E6B8A
-  style B fill:#E8E0F0,stroke:#6B5B8A
-  style I fill:#E8E0F0,stroke:#6B5B8A
-  style A fill:#D8F0D8,stroke:#3D7A3D
-  style V fill:#E8DCC4,stroke:#6B5B45
-  style D fill:#D4E6F1,stroke:#2E6B8A
-  style S fill:#D4E6F1,stroke:#2E6B8A
-  style P fill:#D4E6F1,stroke:#2E6B8A
-  style Workstation fill:#F5F1E9,stroke:#B7A991
-  style OpenShift fill:#F5F1E9,stroke:#B7A991
-  linkStyle default stroke:#4A4035
+    style U fill:#D4E6F1,stroke:#2E6B8A
+    style H fill:#D4E6F1,stroke:#2E6B8A
+    style O fill:#E8E0F0,stroke:#6B5B8A
+    style A fill:#D8F0D8,stroke:#3D7A3D
+    style S fill:#E8DCC4,stroke:#6B5B45
+    style M fill:#E8DCC4,stroke:#6B5B45
+    style P fill:#E8DCC4,stroke:#6B5B45
 ```
 
-## Prerequisites
+One StatefulSet replica mounts the existing `impact-hours-data` PVC. Run history, frozen instructions, source snapshots, chart history and saved provider sessions survive image updates. The app is one shared reporting workspace for authorized project users.
 
-- Java 25, Node.js 22/npm, Git and the `oc` CLI on your workstation.
-- An OpenShift login with permission to create or update the project, builds, ImageStreams, StatefulSets, Services, PVCs and NetworkPolicies, plus pod exec for the post-deployment API checks and port-forward for private access.
-- A default storage class that can bind a ReadWriteOnce claim.
-- Build and workload egress for the runtime image, browser dependencies and the metric sources.
+The OAuth proxy uses a namespaced ServiceAccount OAuth client and checks permission to read the `impact-hours-access` ConfigMap. Deployment grants that permission to the deploying account; users with project view, edit or admin permissions may already have it. The Service exposes only the proxy, and the NetworkPolicy admits router traffic only on port 8443. TLS is re-encrypted between the router and proxy. The app binds to pod loopback so other pods cannot bypass the proxy, even when platform NetworkPolicies allow namespace traffic. The app container does not mount the proxy's Kubernetes token.
 
-The image uses Eclipse Temurin 25 on Ubuntu Noble to supply the browser libraries. It runs with the UID assigned by the OpenShift namespace. No `anyuid` or privileged SCC is required by the supplied configuration.
+This uses OpenShift's [service-account OAuth clients](https://docs.redhat.com/en/documentation/openshift_container_platform/4.13/html-single/authentication_and_authorization/index) and [OAuth proxy](https://github.com/openshift/oauth-proxy). It creates no cluster-wide OAuthClient or auth-delegator binding. You need project permission to create builds, ImageStreams, StatefulSets, Services, Routes, Secrets, ServiceAccounts, Roles, RoleBindings, PVCs and NetworkPolicies, plus pod exec for readiness checks. The default proxy image is read from the cluster's `openshift/oauth-proxy` ImageStream; set `METRICS_OAUTH_PROXY_IMAGE` to an approved image digest if that read is restricted.
 
-The profile aligns `quarkus.application.name` with the `impact-hours` resource name and selects the internal image registry. This keeps the BuildConfig output tag identical to the deployed container tag. Generation validates that match before any deployment.
+## 1. Build and validate
 
-## 1. Generate and inspect
-
-!!! note "Generation is the default"
-    Running `./deploy-openshift.sh` without an action flag only generates and validates files. **This command made no cluster changes** means that step succeeded. Use `--deploy` to actually build and deploy the workspace.
+Use Java 25+, Node.js 22/npm and an up-to-date `oc` CLI. Sign in to your cluster using its console's **Copy login command**. Never commit tokens or provider sessions.
 
 ```bash
-./deploy-openshift.sh --generate --namespace impact-metrics
+# Local packaging and validation only; no cluster writes.
+./deploy-openshift.sh --generate --namespace doh-dev
 ```
 
-This packages the app and validates the generated resources. It makes **no cluster changes**. The outputs are:
+The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) generates the build/workload resources. The script adds the protected Route configuration and validates the final manifests, single-replica storage, stateful API probes and packaged instructions. Generation uses a placeholder workspace owner; `--deploy` resolves the real owner with `oc whoami`.
 
-```text
-target/kubernetes/openshift.yml
-target/kubernetes/openshift.json
-target/kubernetes/kubernetes.yml
-target/kubernetes/kubernetes.json
-```
+The image contains Java 25, the compiled app, canonical instructions and Playwright Chromium. Xvfb, Openbox, VNC and noVNC are absent. The binary build context is **only `target/quarkus-app`**; local run data, credentials and browser profiles are excluded by construction. The Dockerfile's COPY paths are relative to this packaged context.
 
-`scripts/check-deployment.mjs` checks single-replica storage, probes, security context, private access and packaged instructions. The image build context contains the compiled application; local runs, uploaded workbooks and saved authentication are not copied into it.
-
-## 2. Build and deploy
+## 2. Deploy or update
 
 ```bash
-oc login <your-cluster-api>
-./deploy-openshift.sh --deploy --namespace impact-metrics
+./deploy-openshift.sh --deploy --namespace doh-dev
 ```
 
-For **Red Hat Developer Sandbox**, use the existing project assigned to your account rather than creating a new one. After signing in and selecting that project:
+The script:
+
+1. Packages the app and validates the secured generated resources.
+2. Keeps the existing PVC and reuses the OAuth cookie Secret.
+3. Applies build and Route prerequisites, then streams the packaged app with `oc start-build --follow --wait`.
+4. Resolves the built image's immutable digest and applies the StatefulSet with that digest.
+5. Waits for rollout and checks `/api/runs` and `/api/chart-history` inside the pod.
+6. Prints the HTTPS Route URL.
+
+A failed build stops before changing the running StatefulSet. Rerun the same command after pulling code changes; it builds and rolls out the new image without resetting history. The old tunnel command `--connect` is retained as an alias for `--url`; it now prints the Route URL and exits.
 
 ```bash
-oc project -q
-./deploy-openshift.sh --deploy --namespace "$(oc project -q)"
+./deploy-openshift.sh --url --namespace doh-dev
+./deploy-openshift.sh --status --namespace doh-dev
 ```
 
-The script uses the same SDKMAN/Homebrew JDK lookup as `dev.sh`, and checks Java 25+ before packaging or changing cluster resources. An explicitly configured `JAVA_HOME` takes precedence.
+For an existing project outside Sandbox, substitute its namespace. If the project does not exist, deployment attempts `oc new-project`; your account must have project creation permission.
 
-The script validates the generated resources first, creates the project if needed, applies storage and the private-workspace ingress policy, then invokes the Quarkus in-cluster Docker build and deployment. It waits for the StatefulSet rollout and checks `/api/runs` and `/api/chart-history` inside the pod before announcing success.
-
-Packaging skips tests; use a reviewed commit whose CI checks have passed. By default the image tag is the Git commit's short SHA. Set `--image-tag` when using a different approved tag.
+Optional settings:
 
 ```bash
-./deploy-openshift.sh --status --namespace impact-metrics
-oc -n impact-metrics logs -f bc/impact-hours
-oc -n impact-metrics logs -f statefulset/impact-hours
+# Grant workspace access to another explicitly selected account at deployment.
+METRICS_WORKSPACE_OWNER=your-openshift-user ./deploy-openshift.sh --deploy --namespace your-project
+# Pin an approved proxy image if cluster ImageStream discovery is unavailable.
+METRICS_OAUTH_PROXY_IMAGE=quay.io/your-team/oauth-proxy@sha256:YOUR_DIGEST \
+  ./deploy-openshift.sh --deploy --namespace your-project
 ```
 
-The PVC may remain pending with a `WaitForFirstConsumer` storage class until the first pod is scheduled.
+## 3. Connect IBM and LinkedIn from your computer
 
-## 3. Open the app and sign-in desktop
+Open the Route and complete **OpenShift sign-in**. Choose **Connect SharePoint** or **Connect LinkedIn**. The app shows the helper command with the correct Route and workbook URL.
+
+From your **local checkout**, install the helper's dependency once:
 
 ```bash
-./deploy-openshift.sh --connect --namespace impact-metrics
+npm ci --prefix src/main/webui
 ```
 
-Keep that terminal open. Use two browser tabs:
+Copy the command displayed in the app. For LinkedIn, it has this shape:
 
-- App: **[http://127.0.0.1:8097](http://127.0.0.1:8097)**
-- Desktop: **[http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale](http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale)**
+```bash
+node scripts/connect-browser-session.mjs \
+  --app 'https://YOUR_APP_ROUTE' --provider linkedin
+```
 
-Click **Connect SharePoint** or **Connect LinkedIn** in the app. The sign-in browser opens inside the pod; complete sign-in in the desktop tab. The app checks connection progress and saves the session on the PVC. Subsequent source reads and collection reuse it.
+For SharePoint, the displayed command also includes `--url 'YOUR_WORKBOOK_LINK'`.
 
-The desktop listeners are loopback-only and are not exposed through a Service or Route. The ingress NetworkPolicy isolates the workspace. Access requires permission to port-forward to its pod.
+1. The helper opens a dedicated local Chrome window. Sign in to the Impact Hours Route, then press Enter in its terminal.
+2. Complete IBM SSO/MFA or LinkedIn sign-in in the next tab, then press Enter to connect it.
+3. The helper sends only that provider's browser storage over HTTPS. OpenShift cookies and unrelated account state are excluded. It stores no session file on your computer and closes its browser when finished.
+4. The pod verifies access before saving the session to the PVC. Return to the app; connection checks refresh automatically, or click **Check connection**.
 
-!!! note "Local port already in use"
-    Stop local dev mode before opening this tunnel, or forward the app to another local port, for example `oc -n impact-metrics port-forward --address 127.0.0.1 statefulset/impact-hours 18097:8097 6080:6080`.
+Passwords are entered directly on provider pages and never sent to the app. Provider sessions are sensitive: they stay in the guarded workspace, are not returned by APIs and are not packaged into images. IBM organizational policy or LinkedIn verification can reject a transferred session; the UI reports verification failure and offers reconnection, workbook upload or manual measurement paths as appropriate. Completing LinkedIn sign-in does not grant event analytics permissions your account lacks.
 
-## Persistent state and upgrades
+Local `./dev.sh` behavior remains unchanged: its Connect buttons open browsers locally without needing the helper. OpenShift's helper is needed only when signing in or renewing an expired session; workbook reads, publishing and collection then reuse the saved session.
 
-The PVC mounts at `/data/metrics`; the application workspace is `/data/metrics/runtimes`. That guarded subdirectory contains runs, structured results, sessions and `.chart-history/`. Current `RUN.md` and `AGENTS.md` are installed there from the deployed image at startup; every existing run retains its frozen instruction copies. Startup and readiness probes exercise `/api/runs` so an invalid workspace cannot appear ready merely because the static UI loads.
+## Storage and recovery
 
-Finish or cancel active work before upgrading. Deploy the next reviewed commit with the same namespace and PVC. Interrupted work remains available for an explicit **Retry phase**; a new pod does not fabricate completion.
+The PVC mounts at `/data/metrics`; `METRICS_RUNTIME_ROOT` is `/data/metrics/runtimes`. Keep this subdirectory so the workspace guard remains effective. Startup/readiness probes execute a loopback request to `/api/runs` inside the app container, liveness checks `/api/config`, and the OAuth proxy has its own HTTPS health probe. Writable `/tmp` and `/dev/shm` volumes support headless Chromium while the image root remains read-only.
 
-For a team-authenticated ingress, integrate your approved gateway and adjust the network policy before exposing the app. The supplied deployment is a private reporting workspace and intentionally generates no public application Route.
+The image supports arbitrary non-root OpenShift UIDs. Keep one replica and preserve the existing PVC during upgrades. Deleting the StatefulSet does not remove this separately managed PVC; deleting the PVC removes the saved workspace.
 
-See the [official Quarkus OpenShift guide](https://quarkus.io/guides/deploying-to-openshift/) and [Docker build strategy guide](https://quarkus.io/guides/deploying-to-openshift-docker-howto/) for extension details.
+```bash
+oc -n doh-dev get pods,pvc,route
+oc -n doh-dev logs statefulset/impact-hours -c impact-hours --tail=50
+oc -n doh-dev logs statefulset/impact-hours -c oauth-proxy --tail=50
+```
+
+For Route errors, check proxy readiness, serving-certificate Secret creation and the Route ingress status. For a 403 after sign-in, verify the account's access to `impact-hours-access`. Reconnecting provider sessions does not release SharePoint editing locks; wait for AutoSave and close Excel editing sessions before publishing.

@@ -514,3 +514,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .report-attention h3 { margin:0 0 10px; }
 #reporting-detail { scroll-margin-top:220px; }
 .timeline a { color:inherit; }
+/* Account sign-in stays on the owner's computer in Route deployments. */
+.local-signin-help{padding:1.25rem;margin:1rem 0;border:1px solid #c4d4f7;border-radius:12px;background:#f3f7ff;max-width:100%;min-width:0}
+.local-signin-help h3{margin-top:0}
+.local-signin-help pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:1rem;border-radius:8px;background:#17263d;color:#edf3ff;font-size:.85rem}
+.local-signin-help li{margin:.5rem 0}

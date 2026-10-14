@@ -1,7 +1,9 @@
+# Kubernetes without an authenticated ingress remains private. An approved
+# gateway must supply authentication before relaxing this policy.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: impact-hours-private-workspace
+  name: impact-hours-workspace-isolation
 spec:
   podSelector:
     matchLabels:
