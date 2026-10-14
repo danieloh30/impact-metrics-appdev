@@ -17,7 +17,7 @@ export function secureRoute(manifest,namespace,owner,proxyImage) {
  app.spec.template.spec.containers=app.spec.template.spec.containers.filter(container=>container.name!=='oauth-proxy');
  app.spec.template.spec.volumes=(app.spec.template.spec.volumes??[]).filter(volume=>!volume.name.startsWith('oauth-'));
  const container=app.spec.template.spec.containers.find(container=>container.name==='impact-hours');
- container.env=(container.env??[]).filter(item=>item.name!=='QUARKUS_HTTP_HOST');container.env.push({name:'QUARKUS_HTTP_HOST',value:'127.0.0.1'});
+ container.env=(container.env??[]).filter(item=>!['QUARKUS_HTTP_HOST','METRICS_DZONE_LOCAL_COLLECTION_ENABLED'].includes(item.name));container.env.push({name:'QUARKUS_HTTP_HOST',value:'127.0.0.1'},{name:'METRICS_DZONE_LOCAL_COLLECTION_ENABLED',value:'true'});
  // NetworkPolicies are additive; Sandbox-wide allow policies can admit other
  // pods. Bind the app to pod loopback so they cannot bypass the OAuth proxy.
  for(const name of ['startupProbe','readinessProbe','livenessProbe']) {

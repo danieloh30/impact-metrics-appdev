@@ -125,6 +125,17 @@ A failure message with **HTTP 401** means the request was rejected as unauthenti
 
 Local `./dev.sh` behavior remains unchanged: its Connect buttons open browsers locally without needing the helper. OpenShift's helper is needed only when signing in or renewing an expired session; workbook reads, publishing and collection then reuse the saved session.
 
+## Collect DZone views from your computer
+
+If the pod's headless DZone collection returns HTTP 403, the OpenShift UI offers **Collect DZone views locally** beside LinkedIn. The next-action bar highlights it during a Phase 1 or Phase 4 review with pending DZone article views. This is public counter collection, not a DZone account connection: the helper sends measured totals, never browser cookies.
+
+1. Click **Collect DZone views locally** and copy its run-specific command into Terminal or PowerShell from your project checkout. Desktop Google Chrome and the same `npm ci --prefix src/main/webui` setup are required.
+2. Sign in to the OpenShift app in the helper's Chrome window, then press Enter. A separate isolated context reads each pending article's public Views counter.
+3. Review the printed whole-article totals and approximation labels, then type `yes` to save the batch. Any other answer cancels without changes.
+4. The app recalculates once and refreshes automatically. Existing author/tool attribution, previous baselines, and data review rules still apply. Use the helper again for a later collection phase if needed.
+
+The helper stops without saving if a page is blocked or its counter is ambiguous. It does not transfer cookies, change fingerprints, or solve challenges. Use the existing manual measurement action if the local browser cannot collect the counter. This feature defaults off in local dev mode and portable Kubernetes; the protected OpenShift deployment enables it.
+
 ## Storage and recovery
 
 The PVC mounts at `/data/metrics`; `METRICS_RUNTIME_ROOT` is `/data/metrics/runtimes`. Keep this subdirectory so the workspace guard remains effective. Startup/readiness probes execute a loopback request to `/api/runs` inside the app container, liveness checks `/api/config`, and the OAuth proxy has its own HTTPS health probe. Writable `/tmp` and `/dev/shm` volumes support headless Chromium while the image root remains read-only.

@@ -239,6 +239,38 @@ public synchronized byte[] input(String id,String name) throws Exception {
     public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence) throws Exception {
         return measured(id,version,rowId,value,type,evidence,false);
     }
+    public record LocalDZoneValue(@jakarta.validation.constraints.NotBlank String rowId,@jakarta.validation.constraints.NotBlank String value,@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=1000) String evidence) {}
+    public synchronized Run measuredDZone(String id,int version,List<LocalDZoneValue> values) throws Exception {
+        synchronized(lock(id)) {
+            Run run=get(id);
+            if(!run.status.equals("AWAITING_APPROVAL")||run.version!=version||!Set.of(1,4).contains(run.phase))throw new ClientErrorException("Local DZone collection requires the current phase-1 or phase-4 review",409);
+            if(values==null||values.isEmpty()||values.size()>100)throw new BadRequestException("Collect between 1 and 100 pending DZone resources");
+            Data source=workspace.data(id,run.phase==4?"trailing-source":"source");
+            Map<String,Measurement> pending=new LinkedHashMap<>();
+            for(LocalDZoneValue value:values) {
+                if(value==null)throw new BadRequestException("DZone measurement required");
+                Row row=source.rows.stream().filter(candidate->candidate.id.equals(value.rowId())).findFirst().orElseThrow(()->new BadRequestException("Unknown DZone source row"));
+                boolean issue=run.issues.stream().anyMatch(candidate->candidate.rowId().equals(row.id)&&!candidate.blocking()&&candidate.metricType().equals("VIEWS"));
+                if(!issue||(run.phase==1&&!DIGITAL.contains(row.type())))throw new BadRequestException("Only pending DZone view collection items can be updated");
+                java.net.URI uri;
+                try{uri=java.net.URI.create(row.get(URL));}catch(Exception invalid){throw new BadRequestException("Unsupported DZone source URL");}
+                if(!Set.of("http","https").contains(String.valueOf(uri.getScheme()).toLowerCase(Locale.ROOT))||uri.getUserInfo()!=null||uri.getPort()!=-1||!Set.of("dzone.com","www.dzone.com").contains(String.valueOf(uri.getHost()).toLowerCase(Locale.ROOT))||uri.getPath()==null||!uri.getPath().matches("/articles/[A-Za-z0-9_-]+/?"))throw new BadRequestException("Only public DZone article URLs can be collected locally");
+                if(value.value()==null||value.value().isBlank())throw new BadRequestException("DZone views are required");
+                BigDecimalValidation(value.value());var total=Calculations.number(value.value());
+                if(total.stripTrailingZeros().scale()>0||total.compareTo(new java.math.BigDecimal("1000000000000000"))>0)throw new BadRequestException("DZone article views must be a whole public count within the supported range");
+                if(value.evidence()==null||value.evidence().isBlank()||value.evidence().length()>1000)throw new BadRequestException("DZone collection evidence is required and limited to 1,000 characters");
+                String key=Calculations.urlKey(row.get(URL));
+                var measured=new Measurement(Calculations.format(total),"VIEWS",row.get(URL),Instant.now().toString(),value.evidence().strip(),true);
+                var previous=pending.putIfAbsent(key,measured);
+                if(previous!=null&&!previous.value().equals(measured.value()))throw new BadRequestException("Conflicting totals for the same DZone article");
+            }
+            // Validate the entire batch first. Raw whole-article totals use the existing
+            // attribution and baseline rules; no original row or baseline is changed.
+            run.measurements.putAll(pending);
+            Pipeline.event(run,"Local DZone collection","Recorded "+pending.size()+" verified public article totals; refreshing the phase review");
+            enqueue(run,run.phase);return run;
+        }
+    }
     public synchronized Run measured(String id,int version,String rowId,String value,String type,String evidence,boolean attributed) throws Exception {
         synchronized(lock(id)) {
             Run run=get(id);if(!run.status.equals("AWAITING_APPROVAL")||run.version!=version||!Set.of(1,2,4).contains(run.phase))throw new ClientErrorException("Measurements require the current phase-1, phase-2 or phase-4 review",409);

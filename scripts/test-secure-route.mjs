@@ -6,6 +6,7 @@ assert.deepEqual(secureRoute({items:result},'project','owner','proxy@sha256:'+'a
 const app=result.find(item=>item.kind==='StatefulSet'),pod=app.spec.template.spec,proxy=pod.containers[1];
 assert.equal(pod.automountServiceAccountToken,false);assert.equal(pod.containers[0].volumeMounts.length,0);
 assert(pod.containers[0].env.some(item=>item.name==='QUARKUS_HTTP_HOST'&&item.value==='127.0.0.1'));
+assert(pod.containers[0].env.some(item=>item.name==='METRICS_DZONE_LOCAL_COLLECTION_ENABLED'&&item.value==='true'));
 assert.equal(pod.containers[0].readinessProbe.exec.command.at(-1),'http://127.0.0.1:8097/api/runs');
 for(const probe of ['readinessProbe','startupProbe','livenessProbe'])assert.equal(pod.containers[0][probe].httpGet,null,'Migration must explicitly clear the existing HTTP probe handler');
 assert(proxy.args.includes('--cookie-secure=true'));assert(proxy.args.includes('--pass-access-token=false'));

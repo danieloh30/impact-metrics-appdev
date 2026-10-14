@@ -13,6 +13,7 @@ import './style.css';
 import {WorkbookImport,type ImportDefaults} from './WorkbookImport';
 import {NextAction,importStart,type NextStep} from './NextAction';
 import {LocalSignInHelp} from './LocalSignInHelp';
+import {DZoneLocalCollection,pendingDZoneUrls} from './DZoneLocalCollection';
 import {ProcessStatus} from './ProcessStatus';
 
 type Artifact={name:string;version:number;phase:number;rows:number;sha256:string};
@@ -81,6 +82,7 @@ function App(){
  const [sourceInput,setSourceInput]=useState<TrailingInput|null>(null),[inputMode,setInputMode]=useState(false),[duration,setDuration]=useState('');
  const [manual,setManual]=useState<Issue|null>(null),[value,setValue]=useState(''),[evidence,setEvidence]=useState('');
  const [linkedInMode,setLinkedInMode]=useState('LOCAL_BROWSER');
+ const [dzoneLocalEnabled,setDzoneLocalEnabled]=useState(false);
  const [connection,setConnection]=useState(''),[linkedInConnecting,setLinkedInConnecting]=useState(false);
  const [linkedInStartedAt,setLinkedInStartedAt]=useState(0),[linkedInElapsed,setLinkedInElapsed]=useState(0),[linkedInCheckError,setLinkedInCheckError]=useState('');
  const linkedInRequests=useRef(0);
@@ -209,6 +211,7 @@ useEffect(()=>{
   if(allDone)nextStep={key:run.id+':finished',title:'Results and charts are ready',description:provisional?'This provisional run is complete. Download results or start another run for newer totals. Run on month-end or later for the final snapshot.':'Download the combined pivot workbook with editable charts, or start another reporting run. Previous runs stay saved.',sectionId:'results-export',auto:false};
   else nextStep={...nextStep,auto:false,actionLabel:nextStep.sectionId==='workbook-publication'?'Review publication':reportCompletion?.attention?'Review reporting items':'View report & charts'};
  }
+ if(dzoneLocalEnabled&&run&&waiting&&!importing&&!acknowledge&&!linkedInAttention&&!run.issues.some(issue=>issue.blocking)&&pendingDZoneUrls(run).length)nextStep={key:`${run.id}:${run.phase}:dzone-local`,title:'Collect DZone views on your computer',description:'The pod could not read the public article counter. Use local Chrome to collect and confirm the pending totals.',sectionId:'dzone-local-collection',actionId:'collect-dzone-local',alternate:{label:'Review manual / follow-up options',sectionId:'phase-review',actionId:'acknowledge-issues'}};
  if(error)nextStep={key:'error:'+error,title:'Check the request error',description:'Review the error message, then retry the relevant action.',sectionId:'request-error'};
  return <div className="shell"><a className="skip-link" href="#main-content">Skip to main content</a>
 <aside className="sidebar">
@@ -245,6 +248,7 @@ useEffect(()=>{
     {linkedInCheckError&&<p className="linkedin-help" role="status">{linkedInCheckError}</p>}
     {linkedInAttention&&!linkedInConnecting&&<p>Sign-in does not guarantee analytics access; you can still enter a verified measurement below or retain unresolved items for follow-up.</p>}
    </section>
+   <DZoneLocalCollection run={run} busy={busy} onEnabled={setDzoneLocalEnabled}/>
 {!run&&<section className="getting-started"><div className="section-title"><div><h2>From activity to impact</h2><p>One guided workflow. A complete set of metrics.</p></div><span>YOUR NEXT STEPS</span></div><div className="guide-grid"><article><span className="guide-number">01</span><h3>Bring your data</h3><p>Connect SharePoint once. Read the activity workbooks, load saved chart history, and select the reporting month.</p></article><article><span className="guide-number">02</span><h3>Review with confidence</h3><p>Confirm calculations and add verified measurements where collection needs your input.</p></article><article><span className="guide-number">03</span><h3>Share your impact</h3><p>Review month-end pivots and charts, then download CSV results or an Excel report.</p></article></div></section>}
 {run&&<>
     {run.workbook?.month&&<section className="section workbook-summary"><div className="section-title"><div><h2>Prepared workbook inputs</h2><p>Reporting month {run.workbook.month} · trailing window {run.workbook.windowStart} through {run.workbook.windowEnd} (three calendar months).</p></div></div><p>Current workbook: <strong>{run.workbook.filename}</strong> · Historical workbook: <strong>{run.workbook.historyFilename||run.workbook.filename}</strong></p><p>Current sheet: <strong>{run.workbook.currentSheet}</strong> · History: {run.workbook.historySheets.join(', ')||'None selected'}</p>{run.workbook.blogRows&&<p>Blog activities appended: {Object.entries(run.workbook.blogRows).map(([sheet,count])=>`${sheet}: ${count}`).join(', ')}</p>}{Object.entries(run.workbook.blogSkippedRows||{}).filter(([,count])=>count>0).map(([sheet,count])=><p className="baseline-notice" key={sheet}>{sheet}: {count} undated rows excluded. Fill their Date or Month in Excel to include them.</p>)}{run.workbook.missingBaselines>0&&<p className="baseline-notice">{run.workbook.missingBaselines} historical activities need a verified previous total during phase 4.</p>}<p>Optional input CSV snapshots are created only when downloaded.</p><div className="import-actions"><a className="button secondary" href={`/api/runs/${run.id}/inputs/AvocadoBot%202.csv/download`}>Download AvocadoBot 2.csv ↓</a>{run.trailing&&<a className="button secondary" href={`/api/runs/${run.id}/inputs/trailing_90-day.csv/download`}>Download trailing_90-day.csv ↓</a>}</div></section>}

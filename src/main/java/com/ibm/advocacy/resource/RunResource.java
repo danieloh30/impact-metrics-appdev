@@ -6,6 +6,7 @@ import com.ibm.advocacy.model.Data;
 import com.ibm.advocacy.model.Run;
 import com.ibm.advocacy.service.Pipeline;
 import com.ibm.advocacy.service.RunService;
+import com.ibm.advocacy.service.RunService.LocalDZoneValue;
 import com.ibm.advocacy.service.TrailingReporting;
 
 import io.smallrye.mutiny.Multi;
@@ -25,6 +26,7 @@ import static com.ibm.advocacy.model.MetricsSchema.*;
 public class RunResource {
     @Inject RunService service;
     @Inject LinkedInCollector linkedin;
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name="metrics.dzone.local-collection-enabled",defaultValue="false") boolean dzoneLocalCollection;
     @Inject com.ibm.advocacy.service.WorkbookPublicationService publications;
     public record PublicationPreview(@Min(1) int version,@Min(0) int revision) {}
     public record PublicationConfirm(@Min(1) int version,@Min(0) int revision,@NotBlank String digest,boolean confirmed) {}
@@ -50,7 +52,13 @@ public class RunResource {
         String type=format.equals("xlsx")?"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":"text/csv; charset=utf-8";
         return Response.ok(service.reportingDownload(id,scope,format.equals("xlsx"),bob),type).header("Content-Disposition","attachment; filename=\"monthly-report-"+scope+"."+format+"\"").header("X-Content-Type-Options","nosniff").build();
     }
-    @GET @Path("/config") public Map<String,Object> config() { return Map.of("phases",PHASES,"contract",Pipeline.CONTRACT,"outputs",OUTPUTS); }
+    @GET @Path("/config") public Map<String,Object> config() { return Map.of("phases",PHASES,"contract",Pipeline.CONTRACT,"outputs",OUTPUTS,"dzoneLocalCollection",dzoneLocalCollection); }
+    public record DZoneBatch(@Min(1) int version,boolean confirmed,@NotNull @Size(min=1,max=100) List<@Valid LocalDZoneValue> values) {}
+    @POST @Path("/runs/{id}/dzone/measurements") public Response localDZone(@PathParam("id") String id,@Valid DZoneBatch body) throws Exception {
+        if(!dzoneLocalCollection)throw new NotFoundException("Local DZone collection is available only in the OpenShift deployment");
+        if(body==null||!body.confirmed())throw new BadRequestException("Confirm the collected DZone totals before saving");
+        return accepted(service.measuredDZone(id,body.version(),body.values()));
+    }
     @GET @Path("/linkedin/session") public Map<String,Object> session() { return linkedin.session(); }
     @POST @Path("/linkedin/session") public Response connect() { return Response.accepted(linkedin.connect()).build(); }
     @POST @Path("/runs/reset") @Consumes(MediaType.APPLICATION_JSON)
