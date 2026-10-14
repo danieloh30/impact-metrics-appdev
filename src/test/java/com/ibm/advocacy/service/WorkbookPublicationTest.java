@@ -59,5 +59,25 @@ class WorkbookPublicationTest {
         publications.publish(run.id,complete.version,complete.reportingRevision,plan.publication().planDigest,true);Run saved=await(run.id,"COMPLETED");assertEquals("PUBLISHED",saved.publication.status);assertEquals("PROVISIONAL",saved.publication.stage);assertTrue(saved.publication.message.contains("Provisional snapshot published"));
         byte[] workbook=FakeSharePointCollector.files.get(collector.fileUri(url).toASCIIString());assertThrows(BadRequestException.class,()->new WorkbookService().historySheets(workbook,"2026-11"));
     }
+    @Test void freshTrailingGrowthReplacesCarriedSnapshotAndPreservesStartingBaselineForReruns() throws Exception {
+        byte[] historical;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(history()));ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            var sheet=book.getSheet("August inputs");sheet.getRow(0).createCell(10).setCellValue("Snapshot stage");sheet.getRow(1).createCell(10).setCellValue("BASELINE_CARRY");book.write(out);historical=out.toByteArray();
+        }
+        FakeSharePointCollector.files.put(collector.fileUri(url).toASCIIString(),historical);
+        Run run=runs.createSharePointWorkbooks(current(false),"AvocadoBot.xlsx",historical,"Metrics.xlsx","2026-09","Current month inputs",List.of("August inputs"),"https://ibm-my.sharepoint.com/personal/test/Documents/AvocadoBot.xlsx",url);
+        assertEquals("BASELINE_CARRY",workspace.data(run.id,"trailing-source").rows.getFirst().get("Snapshot stage"));
+        runs.start(run.id,true);for(int phase=1;phase<=3;phase++){Run ready=await(run.id,"AWAITING_APPROVAL");approve(ready);}run=await(run.id,"AWAITING_PUBLICATION");
+        var partial=publications.preview(run.id,run.version,run.reportingRevision);publications.publish(run.id,run.version,run.reportingRevision,partial.publication().planDigest,true);approve(await(run.id,"AWAITING_APPROVAL"));Run complete=await(run.id,"COMPLETED");
+        // Offline deterministic Phase 4 result: the inherited carry marker must not suppress fresh growth.
+        Row measured=workspace.data(run.id,"trailing-source").rows.getFirst().copy();measured.cells.put("Current total","180");measured.cells.put("Previous total","100");measured.cells.put(VIEWS,"80");measured.cells.put("Metric basis","Trailing delta");measured.cells.put("Measured at","2026-09-30T12:00:00Z");
+        Artifact artifact=complete.artifacts.get("updated_90-day.csv");workspace.bytes(workspace.runPath(run.id,"output/"+artifact.version()+"/updated_90-day.json"),new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(Data.output(new Data(),List.of(measured))));
+        assertEquals("140",runs.report(run.id,"combined").impact());
+        var finalPlan=publications.preview(run.id,complete.version,complete.reportingRevision);Row fresh=finalPlan.rows().stream().filter(row->row.get("Name of activity").equals("Historical video")).findFirst().orElseThrow();assertEquals("180",fresh.get("Current total"));assertEquals("100",fresh.get("Starting baseline"));assertEquals("COMPLETED",fresh.get("Snapshot stage"));
+        publications.publish(run.id,complete.version,complete.reportingRevision,finalPlan.publication().planDigest,true);await(run.id,"COMPLETED");byte[] published=FakeSharePointCollector.files.get(collector.fileUri(url).toASCIIString());
+        try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(published))){var sheet=book.getSheet("September 2026 inputs");var fields=MonthlyInputWorkbook.columns(sheet.getRow(0),new org.apache.poi.ss.usermodel.DataFormatter());var old=sheet.getRow(3);assertEquals(180,old.getCell(fields.get("Current total")).getNumericCellValue());assertEquals(100,old.getCell(fields.get("Starting baseline")).getNumericCellValue());}
+        WorkbookService reader=new WorkbookService();reader.blogs=new BlogSheetReader();var same=reader.prepare(new WorkbookRequest(current(false),"2026-09","Current month inputs",List.of("September 2026 inputs"),published),java.time.LocalDate.of(2026,9,30));assertEquals("100",same.trailing().rows.getFirst().get("Current total"));
+        byte[] october;try(XSSFWorkbook book=new XSSFWorkbook(new ByteArrayInputStream(current(false)));ByteArrayOutputStream out=new ByteArrayOutputStream()){book.getSheet("Current month inputs").getRow(1).getCell(0).setCellValue("2026-10-02");book.write(out);october=out.toByteArray();}
+        var next=reader.prepare(new WorkbookRequest(october,"2026-10","Current month inputs",List.of("September 2026 inputs"),published),java.time.LocalDate.of(2026,10,13));assertEquals("180",next.trailing().rows.getFirst().get("Current total"));
+    }
 
 }
