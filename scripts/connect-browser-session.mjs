@@ -22,13 +22,18 @@ export function signInUrl(provider,value) {
  return url.href;
 }
 
+export async function launchSignInBrowser(browserType=chromium) {
+ try{return await browserType.launch({channel:'chrome',headless:false});}
+ catch{throw new Error('Google Chrome could not start. Install the Google Chrome desktop app from https://www.google.com/chrome/. On macOS, move it to Applications; on Windows, run the downloaded installer. If already installed, open Chrome once and retry this helper. Installation guide: https://support.google.com/chrome/answer/95346');}
+}
+
 async function main() {
  const args=process.argv.slice(2),values={};
  for(let index=0;index<args.length;index+=2){if(!['--app','--provider','--url'].includes(args[index])||!args[index+1])throw new Error('Usage: node scripts/connect-browser-session.mjs --app HTTPS_ROUTE --provider sharepoint|linkedin [--url WORKBOOK_URL]');values[args[index].slice(2)]=args[index+1];}
  const origin=appOrigin(values.app),provider=values.provider,target=signInUrl(provider,values.url);
  const terminal=createInterface({input:stdin,output:stdout});let browser;
  try {
-  browser=await chromium.launch({channel:'chrome',headless:false});
+  browser=await launchSignInBrowser();
   const context=await browser.newContext();const app=await context.newPage();
   await app.goto(origin,{waitUntil:'domcontentloaded'});
   console.log('Sign in to the Impact Hours app in the opened browser (OpenShift sign-in).');
@@ -59,4 +64,4 @@ async function main() {
   throw new Error('Server verification timed out. Check the app connection status before retrying.');
  } finally {terminal.close();await browser?.close();}
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(error=>{console.error(error instanceof Error&&/^(Use |Provider |Usage:|App |The app |Provider sign-in|Server verification|The server)/.test(error.message)?error.message:'Sign-in helper could not finish. Check Chrome, app access and provider sign-in, then retry.');process.exitCode=1;});
+if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(error=>{console.error(error instanceof Error&&/^(Use |Provider |Usage:|App |The app |Provider sign-in|Server verification|The server|Google Chrome)/.test(error.message)?error.message:'Sign-in helper could not finish. Check Chrome, app access and provider sign-in, then retry.');process.exitCode=1;});

@@ -5,7 +5,7 @@ The local app hosts the web UI and launches the browsers used for SharePoint and
 ## Prerequisites
 
 - Java **25** and Node.js **22** with npm.
-- Git and Chrome or the Playwright browsers.
+- Git and [Google Chrome desktop](https://www.google.com/chrome/) for IBM/LinkedIn sign-in and the default DZone collector. See Google's [macOS and Windows installation guide](https://support.google.com/chrome/answer/95346). On macOS, move Chrome into Applications; on Windows, complete its installer. Open Chrome once before connecting.
 - Access to the three reporting workbooks and any LinkedIn analytics you collect.
 - An optional model API key if you want language-model commentary. The pipeline runs without it.
 
@@ -16,9 +16,11 @@ git clone https://github.com/danieloh30/impact-metrics-appdev.git
 cd impact-metrics-appdev
 cd src/main/webui
 npm ci
-npx playwright install chromium chrome
+npx playwright install chromium
 cd ../../..
 ```
+
+`npm ci` installs dependencies, and the Playwright command installs Chromium for tests. Install desktop Google Chrome separately using the link above; the default interactive sign-in uses Chrome.
 
 ## Start with dev.sh
 

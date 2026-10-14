@@ -83,6 +83,16 @@ METRICS_OAUTH_PROXY_IMAGE=quay.io/your-team/oauth-proxy@sha256:YOUR_DIGEST \
 
 Open the Route and complete **OpenShift sign-in**. Choose **Connect SharePoint** or **Connect LinkedIn**. The app shows the helper command with the correct Route and workbook URL. The SharePoint connection section also links to this **Local sign-in helper guide**. **Connect SharePoint** reveals the instructions even when a saved session is already connected, so you can renew sign-in when needed.
 
+### Install Chrome on the computer running the helper
+
+The helper requires **Google Chrome desktop**, Node.js 22+ with npm, and a local project checkout. These client requirements apply to both IBM SSO and LinkedIn sign-in; Java and `oc` are needed for building/deploying the app, not for running the helper. `npm ci` installs JavaScript dependencies and does **not** install Chrome.
+
+1. [Download Google Chrome](https://www.google.com/chrome/) using Google's [macOS and Windows installation guide](https://support.google.com/chrome/answer/95346).
+2. **macOS:** open the downloaded `.dmg`, move Chrome into **Applications**, then launch it once. **Windows:** run the downloaded installer, finish installation, then launch Chrome once.
+3. Return to Terminal on macOS or PowerShell on Windows, open the project directory, install the helper dependencies below, and paste the one-line command shown in the app.
+
+Without Chrome installed, the helper stops before opening the app or provider sign-in page and prints installation links. It launches a separate Chrome window with an isolated browser session; your existing Chrome tabs and sign-ins are not reused. Installing Chromium for tests does not satisfy this helper's Chrome requirement.
+
 From your **local checkout**, install the helper's dependency once:
 
 ```bash

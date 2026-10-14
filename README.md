@@ -129,6 +129,8 @@ One replica keeps run history, source snapshots, saved provider sessions and cha
 
 Open the printed Route and sign in to OpenShift. The Connect buttons show the local helper command for IBM/LinkedIn. The SharePoint section includes a **Local sign-in helper guide** link; **Connect SharePoint** reveals instructions even with an existing saved session. Run `npm ci --prefix src/main/webui` once in your local checkout, copy that command, and complete the provider sign-in in its dedicated Chrome window. The pod verifies access before saving the session; passwords stay on provider pages. OpenShift login cookies are excluded from provider transfer. See the [OpenShift guide](docs/site/deploy/openshift.md) for the complete flow, permissions and recovery, or the [Kubernetes guide](docs/site/deploy/kubernetes.md) for other clusters.
 
+**Local sign-in prerequisites (macOS or Windows):** Node.js 22+ with npm, a project checkout, and [Google Chrome desktop](https://www.google.com/chrome/). Follow Google's [installation guide](https://support.google.com/chrome/answer/95346): on macOS move Chrome into Applications; on Windows run its installer. Open Chrome once before running the helper. `npm ci` installs the helper dependencies, not Chrome. Without Chrome the helper stops and prints installation links. It opens a separate Chrome window with an isolated session for both IBM SSO and LinkedIn. Run the copied one-line command in macOS Terminal or Windows PowerShell.
+
 Deployment checks cover build ordering, immutable image pinning, Route authentication, credential isolation, provider session validation, storage, probes and packaged instructions. The obsolete VNC stack and unused JVM/native Dockerfile templates have been removed.
 
 To build the documentation locally:
@@ -143,6 +145,8 @@ node scripts/check-docs.mjs
 ## Start locally
 
 Requires Java 25+, Node 20.19+ or 22.12+, and npm. The Maven wrapper is included. On this Mac, `dev.sh` finds the installed SDKMAN/Homebrew JDK when system Java is not configured. Select a Java 25+ installation.
+
+Install [Google Chrome desktop](https://www.google.com/chrome/) for the default local sign-in browsers and DZone collection; see the [macOS and Windows installation guide](https://support.google.com/chrome/answer/95346).
 
 ```bash
 cd /Users/danieloh/developer-advocacy/tools/impact-metrics-appdev

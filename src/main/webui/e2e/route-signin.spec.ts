@@ -14,6 +14,7 @@ for(const width of [1280,390])test(`Route sign-in shows local helper commands an
  await expect(sharepoint.locator('code').first()).toContainText('--provider sharepoint');await expect(sharepoint.locator('code').first()).toContainText('--url');
  await expect(linkedin.locator('code').first()).toContainText('--provider linkedin');await expect(linkedin.locator('code').first()).not.toContainText('--url');
  await expect(sharepoint).toContainText('no tunnel or remote desktop');
+ for(const help of [sharepoint,linkedin]){await expect(help).toContainText('Google Chrome desktop is required');await expect(help.getByRole('link',{name:'Download Google Chrome'})).toHaveAttribute('href','https://www.google.com/chrome/');await expect(help.getByRole('link',{name:'macOS and Windows installation guide'})).toHaveAttribute('href','https://support.google.com/chrome/answer/95346');}
  await expect(page.locator('#connect-sharepoint')).toBeEnabled();await page.locator('#connect-sharepoint').click();expect(signIns).toBe(1);
  await expect(page.locator('.linkedin-progress')).toHaveCount(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  connected=true;await expect(sharepoint).toHaveCount(0,{timeout:7000});await expect(linkedin).toHaveCount(0,{timeout:7000});await expect(page.locator('.linkedin-success')).toBeVisible();
