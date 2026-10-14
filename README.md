@@ -149,7 +149,7 @@ cd /Users/danieloh/developer-advocacy/tools/impact-metrics-appdev
 ./dev.sh
 ```
 
-Open **http://127.0.0.1:8097**. Quinoa builds and serves the SPA through Quarkus; no separate frontend server is needed. First startup requires dependency downloads. Override the port with `./dev.sh -Dquarkus.http.port=8098` if necessary.
+Open **http://localhost:8097**. Quinoa builds and serves the SPA through Quarkus; no separate frontend server is needed. First startup requires dependency downloads. Override the port with `./dev.sh -Dquarkus.http.port=8098` if necessary.
 
 Connect SharePoint once with your IBM account and choose the reporting month, then select **Read workbooks & prepare inputs**. Both editable URL fields start with the supplied defaults. The app reads both sources and prepares their selected sheets sequentially. Ambiguous selections pause for review. If a step fails, **Retry failed step** reuses successful snapshots; independent re-read controls are available under each workbook’s **Source details**. Prepared inputs start processing automatically; clean phases advance without an approval checkbox or button. Required data reviews, LinkedIn setup choices and workbook publication remain explicit checkpoints. CSV/local Excel import controls and runtime seed import endpoints are removed. Download results individually or as ZIP.
 
@@ -356,7 +356,7 @@ Then run the browser suite in another terminal:
 cd src/main/webui
 npm ci
 npx playwright install chromium
-METRICS_URL=http://127.0.0.1:8098 METRICS_RESET_TESTS=true npm run test:e2e
+METRICS_URL=http://localhost:8098 METRICS_RESET_TESTS=true npm run test:e2e
 ```
 
 `METRICS_URL` overrides the test URL. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` selects an existing compatible Chromium. Browser tests create synthetic runs in the isolated runtime directory. The destructive reset test is skipped unless `METRICS_RESET_TESTS=true`; use that flag only with a dedicated test runtime root.
