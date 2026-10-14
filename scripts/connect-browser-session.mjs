@@ -26,6 +26,9 @@ export async function launchSignInBrowser(browserType=chromium) {
  try{return await browserType.launch({channel:'chrome',headless:false});}
  catch{throw new Error('Google Chrome could not start. Install the Google Chrome desktop app from https://www.google.com/chrome/. On macOS, move it to Applications; on Windows, run the downloaded installer. If already installed, open Chrome once and retry this helper. Installation guide: https://support.google.com/chrome/answer/95346');}
 }
+export function helperErrorMessage(error) {
+ return error instanceof Error&&/^(Use |Provider |Usage:|App |The app |Provider sign-in|Server verification|The server|Google Chrome|SharePoint )/.test(error.message)?error.message:'Sign-in helper could not finish. Check Chrome, app access and provider sign-in, then retry.';
+}
 
 async function main() {
  const args=process.argv.slice(2),values={};
@@ -64,4 +67,4 @@ async function main() {
   throw new Error('Server verification timed out. Check the app connection status before retrying.');
  } finally {terminal.close();await browser?.close();}
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(error=>{console.error(error instanceof Error&&/^(Use |Provider |Usage:|App |The app |Provider sign-in|Server verification|The server|Google Chrome)/.test(error.message)?error.message:'Sign-in helper could not finish. Check Chrome, app access and provider sign-in, then retry.');process.exitCode=1;});
+if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(error=>{console.error(helperErrorMessage(error));process.exitCode=1;});

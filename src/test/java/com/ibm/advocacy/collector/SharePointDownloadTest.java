@@ -24,14 +24,58 @@ class SharePointDownloadTest {
     HttpServer server;URI base;SharePointCollector collector;byte[] workbook;
     @BeforeEach void setup() throws Exception {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);base=URI.create("http://127.0.0.1:"+server.getAddress().getPort());
-        collector=new SharePointCollector(){@Override public URI downloadUri(URI file){return base.resolve("/layout");}@Override URI workbookApiUri(URI file){return base.resolve("/rest");}};
+        collector=new SharePointCollector(){@Override public URI fileUri(String value){return base.resolve("/file.xlsx");}@Override public URI downloadUri(URI file){return base.resolve("/layout");}@Override URI workbookApiUri(URI file){return base.resolve("/rest");}};
         collector.workspace=workspace;collector.allowedHost="127.0.0.1";collector.channel="chrome";collector.executable=Optional.empty();
+        collector.mapper=new com.fasterxml.jackson.databind.ObjectMapper();collector.enabled=true;collector.loginMode="LOCAL_HELPER";
         Files.deleteIfExists(workspace.path(".sessions/sharepoint-auth.json"));
         try(XSSFWorkbook xlsx=new XSSFWorkbook();ByteArrayOutputStream out=new ByteArrayOutputStream()){xlsx.createSheet("Inputs").createRow(0).createCell(0).setCellValue("Synthetic workbook");xlsx.write(out);workbook=out.toByteArray();}
     }
     @AfterEach void cleanup() throws Exception {server.stop(0);collector.close();Files.deleteIfExists(workspace.path(".sessions/sharepoint-auth.json"));}
     void endpoint(String path,int code,byte[] body) {
         server.createContext(path,exchange->{exchange.sendResponseHeaders(code,body.length);exchange.getResponseBody().write(body);exchange.close();});
+    }
+    com.fasterxml.jackson.databind.JsonNode transferredState() {
+        var state=collector.mapper.createObjectNode();state.putArray("origins");
+        state.putArray("cookies").addObject().put("name","FedAuth").put("value","synthetic-transfer").put("domain","127.0.0.1").put("path","/").put("expires",-1).put("httpOnly",true).put("secure",false).put("sameSite","Lax");
+        return state;
+    }
+    void awaitVerification() throws InterruptedException {
+        long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(15);
+        while(Boolean.TRUE.equals(collector.session().get("busy"))&&System.nanoTime()<deadline)Thread.sleep(25);
+        assertFalse((boolean)collector.session().get("busy"),"Session verification did not finish");
+    }
+    @Test void importedSessionUsesDownloadFallbackWhenRestRejectsAccess() throws Exception {
+        endpoint("/rest",403,new byte[0]);
+        server.createContext("/layout",exchange->{boolean signedIn=Optional.ofNullable(exchange.getRequestHeaders().getFirst("Cookie")).orElse("").contains("FedAuth=synthetic-transfer");byte[] body=signedIn?workbook:new byte[0];exchange.sendResponseHeaders(signedIn?200:401,body.length);exchange.getResponseBody().write(body);exchange.close();});server.start();
+        collector.importSession(base.resolve("/viewer").toString(),transferredState());awaitVerification();
+        assertEquals("CONNECTED",collector.session().get("status"),collector.session().toString());
+        assertTrue(Files.readString(workspace.path(".sessions/sharepoint-auth.json")).contains("synthetic-transfer"));
+    }
+    @Test void importedSessionRefreshesWorkbookLinkBeforeSavingVerifiedCookies() throws Exception {
+        AtomicBoolean refreshed=new AtomicBoolean();
+        server.createContext("/rest",exchange->{boolean ready=refreshed.get()&&Optional.ofNullable(exchange.getRequestHeaders().getFirst("Cookie")).orElse("").contains("FedAuth=renewed");byte[] body=ready?workbook:new byte[0];exchange.sendResponseHeaders(ready?200:403,body.length);exchange.getResponseBody().write(body);exchange.close();});
+        endpoint("/layout",403,new byte[0]);
+        server.createContext("/warm",exchange->{refreshed.set(true);exchange.getResponseHeaders().set("Set-Cookie","FedAuth=renewed; Path=/; HttpOnly");byte[] body="<html>Signed in</html>".getBytes(StandardCharsets.UTF_8);exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();});server.start();
+        collector.importSession(base.resolve("/warm").toString(),transferredState());awaitVerification();
+        assertEquals("CONNECTED",collector.session().get("status"),collector.session().toString());
+        assertTrue(refreshed.get());assertTrue(Files.readString(workspace.path(".sessions/sharepoint-auth.json")).contains("renewed"));
+    }
+    @Test void deniedImportedSessionShowsAccessReasonAndPreservesPreviousSavedState() throws Exception {
+        for(String path:List.of("/rest","/layout","/file.xlsx"))endpoint(path,403,new byte[0]);server.start();
+        Path saved=workspace.path(".sessions/sharepoint-auth.json");Files.createDirectories(saved.getParent());Files.writeString(saved,"synthetic-previous-state");
+        collector.importSession(base.resolve("/viewer").toString(),transferredState());awaitVerification();
+        assertEquals("NOT_CONNECTED",collector.session().get("status"));
+        assertTrue(collector.session().get("message").toString().contains("HTTP 403"));assertTrue(collector.session().get("message").toString().contains("device or network policy"));
+        assertEquals("synthetic-previous-state",Files.readString(saved));
+    }
+    @Test void verificationErrorsGiveSafeReasonsWithoutExposingRawExceptionDetails() {
+        String marker="synthetic-private-detail";
+        for(int code:List.of(401,403,404)) {
+            String message=SharePointCollector.verificationFailure(new WebApplicationException(marker,code));
+            assertTrue(message.contains("HTTP "+code));assertFalse(message.contains(marker));
+        }
+        assertFalse(SharePointCollector.verificationFailure(new PlaywrightException(marker)).contains(marker));
+        assertTrue(SharePointCollector.verificationFailure(new java.io.IOException(marker)).contains("No new session was saved"));
     }
     @Test void restoredBrowserCookiesAuthenticateHttpDownloadAndRedirects() throws Exception {
         server.createContext("/redirect",exchange->{exchange.getResponseHeaders().set("Location","/file.xlsx");exchange.sendResponseHeaders(302,-1);exchange.close();});

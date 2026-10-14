@@ -110,11 +110,28 @@ public class SharePointCollector {
         browserWorker.submit(()->{
             try(Playwright playwright=Playwright.create();Browser chrome=downloadBrowser(playwright);BrowserContext browser=chrome.newContext(new Browser.NewContextOptions().setStorageState(filtered))) {
                 if(!authenticated(browser,file.getHost()))throw new BadRequestException("Sign in to this workbook's SharePoint host");
-                requestWorkbook(browser,workbookApiUri(file));saveSession(browser);
+                downloadWorkbook(browser,url,file);saveSession(browser);
                 status="CONNECTED";message="SharePoint session verified. You can read and publish workbooks.";
-            }catch(Exception e){status="NOT_CONNECTED";message="The server could not verify the transferred SharePoint session. Run the helper again or upload the workbook locally.";}
+            }catch(Exception e){status="NOT_CONNECTED";message=verificationFailure(e);
+                int code=e instanceof WebApplicationException web?web.getResponse().getStatus():0;
+                org.jboss.logging.Logger.getLogger(SharePointCollector.class).warnf("SharePoint session verification failed: category=%s, HTTP status=%d",e.getClass().getSimpleName(),code);
+            }
             finally{busy.set(false);downloadStage="IDLE";}
         });return session();
+    }
+    static String verificationFailure(Exception failure) {
+        if(failure instanceof WebApplicationException web)return switch(web.getResponse().getStatus()) {
+            case 400 -> "SharePoint sign-in belongs to a different workbook host. Rerun the helper with this workbook's link and complete IBM sign-in until the workbook opens.";
+            case 401 -> "SharePoint rejected the transferred sign-in (HTTP 401). Rerun the helper and wait until the workbook opens before pressing Enter. If access works on your computer but keeps failing on the pod, ask your IBM administrator whether sessions can be used from the cluster.";
+            case 403 -> "SharePoint denied workbook access from the pod (HTTP 403). Check your IBM account's download permission. If the workbook downloads on your computer, ask your IBM administrator whether organizational device or network policy permits access from the cluster. Repeating sign-in alone may not resolve this.";
+            case 404 -> "SharePoint could not find the workbook (HTTP 404). Check the workbook link, then rerun the helper with the corrected link.";
+            case 413 -> "SharePoint sign-in reached the workbook, but it exceeds the app's workbook size limit. Check the workbook size limit before retrying.";
+            case 422 -> "SharePoint returned a web page instead of the Excel workbook. Wait until the original workbook opens and verify that download is permitted, then rerun the helper.";
+            case 504 -> "The pod's SharePoint file request timed out or could not finish. Check cluster network access to SharePoint, then retry the helper.";
+            default -> "SharePoint workbook verification failed (HTTP "+web.getResponse().getStatus()+"). Check workbook availability and cluster network access, then retry the helper.";
+        };
+        if(failure instanceof PlaywrightException)return "The server's SharePoint browser could not start or restore the transferred session. Check the pod's browser configuration and server logs before retrying.";
+        return "The server could not verify or save the transferred SharePoint session. Check server logs before retrying. No new session was saved.";
     }
     /** Uses the browser cookie jar but reads the response instead of waiting for a download event. */
     byte[] requestWorkbook(BrowserContext browser,URI target) {

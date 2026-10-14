@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {appOrigin,providerState,signInUrl,launchSignInBrowser} from './connect-browser-session.mjs';
+import {appOrigin,providerState,signInUrl,launchSignInBrowser,helperErrorMessage} from './connect-browser-session.mjs';
 assert.equal(appOrigin('https://app.example.com/'),'https://app.example.com');
 assert.equal(appOrigin('http://127.0.0.1:8097'),'http://127.0.0.1:8097');
 for(const url of ['http://app.example.com','https://user:pass@app.example.com','https://app.example.com/path','https://app.example.com/?secret=x'])assert.throws(()=>appOrigin(url));
@@ -15,4 +15,7 @@ assert.equal(await launchSignInBrowser({launch:async options=>{assert.deepEqual(
 await assert.rejects(launchSignInBrowser({launch:async()=>{throw new Error("Chromium distribution 'chrome' is not found at a synthetic path");}}),error=>{
  assert.match(error.message,/Google Chrome could not start/);assert.match(error.message,/https:\/\/www.google.com\/chrome\//);assert.match(error.message,/macOS.*Applications/);assert.match(error.message,/Windows.*installer/);assert(!error.message.includes('synthetic path'));return true;
 });
-console.log('Local helper: URL validation, account-state isolation and Chrome installation guidance passed');
+const denied='SharePoint denied workbook access from the pod (HTTP 403). Check your IBM account download permission.';
+assert.equal(helperErrorMessage(new Error(denied)),denied,'Safe server verification reason must reach the terminal');
+assert(!helperErrorMessage(new Error('raw synthetic private browser error')).includes('synthetic private'));
+console.log('Local helper: URL validation, account-state isolation, Chrome installation guidance and safe server verification errors passed');
