@@ -2,9 +2,9 @@ name: Operations guide
 on:
   push:
     branches: [main]
-    paths: ['docs/site/**', 'mkdocs.yml', 'requirements-docs.txt', 'scripts/check-docs.mjs', '.github/workflows/pages.yml']
+    paths: ['docs/site/**', 'mkdocs.yml', 'requirements-docs.txt', 'scripts/check-docs.mjs', 'scripts/verify-docs-ui.mjs', '.github/workflows/pages.yml']
   pull_request:
-    paths: ['docs/site/**', 'mkdocs.yml', 'requirements-docs.txt', 'scripts/check-docs.mjs', '.github/workflows/pages.yml']
+    paths: ['docs/site/**', 'mkdocs.yml', 'requirements-docs.txt', 'scripts/check-docs.mjs', 'scripts/verify-docs-ui.mjs', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
