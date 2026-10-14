@@ -34,7 +34,7 @@ This uses OpenShift's [service-account OAuth clients](https://docs.redhat.com/en
 Use Java 25+, Node.js 22/npm and an up-to-date `oc` CLI. Sign in to your cluster using its console's **Copy login command**. Never commit tokens or provider sessions.
 
 !!! note "Choose your project"
-    `impact-hours` is the example project; `--namespace` accepts any valid project name. Generation does not contact the cluster. Deployment requires access to the project or permission to create it. On Developer Sandbox, substitute your assigned project (check with `oc project -q`). For an existing workspace, use its original namespace when updating it.
+    `impact-hours` is the example project; `--namespace` accepts any valid project name. Generation does not contact the cluster and works even when that project does not exist. Deployment reuses the existing project or creates it automatically if missing; your account needs project access or creation permission. On Developer Sandbox, substitute your assigned project (check with `oc project -q`) if creating another project is restricted. For an existing workspace, use its original namespace when updating it.
 
 ```bash
 # Local packaging and validation only; no cluster writes.
@@ -53,7 +53,7 @@ The image contains Java 25, the compiled app, canonical instructions and Playwri
 
 The script:
 
-1. Packages the app in a fresh temporary workspace and validates the secured generated resources and archive contents.
+1. Packages the app in a fresh temporary workspace and validates the secured generated resources and archive contents, then checks the requested project. If missing, it creates it with `oc new-project --skip-config-write`, preserving the project selected in your local `oc` configuration.
 2. Keeps the existing PVC and reuses the OAuth cookie Secret.
 3. Applies build and Route prerequisites, then streams the packaged app with `oc start-build --follow --wait`.
 4. Resolves the built image's immutable digest and applies the StatefulSet with that digest.
@@ -67,7 +67,7 @@ A failed build stops before changing the running StatefulSet. Rerun the same com
 ./deploy-openshift.sh --status --namespace impact-hours
 ```
 
-Substitute your chosen project throughout these examples. If the project does not exist, deployment attempts `oc new-project`; your account must have project creation permission.
+Substitute your chosen project throughout these examples. `--generate` leaves the cluster untouched; `--deploy` creates a missing project and reuses an existing one. The project lookup distinguishes a missing project from permission or connectivity failures. A failed lookup or denied project creation stops before app resources are applied and prints recovery guidance; your account must have project creation permission.
 
 Optional settings:
 

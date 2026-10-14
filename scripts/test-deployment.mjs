@@ -18,7 +18,11 @@ try {
  writeFileSync(resolve(bin,'node'),mock+`if [[ $1 == scripts/prepare-deployment-build.mjs ]]; then exec '${process.execPath}' "$@"; fi\n`+'if [[ $1 == scripts/check-deployment.mjs && ${DEPLOYMENT_TEST_INVALID_MANIFEST:-false} == true ]]; then exit 8; fi\nif [[ $3 == tag ]]; then echo "impact-hours:release"; fi\n',{mode:0o755});
  writeFileSync(resolve(bin,'oc'),mock+`
 if [[ $1 == whoami ]]; then echo owner; fi
-if [[ $1 == get && $2 == project && \${DEPLOYMENT_TEST_MISSING_PROJECT:-false} == true ]]; then exit 1; fi
+if [[ $1 == get && $2 == project ]]; then
+ if [[ \${DEPLOYMENT_TEST_PROJECT_ERROR:-false} == true ]]; then echo Forbidden >&2; exit 1; fi
+ if [[ \${DEPLOYMENT_TEST_MISSING_PROJECT:-false} != true ]]; then echo "project.project.openshift.io/$3"; fi
+fi
+if [[ $1 == new-project && \${DEPLOYMENT_TEST_CREATE_DENIED:-false} == true ]]; then echo 'Project creation denied' >&2; exit 1; fi
 if [[ "$*" == *" get secret "* && \${DEPLOYMENT_TEST_MISSING_SECRET:-false} == true ]]; then exit 1; fi
 if [[ "$*" == *" get route "* ]]; then echo app.apps.example.com; fi
 if [[ "$*" == *" get istag "* ]]; then echo 'image-registry.openshift-image-registry.svc:5000/isolated-fixture/impact-hours@sha256:${'a'.repeat(64)}'; fi
@@ -36,6 +40,7 @@ fi
  let checks=0;
  const run=(args=[],overrides={})=>{checks++;writeFileSync(log,'');const result=spawnSync('/bin/bash',[resolve(fixture,'deploy-openshift.sh'),...args,'--image-tag','release'],{encoding:'utf8',env:{PATH:`${bin}:/usr/bin:/bin`,HOME:home,JAVA_HOME:java25,DEPLOYMENT_TEST_LOG:log,...overrides}});return {...result,commands:readFileSync(log,'utf8')};};
  const generated=run();assert.equal(generated.status,0,generated.stderr);assert(!generated.commands.includes('oc '));assert(generated.commands.includes('<scripts/secure-route.mjs>'));assert(!generated.commands.includes('-Dquarkus.openshift.deploy=true'));
+ const missingGeneration=run(['--generate','--namespace','impact-hours'],{DEPLOYMENT_TEST_MISSING_PROJECT:'true'});assert.equal(missingGeneration.status,0,missingGeneration.stderr);assert(!missingGeneration.commands.includes('oc '));assert(missingGeneration.commands.includes('<-Dquarkus.openshift.namespace=impact-hours>'));assert.match(missingGeneration.stdout,/Deployment creates the project if it is missing/);
  assert.equal(readFileSync(resolve(fixture,'target/classes/.sessions/synthetic-secret'),'utf8'),'synthetic stale profile','Deployment must leave dev output untouched');
  assert.equal(run([],{JAVA_HOME:''}).status,0);
  for(const args of [[],['--deploy']]){const invalid=run(args,{JAVA_HOME:java21});assert.equal(invalid.status,1);assert.match(invalid.stderr,/Java 25/);assert(!invalid.commands.includes('<apply>')&&!invalid.commands.includes('npm '));}
@@ -44,6 +49,7 @@ fi
  for(const args of [['--namespace','INVALID'],['--unknown']])assert.equal(run(args).status,2);
  for(const missing of [false,true]){const result=run(['--deploy','--namespace','isolated-fixture'],{DEPLOYMENT_TEST_MISSING_PROJECT:String(missing),DEPLOYMENT_TEST_MISSING_SECRET:String(missing)});assert.equal(result.status,0,result.stderr);const commands=result.commands;
   assert.equal(commands.includes('<new-project>'),missing);assert.equal(commands.includes('<scripts/create-route-secret.mjs>'),missing);
+  assert(commands.includes('<--ignore-not-found> <-o> <name>'));if(missing)assert(commands.includes('<new-project> <isolated-fixture> <--skip-config-write>'));
   assert(commands.includes('<deploy/route-access.yaml>'));assert(!commands.includes('-Dquarkus.openshift.deploy=true'));
   assert(commands.indexOf('<scripts/check-deployment.mjs>')<commands.indexOf('<apply>'));
   assert(commands.indexOf('<start-build>')<commands.indexOf('<workload>'));
@@ -52,6 +58,8 @@ fi
   assert(commands.includes('<--from-dir=target/quarkus-app>'));
   assert.match(result.stdout,/https:\/\/app.apps.example.com/);assert(!result.stdout.includes('synthetic-private-api-response'));
  }
+ const inaccessible=run(['--deploy'],{DEPLOYMENT_TEST_PROJECT_ERROR:'true'});assert.equal(inaccessible.status,1);assert(!inaccessible.commands.includes('<new-project>')&&!inaccessible.commands.includes('<apply>'));assert.match(inaccessible.stderr,/Cannot check OpenShift project/);
+ const denied=run(['--deploy'],{DEPLOYMENT_TEST_MISSING_PROJECT:'true',DEPLOYMENT_TEST_CREATE_DENIED:'true'});assert.equal(denied.status,1);assert(!denied.commands.includes('<apply>'));assert.match(denied.stderr,/project creation permission/);
  const buildFailure=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_BUILD:'true'});assert.equal(buildFailure.status,7);assert(!buildFailure.commands.includes('<workload>')&&!buildFailure.commands.includes('<rollout>'),'Failed build must preserve the running workload');
  for(const endpoint of ['runs','chart-history']){const result=run(['--deploy'],{DEPLOYMENT_TEST_FAIL_API:endpoint});assert.equal(result.status,22);assert(!result.stdout.includes('Workspace deployed'));}
  const invalid=run(['--deploy'],{DEPLOYMENT_TEST_INVALID_MANIFEST:'true'});assert.equal(invalid.status,8);assert(!invalid.commands.includes('<apply>'));

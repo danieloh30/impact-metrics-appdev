@@ -11,11 +11,27 @@ usage() {
     cat <<'HELP'
 Usage: ./deploy-openshift.sh [--generate|--deploy|--url|--status] [--namespace NAME] [--image-tag TAG]
   --generate  Package and validate OpenShift + Kubernetes manifests; no cluster changes (default).
-  --deploy    Build the image inside an authenticated OpenShift project, then deploy one workspace.
+  --deploy    Create the project if missing, build the image in OpenShift, then deploy one workspace.
   --url       Print the HTTPS app Route (no tunnel or desktop).
   --status    Inspect the app StatefulSet, pods, storage and build status.
 Requires Java 25 + Node.js 22/npm for packaging; oc login for cluster actions.
 HELP
+}
+ensure_project() {
+    local metrics_project
+    if ! metrics_project=$(oc get project "$namespace" --ignore-not-found -o name); then
+        echo "Cannot check OpenShift project '$namespace'. Check your login and project access; no project was created." >&2
+        return 1
+    fi
+    if [[ -n $metrics_project ]]; then
+        printf 'Using existing OpenShift project: %s\n' "$namespace"
+    else
+        printf 'Creating OpenShift project: %s\n' "$namespace"
+        if ! oc new-project "$namespace" --skip-config-write; then
+            echo "Could not create OpenShift project '$namespace'. Your account needs project creation permission; Developer Sandbox users should use their assigned project." >&2
+            return 1
+        fi
+    fi
 }
 while (($#)); do
     case "$1" in
@@ -85,7 +101,7 @@ node scripts/secure-route.mjs target/kubernetes/openshift.json "$namespace" "$wo
 node scripts/check-deployment.mjs
 node scripts/prepare-deployment-build.mjs publish "$repo_dir"
 if [[ $mode == deploy ]]; then
-    if ! oc get project "$namespace" >/dev/null 2>&1; then oc new-project "$namespace"; fi
+    ensure_project
     oc -n "$namespace" apply -f deploy/storage.yaml -f deploy/route-access.yaml
     if ! oc -n "$namespace" get secret impact-hours-route-cookie >/dev/null 2>&1; then
         node scripts/create-route-secret.mjs | oc -n "$namespace" apply -f -
@@ -109,4 +125,5 @@ if [[ $mode == deploy ]]; then
 else
     printf 'Validated manifests: target/deployment/kubernetes/openshift.yml and target/deployment/kubernetes/kubernetes.yml\n'
     printf 'This command made no cluster changes. Deploy with: ./deploy-openshift.sh --deploy --namespace %s\n' "$namespace"
+    printf 'Deployment creates the project if it is missing and your account has permission.\n'
 fi

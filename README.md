@@ -114,7 +114,7 @@ The [Quarkus OpenShift extension](https://quarkus.io/guides/deploying-to-openshi
 
 One replica keeps run history, source snapshots, saved provider sessions and chart history on the existing `impact-hours-data` PVC. The proxy exposes the app through a re-encrypted Route, checks project workspace permissions, and sends the loopback upstream Host to Quarkus with `--pass-host-header=false`; no cluster-wide OAuthClient or auth-delegator binding is needed. The image supports arbitrary non-root UIDs and a read-only root filesystem.
 
-> **Project name:** `impact-hours` is the example project. Choose any project your account can access. On Developer Sandbox, use your assigned project (check with `oc project -q`). For an existing deployment, keep its original namespace when updating it.
+> **Project name:** `impact-hours` is the example project. `--generate --namespace impact-hours` works even if the project does not exist: it generates files locally without contacting the cluster. `--deploy --namespace impact-hours` reuses an existing project or creates it automatically when missing and your account has project creation permission. Creation preserves the project selected in your `oc` configuration. Permission or connectivity errors stop deployment before applying app resources. On Developer Sandbox, use your assigned project (check with `oc project -q`) if creating another project is restricted. For an existing deployment, keep its original namespace when updating it.
 
 ```bash
 # Package and validate only (default); no cluster changes.
