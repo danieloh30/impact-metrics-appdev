@@ -21,7 +21,9 @@ export function secureRoute(manifest,namespace,owner,proxyImage) {
  // NetworkPolicies are additive; Sandbox-wide allow policies can admit other
  // pods. Bind the app to pod loopback so they cannot bypass the OAuth proxy.
  for(const name of ['startupProbe','readinessProbe','livenessProbe']) {
-  const original=container[name]??{};delete original.httpGet;
+  // Explicit nulls also remove old, unmanaged handlers when migrating a
+  // StatefulSet previously created by Fabric8 rather than oc apply.
+  const original=container[name]??{};original.httpGet=null;original.tcpSocket=null;original.grpc=null;
   original.exec={command:['curl','--fail','--silent','--show-error','--output','/dev/null','http://127.0.0.1:8097'+(name==='livenessProbe'?'/api/config':'/api/runs')]};
   container[name]=original;
  }
