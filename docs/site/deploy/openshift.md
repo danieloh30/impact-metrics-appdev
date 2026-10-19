@@ -49,7 +49,21 @@ The image contains Java 25, the compiled app, canonical instructions and Playwri
 
 Model review is enabled by default in `application-openshift.properties`. Before deploying, create an **Opaque Secret** named `impact-hours-model` in the target project, with key `METRICS_MODEL_API_KEY` containing your API key. Use the OpenShift console's Secret form or a protected local file; do not commit the key. The generated OpenShift and Kubernetes workloads inject this key as an environment variable through `secretKeyRef`. No model key is included in the image or manifests, and the application needs no Kubernetes API permissions to read it.
 
-The template is [`deploy/model-secret.example.yaml`](https://github.com/danieloh30/impact-metrics-appdev/blob/main/deploy/model-secret.example.yaml). Copy it outside the repository, replace `REPLACE_WITH_YOUR_OPENAI_API_KEY`, adjust the namespace if needed, and restrict access to the copy. Apply your edited file with `oc apply -f /path/to/model-secret.yaml`. Do not apply the unchanged example.
+Copy [`deploy/model-secret.example.yaml`](https://github.com/danieloh30/impact-metrics-appdev/blob/main/deploy/model-secret.example.yaml) to the local credential file:
+
+```bash
+# Run once; skip copying if you already have a configured local Secret file.
+cp deploy/model-secret.example.yaml deploy/model-secret.yaml
+chmod 600 deploy/model-secret.yaml
+```
+
+Open `deploy/model-secret.yaml`, replace `REPLACE_WITH_YOUR_OPENAI_API_KEY` with your actual API key, and adjust `metadata.namespace` if needed. Save it, then run:
+
+```bash
+oc apply -f deploy/model-secret.yaml
+```
+
+`model-secret.yaml` is ignored by Git and excluded from deployment build workspaces. Commit only the example; never commit your configured copy. Do not apply the unchanged example. When rotating the key, edit and apply your existing local file, then run `oc -n impact-hours rollout restart statefulset/impact-hours` so the pod receives the updated environment variable.
 
 The default endpoint is `https://api.openai.com/v1`, with model `gpt-4o-mini`. Override `METRICS_MODEL_BASE_URL` and `METRICS_MODEL_NAME` in the workload environment for another OpenAI-compatible endpoint. `METRICS_AI_ENABLED=false` skips reviews; the required Secret reference remains. Instruction review runs in Phase 1; quality review runs during validation of each phase. Model failures fall back to deterministic processing. A completed historical report is not retroactively reviewed.
 

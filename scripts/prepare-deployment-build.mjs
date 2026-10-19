@@ -6,7 +6,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 export function prepareBuild(source,destination){
  if(existsSync(resolve(destination,'pom.xml')))throw new Error('Deployment build workspace must be fresh');
  mkdirSync(destination,{recursive:true});
- for(const name of ['pom.xml','mvnw','.mvn','scripts','deploy'])cpSync(resolve(source,name),resolve(destination,name),{recursive:true});
+ for(const name of ['pom.xml','mvnw','.mvn','scripts','deploy'])cpSync(resolve(source,name),resolve(destination,name),{recursive:true,filter:path=>path.split(sep).at(-1)!=='model-secret.yaml'});
  cpSync(resolve(source,'src'),resolve(destination,'src'),{recursive:true,filter:path=>!relative(resolve(source,'src'),path).split(sep).some(part=>['node_modules','dist','target'].includes(part))});
  mkdirSync(resolve(destination,'runtimes'));
  for(const name of ['RUN.md','AGENTS.md'])cpSync(resolve(source,'runtimes',name),resolve(destination,'runtimes',name));

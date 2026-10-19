@@ -120,7 +120,13 @@ One replica keeps run history, source snapshots, saved provider sessions and cha
 # Package and validate only (default); no cluster changes.
 ./deploy-openshift.sh --generate --namespace impact-hours
 
-# After oc login, build and deploy; rerun this command to apply updates.
+# Copy the example once, then edit METRICS_MODEL_API_KEY in the local copy.
+cp deploy/model-secret.example.yaml deploy/model-secret.yaml
+chmod 600 deploy/model-secret.yaml
+# Replace REPLACE_WITH_YOUR_OPENAI_API_KEY before applying; adjust namespace if needed.
+oc apply -f deploy/model-secret.yaml
+
+# After oc login and Secret creation, build and deploy; rerun to apply updates.
 ./deploy-openshift.sh --deploy --namespace impact-hours
 
 # Print the HTTPS app URL; no persistent terminal/tunnel needed.
@@ -265,6 +271,8 @@ Filesystem access rejects traversal and symlink escapes. Current input and workb
 The contract fixes the legacy script gaps: unresolved digital rows are exclusively follow-up; attribution divides by authors × tools and conserves totals at six decimals; in-person Views / attendance contains allocated attendance hours; trailing totals preserve previous baselines, allocate shared URL totals once, and calculate deltas. Negative deltas remain visible. Phase-5 and unknown activity types are retained. Booth-lead collection and later follow-up recalculation require a separate request.
 
 RUN.md and AGENTS.md must match the reviewed instruction SHA-256 in `metrics.instructions.sha256`. If instructions change, review and implement the new rules before updating that hash. Each run freezes its own copies.
+
+`deploy/model-secret.yaml` is ignored by Git and excluded from deployment build workspaces. Keep your actual API key only in that local file and the cluster Secret; commit only the example. Skip the copy step when updating an existing credential file.
 
 ## Agents and optional model review
 

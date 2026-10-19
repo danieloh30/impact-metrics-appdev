@@ -61,6 +61,7 @@ runtimes/.uploads/
 !/runtimes/AGENTS.md
 
 # Local credentials and browser test artifacts.
+model-secret.yaml
 .env.*
 !.env.example
 src/main/webui/playwright-report/
