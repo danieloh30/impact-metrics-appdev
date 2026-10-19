@@ -47,6 +47,10 @@ The image contains Java 25, the compiled app, canonical instructions and Playwri
 
 ## 2. Deploy or update
 
+Model review is enabled by default in `application-openshift.properties`. Before deploying, create an **Opaque Secret** named `impact-hours-model` in the target project, with key `METRICS_MODEL_API_KEY` containing your API key. Use the OpenShift console's Secret form or a protected local file; do not commit the key. The generated OpenShift and Kubernetes workloads inject this key as an environment variable through `secretKeyRef`. No model key is included in the image or manifests, and the application needs no Kubernetes API permissions to read it.
+
+The default endpoint is `https://api.openai.com/v1`, with model `gpt-4o-mini`. Override `METRICS_MODEL_BASE_URL` and `METRICS_MODEL_NAME` in the workload environment for another OpenAI-compatible endpoint. `METRICS_AI_ENABLED=false` skips reviews; the required Secret reference remains. Instruction review runs in Phase 1; quality review runs during validation of each phase. Model failures fall back to deterministic processing. A completed historical report is not retroactively reviewed.
+
 ```bash
 ./deploy-openshift.sh --deploy --namespace impact-hours
 ```

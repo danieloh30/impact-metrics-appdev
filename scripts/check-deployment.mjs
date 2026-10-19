@@ -19,6 +19,11 @@ for(const target of ['openshift','kubernetes']){
  assert(container.volumeMounts.some(item=>item.name===runtime.name&&item.mountPath==='/data/metrics'));
  for(const path of ['/tmp','/dev/shm'])assert(container.volumeMounts.some(item=>item.mountPath===path));
  assert(container.env.some(item=>item.name==='QUARKUS_PROFILE'&&item.value==='openshift'));
+ const modelKey=container.env.find(item=>item.name==='METRICS_MODEL_API_KEY');
+ assert.equal(modelKey?.valueFrom?.secretKeyRef?.name,'impact-hours-model','Model API key must reference the model Secret');
+ assert.equal(modelKey.valueFrom.secretKeyRef.key,'METRICS_MODEL_API_KEY','Model Secret must use the expected key');
+ assert.notEqual(modelKey.valueFrom.secretKeyRef.optional,true,'Model Secret must be required');
+ assert.equal(modelKey.value,undefined,'Model API key must never be embedded in manifests');
  assert(container.env.some(item=>item.name==='METRICS_RUNTIME_ROOT'&&item.value==='/data/metrics/runtimes'),'Runtime workspace must use the guarded runtimes subdirectory');
  for(const probe of ['readinessProbe','startupProbe'])assert.equal(target==='openshift'?container[probe]?.exec?.command?.at(-1):container[probe]?.httpGet?.path,target==='openshift'?'http://127.0.0.1:8097/api/runs':'/api/runs','Readiness must validate a stateful API');
  assert.equal(target==='openshift'?container.livenessProbe?.exec?.command?.at(-1):container.livenessProbe?.httpGet?.path,target==='openshift'?'http://127.0.0.1:8097/api/config':'/api/config');

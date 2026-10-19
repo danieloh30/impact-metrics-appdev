@@ -272,7 +272,7 @@ RUN.md and AGENTS.md must match the reviewed instruction SHA-256 in `metrics.ins
 
 Phase readiness and background-worker release happen under the same run lock. A phase shown as awaiting approval can immediately accept approval; the finishing worker cannot clear the next worker's busy state. A repeated seven-phase regression exercises immediate approvals without delays or busy retries.
 
-Plain Java agents perform exact calculations and I/O. Optional InstructionReviewer and QualityReviewer model agents explain bounded contract/phase summaries. Models cannot invent measurements or approve phases. The complete workflow runs without model credentials; commentary is disabled by default.
+Plain Java agents perform exact calculations and I/O. Optional InstructionReviewer and QualityReviewer model agents explain bounded contract/phase summaries. Models cannot invent measurements or approve phases. Local and test profiles disable commentary by default. The OpenShift profile enables it by default and injects `METRICS_MODEL_API_KEY` from the required `impact-hours-model` Secret (key `METRICS_MODEL_API_KEY`); create that Secret before deploying either generated cluster workload. Set `METRICS_AI_ENABLED=false` to skip model reviews. Model failures preserve deterministic processing.
 
 To enable commentary before starting, set `METRICS_AI_ENABLED=true`, `METRICS_MODEL_API_KEY`, `METRICS_MODEL_BASE_URL`, and `METRICS_MODEL_NAME`. The configured endpoint must support the OpenAI-compatible chat API. Frozen instructions and bounded issue summaries are sent to it; full CSVs and personal columns are not sent. Model failures preserve deterministic processing.
 

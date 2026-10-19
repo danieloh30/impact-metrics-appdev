@@ -22,6 +22,10 @@ try {
   const result=run();assert.notEqual(result.status,0,'Unsafe manifest was accepted');assert.match(result.stderr,message);writeFileSync(manifest,original);
  };
  rejects(items=>{items.find(item=>item.kind==='BuildConfig').spec.output.to.name='impact-hours:wrong-tag';},/Build output tag must match the deployed container image/);
+ rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours').env=items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours').env.filter(item=>item.name!=='METRICS_MODEL_API_KEY');},/Model API key must reference the model Secret/);
+ rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours').env.find(item=>item.name==='METRICS_MODEL_API_KEY').value='synthetic-key';},/Model API key must never be embedded/);
+ rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours').env.find(item=>item.name==='METRICS_MODEL_API_KEY').valueFrom.secretKeyRef.key='wrong-key';},/Model Secret must use the expected key/);
+ rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours').env.find(item=>item.name==='METRICS_MODEL_API_KEY').valueFrom.secretKeyRef.optional=true;},/Model Secret must be required/);
  rejects(items=>{const container=items.find(item=>item.kind==='StatefulSet').spec.template.spec.containers.find(item=>item.name==='impact-hours');container.image=container.image.replace('image-registry.openshift-image-registry.svc:5000/','');},/OpenShift app must use its internal registry/);
  rejects(items=>{items.push({apiVersion:'route.openshift.io/v1',kind:'Route',metadata:{name:'unintended-public-access'}});},/Only the protected app Route is allowed/);
  rejects(items=>{items.find(item=>item.kind==='StatefulSet').spec.template.spec.securityContext.runAsUser=1001;},/OpenShift must assign its namespace UID/);
@@ -43,5 +47,5 @@ try {
   copyFileSync(sourceJar,fixtureJar);
  }
  assert.equal(run().status,0,'Original copied archive must remain valid after contamination checks');
- console.log('Deployment manifests: 7 unsafe variants and 2 runtime-contaminated archives rejected using scratch copies only');
+ console.log('Deployment manifests: unsafe variants (including model Secret injection) and 2 runtime-contaminated archives rejected using scratch copies only');
 } finally {rmSync(fixture,{recursive:true,force:true});}
