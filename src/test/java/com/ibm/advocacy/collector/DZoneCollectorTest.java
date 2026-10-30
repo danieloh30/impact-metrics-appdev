@@ -38,6 +38,13 @@ class DZoneCollectorTest {
         Measurement measurement=browser("<h1>Article</h1><div id='activity-view-container'><span class='view-count' title='4,963 Views'>4.9K Views</span></div>",200);
         assertEquals("4963",measurement.value());assertTrue(measurement.evidence().contains("exact public count"));assertFalse(measurement.evidence().contains("approximate"));
     }
+    @Test void readsCurrentPlainSpanCounterWithoutTheLegacyClass() throws Exception {
+        Measurement measurement=browser("<h1>Article</h1><aside>999K Views</aside><div id='activity-view-container' class='activity-status activity-views'><svg aria-hidden='true'></svg><span>1.4K Views</span></div>",200);
+        assertEquals("1400",measurement.value());assertTrue(measurement.evidence().contains("approximate"));
+    }
+    @Test void duplicateCurrentCountersNeverProduceMeasurements() {
+        assertThrows(IOException.class,()->browser("<h1>Article</h1><div id='activity-view-container'><span>1.4K Views</span><span>2K Views</span></div>",200));
+    }
     @Test void blockedPagesAndInvalidCountersNeverProduceMeasurements() throws Exception {
         IOException blocked=assertThrows(IOException.class,()->browser("<h1>Sorry, you have been blocked</h1><span>4.9K Views</span>",403));assertTrue(blocked.getMessage().contains("HTTP 403"));
         assertThrows(IOException.class,()->browser("<h1>Article</h1><div id='activity-view-container'><span class='view-count'>Likes (4)</span></div>",200));

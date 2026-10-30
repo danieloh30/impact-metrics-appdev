@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {chromium} from '../src/main/webui/node_modules/@playwright/test/index.mjs';
 import {articleUrl,articleCounter,pendingArticles,readArticle,batchFor} from './dzone-local-collection.mjs';
 const url='https://dzone.com/articles/example';
 assert.equal(articleUrl('http://dzone.com/articles/example?utm_source=synthetic#part'),url);
@@ -14,4 +15,19 @@ await assert.rejects(readArticle(page(403),url),/HTTP 403.*No totals were saved/
 const batch=batchFor(run,new Map([[url,exact]]));assert.equal(batch.version,3);assert.equal(batch.values.length,1);assert.equal(batch.values[0].value,'4963');assert.equal(batch.confirmed,true);assert(!('attributed' in batch.values[0]));
 const approximate=await readArticle(page(200,'4.9K Views',null),url);assert.match(batchFor(run,new Map([[url,approximate]])).values[0].evidence,/approximate.*4900/);
 assert.throws(()=>batchFor(run,new Map()),/review changed/);
+// Exercise actual DOM selection: the old mock cannot detect a publisher class change.
+const chrome=await chromium.launch({channel:'chrome',headless:true});
+try{
+ const context=await chrome.newContext();const article=await context.newPage();
+ const current='<h1>Article</h1><aside>999K Views</aside><div id="activity-view-container" class="activity-status activity-views"><svg aria-hidden="true"></svg><span>1.4K Views</span></div>';
+ let html=current;
+ await context.route('**/*',route=>route.fulfill({status:200,contentType:'text/html',body:html}));
+ assert.equal((await readArticle(article,url)).value,'1400');
+ html='<h1>Article</h1><div id="activity-view-container"><span class="view-count" title="1,432 Views">1.4K Views</span></div>';
+ assert.equal((await readArticle(article,url)).value,'1432');
+ html=current.replace('<span>1.4K Views</span>','<span>1.4K Views</span><span>2K Views</span>');
+ await assert.rejects(readArticle(article,url),error=>error.message.includes(url)&&/No totals were saved.*closes Chrome.*sign-in is not required/.test(error.message));
+ html=current.replace('1.4K Views','Likes (4)');
+ await assert.rejects(readArticle(article,url),/one valid public Views counter/);
+}finally{await chrome.close();}
 console.log('DZone local collection: scoped URLs/counters, blocked pages, URL deduplication, raw totals, approximation and stale-review checks passed');

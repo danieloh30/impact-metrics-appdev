@@ -23,6 +23,7 @@ async function main(){
   const articleContext=await browser.newContext({acceptDownloads:false,serviceWorkers:'block'});
   // DZone gets its own context: neither provider cookies nor OpenShift cookies are exported.
   await articleContext.route('**/*',route=>{try{const url=new URL(route.request().url());const allowed=url.hostname==='dzone.com'||url.hostname.endsWith('.dzone.com')||url.hostname==='challenges.cloudflare.com';if(url.protocol!=='https:'||url.username||url.password||url.port||!allowed)return route.abort();return route.continue();}catch{return route.abort();}});
+  console.log('DZone collection reads public article Views automatically; no DZone sign-in is required. Chrome closes when collection finishes or fails.');
   const page=await articleContext.newPage(),measurements=new Map();
   for(const item of articles){const count=await readArticle(page,item.url);measurements.set(item.url,count);console.log(`${item.url}: ${count.value} views${count.approximate?' (approximate public display)':''}`);}
   console.log(`Collected ${measurements.size} whole-article totals for reporting month ${initial.workbook?.month??'this run'}, Phase ${initial.phase}. Existing attribution and baselines will be applied by the app.`);

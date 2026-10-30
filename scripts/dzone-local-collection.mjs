@@ -27,13 +27,14 @@ export async function readArticle(page,value){
  try{
   const finalUrl=articleUrl(page.url());
   if(new URL(finalUrl).pathname!==new URL(url).pathname)throw new Error('Article redirected to a different resource');
-  const counter=page.locator('#activity-view-container .view-count');
+  // Current activity bars use a plain span; retain the older named counter too.
+  const counter=page.locator('#activity-view-container .view-count, #activity-view-container > span');
   await counter.first().waitFor({timeout:10000});
   if(await counter.count()!==1||await page.locator('h1').count()===0)throw new Error('Counter is not unique');
   let measured=articleCounter(await counter.innerText());const title=await counter.getAttribute('title');
   if(title)try{const exact=articleCounter(title);if(!exact.approximate)measured=exact;}catch{}
   return {...measured,collectedAt:new Date().toISOString()};
- }catch{throw new Error('DZone article did not expose one valid public Views counter. No totals were saved; use verified manual measurements in the app.');}
+ }catch{throw new Error(`DZone article did not expose one valid public Views counter: ${url}. No totals were saved. The helper closes Chrome after a collection failure; DZone sign-in is not required. Retry with the updated local helper or use verified manual measurements in the app.`);}
 }
 export function batchFor(run,measurements){
  const pending=pendingArticles(run);

@@ -49,7 +49,8 @@ public class DZoneCollector {
             Response response=page.navigate(uri.toString(),new Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED).setTimeout(30000));
             if(response==null||response.status()!=200)throw new IOException("DZone "+(backgroundMode()?"background collection blocked or unavailable":"blocked or unavailable")+" (HTTP "+(response==null?"unknown":response.status())+"); retry unresolved collection or enter verified views manually.");
             if(!article(URI.create(page.url())))throw new IOException("DZone redirected away from a supported article");
-            Locator label=page.locator("#activity-view-container .view-count");
+            // Current activity bars use a plain span; retain the older named counter too.
+            Locator label=page.locator("#activity-view-container .view-count, #activity-view-container > span");
             label.first().waitFor(new Locator.WaitForOptions().setTimeout(10000));
             if(label.count()!=1||page.locator("h1").count()==0)throw new IOException("DZone article counter is ambiguous or unavailable");
             Count count=counter(label.innerText());
