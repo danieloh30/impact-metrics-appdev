@@ -278,7 +278,7 @@ public synchronized byte[] input(String id,String name) throws Exception {
             evidence=evidence==null||evidence.isBlank()?"User confirmed measurement; source / collection note not provided":evidence.strip();
             Data source=workspace.data(id,run.phase==4?"trailing-source":"source");Row row=source.rows.stream().filter(r->r.id.equals(rowId)).findFirst().orElseThrow(()->new BadRequestException("Unknown source row"));
             if(run.phase==1&&!DIGITAL.contains(row.type()))throw new BadRequestException("This is not a digital activity");
-            if(run.phase==2&&(!PERSON.contains(row.type())||row.type().equals("booth duty")))throw new BadRequestException("Booth lead recalculation requires a separate request");
+            if(run.phase==2&&(!PERSON.contains(row.type())||row.type().equals("booth duty")))throw new BadRequestException("Correct booth attendance and duration in the source workbook, then import a new run");
             String expected=run.phase==2?"ATTENDANCE":MetricCollectors.type(row.get(URL));
             boolean correction=run.issues.stream().anyMatch(i->i.rowId().equals(rowId)&&i.blocking()&&i.metricType().equals(type));
             if(!expected.equals(type)&&!correction)throw new BadRequestException("Required measurement type: "+expected);

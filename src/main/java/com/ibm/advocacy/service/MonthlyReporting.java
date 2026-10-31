@@ -86,9 +86,9 @@ public class MonthlyReporting {
         return transform(run,data,current,context,followup);
     }
     private Data currentAttendance(Run run,Data data) throws Exception {
-        if(data.rows.stream().noneMatch(row->ParticipationAttendance.matches(row)||MonthlyWorkshopAttendance.matches(row)))return data;
+        if(data.rows.stream().noneMatch(row->ParticipationAttendance.matches(row)||MonthlyWorkshopAttendance.matches(row)||BoothAttendance.matches(row)))return data;
         Data source=Files.isRegularFile(workspace.runPath(run.id,"state/source.json"))?workspace.data(run.id,"source"):new Data();
-        return MonthlyWorkshopAttendance.reconcile(run,ParticipationAttendance.reconcile(run,data,source),source);
+        return BoothAttendance.reconcile(run,MonthlyWorkshopAttendance.reconcile(run,ParticipationAttendance.reconcile(run,data,source),source),source);
     }
     /** Current-only publication after attribution, with unresolved follow-ups still excluded. */
     public Data currentPublication(Run run,Data data,Set<String> unresolved) throws Exception {
@@ -121,6 +121,8 @@ public class MonthlyReporting {
             MonthEndValue override=run.monthEndValues.get((current?"current:":"trailing:")+row.id);
             if(override!=null&&!override.asOf().equals(cutoff))override=null;
             boolean shared=current&&ParticipationAttendance.matches(row)&&row.get("Participation calculation").equals("Shared participation units");
+            boolean booth=current&&BoothAttendance.matches(row)&&!row.get("Booth calculation").isBlank();
+            if(booth){row.cells.put("Metric unit","Attendance hours");if(override!=null){row.cells.put("Previous manual booth total",override.value());row.cells.put("Booth reporting note","Source attendance × duration supersedes the earlier confirmation; original confirmation remains saved for audit");override=null;}}
             if(shared&&override!=null){row.cells.put("Previous manual participation total",override.value());row.cells.put("Participation reporting note","One-unit participation allocation supersedes the earlier attendance confirmation; original confirmation remains saved for audit");override=null;}
             boolean monthly=current&&MonthlyWorkshopAttendance.matches(row)&&!row.get("Attendance calculation").isBlank()&&row.get("Attendance correction").isBlank();
             boolean once=current&&oneTime(original);
@@ -132,12 +134,12 @@ public class MonthlyReporting {
             else if(current&&!cutoff.isBlank()&&!row.get("Date").isBlank()&&LocalDate.parse(row.get("Date")).isAfter(LocalDate.parse(cutoff)))reason="Activity is after this run's reporting date";
             else if(current&&!row.get("Participation correction").isBlank())reason="Shared participation input needs correction — "+row.get("Participation correction");
             else if(current&&!row.get("Attendance correction").isBlank())reason="Monthly attendance total needs correction — "+row.get("Attendance correction");
-            else if(current&&followup.contains(row.id)&&override==null&&!shared&&!monthly)reason="Unresolved follow-up activity";
+            else if(current&&followup.contains(row.id)&&override==null&&!shared&&!monthly&&!booth)reason="Unresolved follow-up activity";
             else if(!current&&(oneTime(original)||!key(rule.trailing()).equals("yes")))reason="One-time activity is not trailing-eligible";
             else if(!current&&original.get("Metric basis").contains("not a trailing delta")&&override==null)reason="Retained historical input is not new growth";
             else try {
                 if(once||current&&PERSON.contains(row.type())) {
-                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"One participation unit allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":MonthlyWorkshopAttendance.matches(row)?"Supplied monthly total allocated once; duration not reapplied":"One-time attendance for reporting month");
+                    metric=override!=null&&override.asOf().equals(cutoff)?nonnegative(override.value()):nonnegative(row.get("Pre-report Views / attendance"));row.cells.put("Month-end basis",shared?"One participation unit allocated once":booth?"Supplied booth attendance × actual duration allocated once":override!=null?"User-confirmed month-end input":once?"One-time blog input for reporting month":MonthlyWorkshopAttendance.matches(row)?"Supplied monthly total allocated once; duration not reapplied":"One-time attendance for reporting month");
                     row.cells.put("Current total",once?"":Calculations.format(metric));row.cells.put("Previous total",once?"":"0");
                 } else {
                     boolean processed=current?!followup.contains(row.id)&&!row.get("Pre-report Views / attendance").isBlank():row.get("Pre-report Metric basis").equals("Trailing delta")&&!row.get("Pre-report Current total").isBlank()&&(!original.get("Month-end basis").equals("Selected monthly workbook snapshot")||!row.get("Measured at").isBlank());

@@ -32,6 +32,7 @@ public final class Calculations {
         return new Data(source.headers,rows);
     }
     public static BigDecimal attendance(Row row) {
+        if(BoothAttendance.matches(row))return BoothAttendance.total(row);
         if(ParticipationAttendance.matches(row))return BigDecimal.ONE;
         BigDecimal views=number(row.get(VIEWS));if(views.signum()<0)throw new IllegalArgumentException("Attendance cannot be negative");
         if(MonthlyWorkshopAttendance.matches(row))return views;

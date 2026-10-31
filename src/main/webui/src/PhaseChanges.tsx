@@ -30,7 +30,7 @@ export function PhaseChanges({id,phase,version,currentRows,issues,artifacts,appr
  const description=phase===1
   ?`Digital activities were classified and their available measurements prepared from ${currentRows} imported activities. Resolved digital rows and collection follow-up are now separated; in-person and other activities are handled in later phases.`
   :phase===2
-   ?'In-person activities were added and attendance hours calculated using the one-hour minimum. Digital results were carried forward unchanged. Booth duty was retained in follow-up pending verified leads.'
+   ?'In-person activities were added and attendance hours calculated using the one-hour minimum. Digital results were carried forward unchanged. Booth duty uses attendance × actual hours automatically when both are positive; zero, missing, or invalid inputs remain in follow-up.'
    :phase===3
     ?'Authors and tools were expanded into every author × tool combination. Digital views and in-person attendance hours were allocated across those rows while conserving activity totals. Follow-up rows were split without recalculating their metrics.'
     :'Historical measurement review was added separately. Recorded baselines are preserved; available fresh totals produce trailing deltas, while explicitly retained or edited inputs are labeled separately. Current-month results are unchanged.';

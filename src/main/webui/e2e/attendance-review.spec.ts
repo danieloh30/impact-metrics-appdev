@@ -28,6 +28,8 @@ test('Phase 2 with manual review opens attendance preview and preserves explicit
  await expect(page.locator('.export-row.selected')).toContainText('in-person.csv');await expect(page.locator('table')).toContainText('Meeting 1');
  const checklist=page.getByLabel('In-person attendance review checklist');
  await expect(checklist).toContainText('Standard participation uses one participation unit per activity, shared in Phase 3; attendance and duration are not multiplied.');
+ await expect(checklist).toContainText('Booth duty requires positive attendance and positive hours, and uses actual hours without that minimum.');
+ await expect(checklist).toContainText('Booth duty calculates automatically when attendance and hours are both greater than zero');
  await expect(page.getByLabel('Changes from the previous phase')).toContainText('What changed from Phase 1');await expect(page.getByLabel('Changes from the previous phase')).toContainText('Review issues below');
  await expect(checklist).not.toContainText('No Phase 2 validation issues');await expect(checklist).toContainText('25 attendees × 2 hours = 50');await expect(checklist).toContainText('one-hour minimum');await expect(checklist).toContainText('Booth duty');await expect(checklist).toContainText('Phase 3');await expect(checklist).toContainText('missing or duplicate');
  const approve=page.getByRole('button',{name:'Approve phase 2',exact:false});await expect(approve).toBeDisabled();expect(state.approvals).toHaveLength(0);
